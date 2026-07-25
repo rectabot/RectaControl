@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build output
+out/
+dist/
+
+# logs / caches
+*.log
+.vite/
+.eslintcache
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# old Python proof-of-concept venv (if any lingers)
+.venv/
+__pycache__/
+
+mockups/

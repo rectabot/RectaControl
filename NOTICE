@@ -1,0 +1,32 @@
+RectaControl
+Copyright (c) 2026 Filip Perić
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License v3.0 as published by the Free
+Software Foundation. The full license text is in the LICENSE file.
+
+"RectaBot", "RectaControl", and the Recta* product-family names, wordmarks, and
+logos are reserved and are NOT covered by the GPL grant above. See the RectaBot
+repository brand policy before reusing the name or marks on a fork or product.
+
+--------------------------------------------------------------------------------
+Third-party components
+--------------------------------------------------------------------------------
+
+This application bundles or builds upon the following open-source projects.
+Each is distributed under its own license by its respective authors.
+
+  Electron .................... MIT License
+  React / React-DOM ........... MIT License
+  three.js .................... MIT License
+  zustand ..................... MIT License
+  serialport .................. MIT License
+  basic-ftp ................... MIT License
+  Vite / electron-vite ........ MIT License
+  Tailwind CSS ................ MIT License
+  PostCSS / Autoprefixer ...... MIT License
+  TypeScript .................. Apache License 2.0
+
+Full license texts for these dependencies are installed under node_modules/
+alongside each package. This list covers the primary components; transitive
+dependencies carry their own (permissive) licenses.

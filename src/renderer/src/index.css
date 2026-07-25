@@ -1,0 +1,212 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .input {
+    @apply rounded-md border border-border2 bg-panel2 px-3 py-1.5 font-mono text-sm text-slate-100 outline-none transition focus:border-brand disabled:opacity-50;
+  }
+  .btn {
+    @apply rounded-md border border-border2 bg-panel2 px-3 py-1.5 text-sm text-slate-200 transition hover:border-brand hover:text-white disabled:opacity-50;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background-color: #020617;
+    color: #f1f5f9;
+    font-family: 'Inter', system-ui, sans-serif;
+    user-select: none;
+    overflow: hidden;
+  }
+}
+
+/* thin dark scrollbars to match the brand */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #0a1421;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ---------------------------------------------------------------------------
+   Light theme — applied when <html class="light">. Overrides the surface and
+   text tokens; brand (cyan) and semantic colours stay the same. Accent text
+   (.text-base on cyan buttons) is pinned dark so it stays readable in both. */
+html.light body {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+html.light ::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+html.light .bg-base {
+  background-color: #e2e8f0 !important;
+}
+html.light .bg-panel {
+  background-color: #ffffff !important;
+}
+html.light .bg-panel2 {
+  background-color: #f1f5f9 !important;
+}
+/* translucent overlay panels (view tabs, Load/Clear/Probe in the viewer) */
+html.light .bg-panel\/80 {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+html.light .border-border {
+  border-color: #cbd5e1 !important;
+}
+html.light .border-border2 {
+  border-color: #94a3b8 !important;
+}
+html.light .text-base {
+  color: #020617 !important;
+}
+html.light .text-slate-100 {
+  color: #0f172a !important;
+}
+html.light .text-slate-200 {
+  color: #1e293b !important;
+}
+html.light .text-slate-300 {
+  color: #334155 !important;
+}
+html.light .text-slate-400 {
+  color: #475569 !important;
+}
+html.light .text-slate-500 {
+  color: #64748b !important;
+}
+html.light .text-slate-600 {
+  color: #94a3b8 !important;
+}
+/* hover surfaces — Tailwind's `.hover:bg-*` variants aren't covered by the plain
+   `.bg-*` overrides above, so without these a hover would flash the dark default */
+html.light .hover\:bg-panel2:hover {
+  background-color: #e2e8f0 !important;
+}
+html.light .hover\:bg-border:hover {
+  background-color: #cbd5e1 !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Soft Light — the light theme, softened for the eyes: panels are a warm off-white
+   (not glaring pure white), the background is a touch greyer, and text is dark
+   slate (#2e3440) rather than near-black, so the contrast is gentler. Applied via
+   <html class="softlight">. */
+html.softlight body {
+  background-color: #e5e9f0;
+  color: #2e3440;
+}
+html.softlight ::-webkit-scrollbar-track {
+  background: #dde2ea;
+}
+html.softlight ::-webkit-scrollbar-thumb {
+  background: #c0c8d6;
+}
+html.softlight ::-webkit-scrollbar-thumb:hover {
+  background: #a9b4c4;
+}
+html.softlight .bg-base {
+  background-color: #dde2ea !important;
+}
+html.softlight .bg-panel {
+  background-color: #eef1f6 !important;
+}
+html.softlight .bg-panel2 {
+  background-color: #e5e9f0 !important;
+}
+html.softlight .bg-panel\/80 {
+  background-color: rgba(238, 241, 246, 0.9) !important;
+}
+html.softlight .border-border {
+  border-color: #c8d0dc !important;
+}
+html.softlight .border-border2 {
+  border-color: #aab4c4 !important;
+}
+html.softlight .text-base {
+  color: #020617 !important;
+}
+html.softlight .text-slate-100 {
+  color: #2e3440 !important;
+}
+html.softlight .text-slate-200 {
+  color: #3b4252 !important;
+}
+html.softlight .text-slate-300 {
+  color: #434c5e !important;
+}
+html.softlight .text-slate-400 {
+  color: #4c566a !important;
+}
+html.softlight .text-slate-500 {
+  color: #667085 !important;
+}
+html.softlight .text-slate-600 {
+  color: #8b96a5 !important;
+}
+html.softlight .hover\:bg-panel2:hover {
+  background-color: #dde2ea !important;
+}
+html.softlight .hover\:bg-border:hover {
+  background-color: #c8d0dc !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Midnight Violet — a dark theme with deep violet surfaces. Text stays light
+   and the cyan brand accent is kept (it pops on violet). Applied via
+   <html class="violet">. */
+html.violet body {
+  background-color: #0b0816;
+}
+html.violet ::-webkit-scrollbar-track {
+  background: #130f24;
+}
+html.violet ::-webkit-scrollbar-thumb {
+  background: #3d3260;
+}
+html.violet ::-webkit-scrollbar-thumb:hover {
+  background: #4c3f78;
+}
+html.violet .bg-base {
+  background-color: #100c1c !important;
+}
+html.violet .bg-panel {
+  background-color: #1a1430 !important;
+}
+html.violet .bg-panel2 {
+  background-color: #130f24 !important;
+}
+html.violet .bg-panel\/80 {
+  background-color: rgba(26, 20, 48, 0.85) !important;
+}
+html.violet .border-border {
+  border-color: #2a2145 !important;
+}
+html.violet .border-border2 {
+  border-color: #3d3260 !important;
+}
+html.violet .hover\:bg-panel2:hover {
+  background-color: #221a3d !important;
+}
+html.violet .hover\:bg-border:hover {
+  background-color: #2a2145 !important;
+}

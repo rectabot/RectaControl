@@ -54,7 +54,12 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow?.show())
+  // Open maximized — the app is dense and looks cramped in a small window.
+  // Maximize BEFORE show so the auto UI-scale (did-finish-load) fits full bounds.
+  mainWindow.on('ready-to-show', () => {
+    mainWindow?.maximize()
+    mainWindow?.show()
+  })
 
   // set the UI scale once the page is loaded (setZoomFactor is reset on navigation)
   mainWindow.webContents.on('did-finish-load', () => applyZoom())

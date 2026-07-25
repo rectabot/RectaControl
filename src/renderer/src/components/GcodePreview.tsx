@@ -321,14 +321,14 @@ function tokenColor(tok: string): string {
   if (tok.startsWith('(') || tok.startsWith(';')) return 'text-slate-500 italic'
   switch (tok[0].toUpperCase()) {
     case 'G':
-      // G0 = rapid (non-cutting travel) → muted, distinct from the cutting moves;
-      // G1/G2/G3 and modal G-codes stay brand cyan
-      return parseInt(tok.slice(1), 10) === 0 ? 'text-slate-400' : 'text-brand'
+      // G0 = rapid (non-cutting travel) → white, clearly set apart from the cutting
+      // moves; G1/G2/G3 and modal G-codes stay brand cyan
+      return parseInt(tok.slice(1), 10) === 0 ? 'text-white' : 'text-brand'
     case 'M':
       return 'text-purple'
     // per-axis colours matching the 3D viewer's R/G/B axes, so you can spot at a
     // glance which axis a word moves: X red, Y green, Z blue. Rotary (A/B/C) has no
-    // firm convention → amber, distinct from the linear three.
+    // firm convention → pink, kept clear of F's amber (they used to clash).
     case 'X':
       return 'text-red-400'
     case 'Y':
@@ -338,7 +338,7 @@ function tokenColor(tok: string): string {
     case 'A':
     case 'B':
     case 'C':
-      return 'text-amber-400'
+      return 'text-pink-400'
     case 'I':
     case 'J':
     case 'K':

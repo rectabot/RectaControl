@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import type { SerialPortInfo } from '@shared/types'
 import { useT, useLabel } from '../i18n'
+import appIcon from '../assets/icon.png'
 
 const STATE_COLOR: Record<string, string> = {
   Idle: 'text-ok',
@@ -119,9 +120,7 @@ export function TopBar(): JSX.Element {
     <div className="relative flex items-center gap-3 rounded-lg border border-border bg-panel px-4 py-2">
       {/* left: brand + workspace + status */}
       <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand">
-          <span className="font-display text-xl font-black leading-none text-base">r</span>
-        </div>
+        <img src={appIcon} alt="RectaControl" className="h-8 w-8 rounded-lg" draggable={false} />
         <span className="font-display text-lg font-black tracking-wider text-brand">rectacontrol</span>
       </div>
 

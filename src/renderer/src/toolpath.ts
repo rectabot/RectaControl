@@ -8,6 +8,10 @@
 export interface Toolpath {
   positions: Float32Array // flat x,y,z pairs per segment vertex
   colors: Float32Array // matching rgb per vertex
+  /** Per-vertex line distance for LineDashedMaterial: cut moves are 0/0 (0 always
+   *  falls in the dash-on zone → solid), rapid moves carry a cumulative length so
+   *  G0 renders as a dotted travel line. */
+  lineDistances: Float32Array
   min: [number, number, number]
   max: [number, number, number]
   hasGeometry: boolean
@@ -60,6 +64,8 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
   const pos = { x: 0, y: 0, z: 0 }
   const verts: number[] = []
   const cols: number[] = []
+  const dists: number[] = [] // per-vertex line distance (dashing; see Toolpath.lineDistances)
+  let dashDist = 0 // running length along rapid moves only, for a continuous dot pattern
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
 
@@ -71,10 +77,21 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
     max[1] = Math.max(max[1], y)
     max[2] = Math.max(max[2], z)
   }
+  // dash distance for one segment: cut → 0/0 (solid), rapid → cumulative (dotted)
+  const dashPair = (len: number, rapid: boolean): void => {
+    if (rapid) {
+      const d0 = dashDist
+      dashDist += len
+      dists.push(d0, dashDist)
+    } else {
+      dists.push(0, 0)
+    }
+  }
   const seg = (x: number, y: number, z: number, rapid: boolean): void => {
     const c = rapid ? RAPID : CUT
     verts.push(pos.x, pos.y, pos.z, x, y, z)
     for (let i = 0; i < 2; i++) cols.push(c[0], c[1], c[2])
+    dashPair(Math.hypot(x - pos.x, y - pos.y, z - pos.z), rapid)
     track(pos.x, pos.y, pos.z)
     track(x, y, z)
   }
@@ -82,6 +99,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
     const c = rapid ? RAPID : CUT
     verts.push(p[0], p[1], p[2], q[0], q[1], q[2])
     for (let i = 0; i < 2; i++) cols.push(c[0], c[1], c[2])
+    dashPair(Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]), rapid)
     track(p[0], p[1], p[2])
     track(q[0], q[1], q[2])
   }
@@ -156,6 +174,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
   return {
     positions: new Float32Array(verts),
     colors: new Float32Array(cols),
+    lineDistances: new Float32Array(dists),
     min,
     max,
     hasGeometry: verts.length > 0

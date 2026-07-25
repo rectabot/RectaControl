@@ -10,6 +10,8 @@ const GRID_CELL = 10 // mm per square
 const LABEL_STEP = 100 // mm between axis dimension labels (100, 200, …)
 const DEFAULT_TRAVEL = 300 // mm fallback until $130/$131 are known
 
+type ViewName = 'top' | 'bottom' | 'front' | 'back' | 'left' | 'right' | 'iso'
+
 /** A camera-facing text sprite (mm ruler tick). Canvas → texture → Sprite so the
  *  number always reads flat regardless of orbit. Scaled in world (mm) units. */
 function makeLabel(text: string, color: string): THREE.Sprite {
@@ -24,7 +26,19 @@ function makeLabel(text: string, color: string): THREE.Sprite {
   ctx.fillText(text, 64, 34)
   const tex = new THREE.CanvasTexture(canvas)
   tex.minFilter = THREE.LinearFilter
-  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }))
+  // depthTest ON so the toolpath/stock occlude these — they're background orientation
+  // ticks, not foreground. depthWrite OFF so they never hide real geometry; low
+  // renderOrder + reduced opacity keep them recessed (never fighting the UI chrome).
+  const spr = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 0.42,
+      depthTest: true,
+      depthWrite: false
+    })
+  )
+  spr.renderOrder = -10
   spr.scale.set(24, 12, 1) // ~24 mm wide labels
   return spr
 }
@@ -47,17 +61,31 @@ function buildGrid(travel: [number, number, number] | null, light: boolean): THR
 
   // inner grid lines — kept deliberately faint/neutral so the toolpath and stock
   // read as the foreground and the grid is just a subtle reference.
-  const inner: number[] = []
+  // minor lines every GRID_CELL (10 mm); the ones landing on a LABEL_STEP (100 mm)
+  // boundary go into a separate "major" buffer drawn stronger, so 100/200/… read as
+  // clear reference gridlines (e.g. the 500×500 point) against the faint 10 mm mesh.
+  const minor: number[] = []
+  const major: number[] = []
   for (let i = 1; i < nx; i++) {
     const x = i * GRID_CELL
-    inner.push(x, 0, 0, x, 0, bz)
+    ;(x % LABEL_STEP === 0 ? major : minor).push(x, 0, 0, x, 0, bz)
   }
   for (let j = 1; j < ny; j++) {
     const z = -j * GRID_CELL
-    inner.push(0, 0, z, bx, 0, z)
+    ;((j * GRID_CELL) % LABEL_STEP === 0 ? major : minor).push(0, 0, z, bx, 0, z)
   }
-  const innerGeom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(inner, 3))
-  group.add(new THREE.LineSegments(innerGeom, new THREE.LineBasicMaterial({ color: light ? 0xdfe5ec : 0x172230, transparent: true, opacity: light ? 0.7 : 0.55 })))
+  const minorGeom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(minor, 3))
+  group.add(new THREE.LineSegments(minorGeom, new THREE.LineBasicMaterial({ color: light ? 0xdfe5ec : 0x172230, transparent: true, opacity: light ? 0.7 : 0.55 })))
+  if (major.length) {
+    const majorGeom = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(major, 3))
+    group.add(
+      new THREE.LineSegments(
+        majorGeom,
+        // major 100 mm gridlines — same hue as the far envelope edges, a touch fainter
+        new THREE.LineBasicMaterial({ color: light ? 0xaab4c0 : 0x334155, transparent: true, opacity: 0.4 })
+      )
+    )
+  }
 
   // the two envelope edges that DON'T touch the origin (faint border)
   const far = [bx, 0, 0, bx, 0, bz, 0, 0, bz, bx, 0, bz]
@@ -173,6 +201,85 @@ function disposeGrid(g: THREE.Group): void {
   })
 }
 
+/** Static CAD-style ViewCube: a fixed iso cube showing Top / Front / Right, with the
+ *  near corner chamfered into a facet that snaps to the 3D (iso) view. `active` (the
+ *  canonical view the live camera is aligned with, or null) lights up the matching
+ *  zone in cyan; clicking a face/corner snaps the camera there. */
+function ViewCube({
+  active,
+  onPick
+}: {
+  active: ViewName | null
+  onPick: (v: ViewName) => void
+}): JSX.Element {
+  const CY = '#22d3ee'
+  // hexagon + chamfer geometry (viewBox 120×120), see the layout notes in chat
+  const P = {
+    TOP: '60,14',
+    UR: '100,37',
+    LR: '100,83',
+    BOT: '60,106',
+    LL: '20,83',
+    UL: '20,37',
+    cUL: '42,49.65',
+    cUR: '78,49.65',
+    cBOT: '60,80.7'
+  }
+  // label = [text, x, y, rotationDeg] — Front/Right are slanted to sit on the iso face
+  // (Front descends to the right +30°, Right rises to the right −30°); Top stays flat
+  const faces: { view: ViewName; pts: string; base: string; label?: [string, number, number, number] }[] = [
+    { view: 'top', pts: `${P.TOP} ${P.UR} ${P.cUR} ${P.cUL} ${P.UL}`, base: '#3a4a5e', label: ['TOP', 60, 37, 0] },
+    { view: 'front', pts: `${P.UL} ${P.LL} ${P.BOT} ${P.cBOT} ${P.cUL}`, base: '#2a3646', label: ['FRONT', 40, 73, 30] },
+    { view: 'right', pts: `${P.UR} ${P.cUR} ${P.cBOT} ${P.BOT} ${P.LR}`, base: '#1b2431', label: ['RIGHT', 80, 73, -30] },
+    { view: 'iso', pts: `${P.cUL} ${P.cUR} ${P.cBOT}`, base: '#54657a' }
+  ]
+  const hex = `${P.TOP} ${P.UR} ${P.LR} ${P.BOT} ${P.LL} ${P.UL}`
+  return (
+    <svg viewBox="0 0 120 120" width={120} height={120} className="drop-shadow">
+      {/* outer silhouette */}
+      <polygon points={hex} fill="#0b1220" stroke="#0b1220" strokeWidth={2} strokeLinejoin="round" />
+      {faces.map((f) => (
+        <polygon
+          key={f.view}
+          points={f.pts}
+          onClick={() => onPick(f.view)}
+          className="cursor-pointer transition hover:brightness-125"
+          fill={active === f.view ? CY : f.base}
+          stroke="none"
+        />
+      ))}
+      {/* the three edges that join the faces + the chamfer corner — rounded caps give a
+          soft 3D bevel (kept neutral; only the chamfer FACET lights up for 3D) */}
+      <path
+        d="M 20 37 L 42 49.65 M 100 37 L 78 49.65 M 60 106 L 60 80.7 M 42 49.65 L 78 49.65 L 60 80.7 Z"
+        fill="none"
+        stroke="#5b6b7f"
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        pointerEvents="none"
+      />
+      {faces
+        .filter((f) => f.label)
+        .map((f) => (
+          <text
+            key={`${f.view}-l`}
+            x={f.label![1]}
+            y={f.label![2]}
+            transform={`rotate(${f.label![3]} ${f.label![1]} ${f.label![2]})`}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={9}
+            fontWeight={700}
+            pointerEvents="none"
+            fill={active === f.view ? '#06212a' : '#cbd5e1'}
+          >
+            {f.label![0]}
+          </text>
+        ))}
+    </svg>
+  )
+}
 
 export function Visualizer(): JSX.Element {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -237,7 +344,62 @@ export function Visualizer(): JSX.Element {
     stock: THREE.Group | null
     size: number
   } | null>(null)
-  const [view, setView] = useState<'top' | 'front' | 'iso'>('iso')
+  // which canonical view the live camera is currently aligned with (null = a custom
+  // orbit angle) — drives the static ViewCube highlight
+  const [activeView, setActiveView] = useState<ViewName | null>('iso')
+  // Follow: when on, the camera pans to keep the live tool position centred (zoom and
+  // orientation preserved) — useful on large programs where the tool runs off-screen.
+  const [follow, setFollow] = useState(false)
+  // the gcode we last framed the camera to — so a WCS/stock tweak rebuilds the
+  // geometry WITHOUT snapping the camera back (which threw away the chosen view)
+  const framedGcode = useRef<string | null>(null)
+  // world-space centre of the toolpath the camera is currently framed on, so a WCS
+  // change (which moves the path to another fixture offset) can PAN the camera to
+  // follow it without re-orienting or re-zooming
+  const framedCenter = useRef<[number, number, number] | null>(null)
+  // ViewCube highlight bookkeeping: the camera direction we snapped to (so a real
+  // orbit can be told apart from a stray click), a mirror of activeView for the
+  // once-bound 'change' handler, and a guard while WE move the camera programmatically
+  const snappedDir = useRef<[number, number, number] | null>(null)
+  const activeViewRef = useRef<ViewName | null>('iso')
+  const snapping = useRef(false)
+  activeViewRef.current = activeView
+
+  // Point the camera for a named preset, framed on the CURRENT target/size. Shared by
+  // the view buttons and the program-load re-frame so a preset (esp. Top, whose `up`
+  // differs) stays correctly oriented instead of ending up rolled/skewed.
+  const orientCamera = (v: ViewName): void => {
+    const t = three.current
+    if (!t) return
+    const tg = t.controls.target
+    const d = (t.size || 100) * 1.6
+    const e = 0.001 // tiny nudge so up-vector never aligns exactly with view dir
+    if (v === 'top') {
+      t.camera.up.set(0, 0, -1)
+      t.camera.position.set(tg.x, tg.y + d, tg.z + e)
+    } else if (v === 'bottom') {
+      t.camera.up.set(0, 0, 1)
+      t.camera.position.set(tg.x, tg.y - d, tg.z + e)
+    } else if (v === 'front') {
+      t.camera.up.set(0, 1, 0)
+      t.camera.position.set(tg.x, tg.y + e, tg.z + d)
+    } else if (v === 'back') {
+      t.camera.up.set(0, 1, 0)
+      t.camera.position.set(tg.x, tg.y + e, tg.z - d)
+    } else if (v === 'right') {
+      // look down the machine X axis (world X) — the Y-Z side elevation
+      t.camera.up.set(0, 1, 0)
+      t.camera.position.set(tg.x + d, tg.y + e, tg.z)
+    } else if (v === 'left') {
+      t.camera.up.set(0, 1, 0)
+      t.camera.position.set(tg.x - d, tg.y + e, tg.z)
+    } else {
+      t.camera.up.set(0, 1, 0)
+      t.camera.position.set(tg.x + d, tg.y + d, tg.z + d)
+    }
+    t.camera.lookAt(tg)
+    t.controls.update()
+  }
 
   // --- init scene once ---
   useEffect(() => {
@@ -295,6 +457,26 @@ export function Visualizer(): JSX.Element {
     }
     animate()
 
+    // the ViewCube highlight reflects the last clicked view; clear it only when the
+    // camera DIRECTION actually deviates (a real orbit), so a stray click that doesn't
+    // move the view keeps the highlight. ~3.6° tolerance (dot > 0.998).
+    {
+      const d0 = new THREE.Vector3().subVectors(camera.position, controls.target).normalize()
+      snappedDir.current = [d0.x, d0.y, d0.z]
+    }
+    const dirTmp = new THREE.Vector3()
+    const onControlsChange = (): void => {
+      if (snapping.current) return
+      const sd = snappedDir.current
+      if (!activeViewRef.current || !sd) return
+      dirTmp.subVectors(camera.position, controls.target).normalize()
+      if (dirTmp.x * sd[0] + dirTmp.y * sd[1] + dirTmp.z * sd[2] < 0.998) {
+        snappedDir.current = null
+        setActiveView(null)
+      }
+    }
+    controls.addEventListener('change', onControlsChange)
+
     const ro = new ResizeObserver(() => {
       const w = mount.clientWidth
       const h = mount.clientHeight
@@ -307,6 +489,7 @@ export function Visualizer(): JSX.Element {
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      controls.removeEventListener('change', onControlsChange)
       controls.dispose()
       renderer.dispose()
       mount.removeChild(renderer.domElement)
@@ -327,7 +510,10 @@ export function Visualizer(): JSX.Element {
     t.cumLen = null
     t.baseColors = null
     t.totalLen = 0
-    if (!gcode) return
+    if (!gcode) {
+      framedGcode.current = null // reloading the same file afterwards should re-frame
+      return
+    }
 
     // in rotary mode wrap the program onto the cylinder (A = angle, Z = radial);
     // the axis line is the work origin, matching where the cylinder is drawn
@@ -344,9 +530,11 @@ export function Visualizer(): JSX.Element {
     const geom = new THREE.BufferGeometry()
     geom.setAttribute('position', new THREE.BufferAttribute(path.positions, 3))
     geom.setAttribute('color', new THREE.BufferAttribute(path.colors, 3))
+    // per-vertex distances make rapids (G0) render dotted while cuts stay solid
+    geom.setAttribute('lineDistance', new THREE.BufferAttribute(path.lineDistances, 1))
     const line = new THREE.LineSegments(
       geom,
-      new THREE.LineBasicMaterial({ vertexColors: true })
+      new THREE.LineDashedMaterial({ vertexColors: true, dashSize: 1.0, gapSize: 2.0 })
     )
     // rotary geometry is in axis-local coords → parent it in the spinning group so
     // it turns with the cylinder; flat geometry is world coords → parent in `group`
@@ -384,30 +572,69 @@ export function Visualizer(): JSX.Element {
     )
     // group is rotated -90° about X → world target maps (x,y,z)→(x,z,-y)
     t.size = size
-    t.controls.target.set(cx, cz, -cy)
-    t.camera.position.set(cx + size, cz + size, -cy + size * 1.3)
-    t.controls.update()
+    const center: [number, number, number] = [cx, cz, -cy] // world: (x,y,z)→(x,z,-y)
+    if (framedGcode.current !== gcode) {
+      // new program → re-frame it while KEEPING the current camera orientation (any
+      // angle, not just a named preset): same direction + up, distance from size
+      framedGcode.current = gcode
+      const dir = new THREE.Vector3().subVectors(t.camera.position, t.controls.target)
+      if (dir.lengthSq() < 1e-6) dir.set(1, 1, 1)
+      dir.normalize().multiplyScalar((t.size || 100) * 1.6)
+      t.controls.target.set(center[0], center[1], center[2])
+      t.camera.position.set(center[0] + dir.x, center[1] + dir.y, center[2] + dir.z)
+      t.controls.update()
+    } else if (framedCenter.current) {
+      // same program, a WCS/stock change moved the path to another fixture offset →
+      // PAN the camera to follow it, keeping the user's orientation AND zoom
+      const [px, py, pz] = framedCenter.current
+      const dx = center[0] - px
+      const dy = center[1] - py
+      const dz = center[2] - pz
+      if (dx || dy || dz) {
+        t.camera.position.set(
+          t.camera.position.x + dx,
+          t.camera.position.y + dy,
+          t.camera.position.z + dz
+        )
+        t.controls.target.set(
+          t.controls.target.x + dx,
+          t.controls.target.y + dy,
+          t.controls.target.z + dz
+        )
+        t.controls.update()
+      }
+    }
+    framedCenter.current = center
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcode, wcsOffsets, wcs, stock])
 
-  // camera view presets (Top / Front / 3D)
-  const applyView = (v: 'top' | 'front' | 'iso'): void => {
-    setView(v)
+  // camera view presets — snapped from the static ViewCube faces / corner. Clicking a
+  // zone lights it up and records the snapped direction; the highlight stays until the
+  // camera direction actually deviates (a real orbit), not on a stray click.
+  const applyView = (v: ViewName): void => {
+    snapping.current = true // our own camera move — don't let it clear the highlight
+    orientCamera(v)
+    snapping.current = false
     const t = three.current
-    if (!t) return
-    const tg = t.controls.target
-    const d = (t.size || 100) * 1.6
-    if (v === 'top') {
-      t.camera.up.set(0, 0, -1)
-      t.camera.position.set(tg.x, tg.y + d, tg.z + 0.001)
-    } else if (v === 'front') {
-      t.camera.up.set(0, 1, 0)
-      t.camera.position.set(tg.x, tg.y + 0.001, tg.z + d)
-    } else {
-      t.camera.up.set(0, 1, 0)
-      t.camera.position.set(tg.x + d, tg.y + d, tg.z + d)
+    if (t) {
+      const d = new THREE.Vector3().subVectors(t.camera.position, t.controls.target).normalize()
+      snappedDir.current = [d.x, d.y, d.z]
     }
-    t.camera.lookAt(tg)
+    setActiveView(v)
+  }
+
+  // Fit: re-frame the whole program in the window, KEEPING the current orientation.
+  // Cancels Follow (opposite intents: "show everything" vs "stay on the tool").
+  const fitView = (): void => {
+    const t = three.current
+    if (!t || !framedCenter.current) return
+    setFollow(false)
+    const [cx, cy, cz] = framedCenter.current
+    const dir = new THREE.Vector3().subVectors(t.camera.position, t.controls.target)
+    if (dir.lengthSq() < 1e-6) dir.set(1, 1, 1)
+    dir.normalize().multiplyScalar((t.size || 100) * 1.6)
+    t.controls.target.set(cx, cy, cz)
+    t.camera.position.set(cx + dir.x, cy + dir.y, cz + dir.z)
     t.controls.update()
   }
 
@@ -427,11 +654,24 @@ export function Visualizer(): JSX.Element {
       const wy = stock.rotaryAxis === 'X' ? o[1] ?? 0 : along
       const wz = (o[2] ?? 0) + rho // angle 0 → straight up (+Z)
       t.marker.position.set(wx, wy, wz + 14)
-      return
+    } else {
+      // origin is the tail; tip = origin + dir*len lands exactly on the position
+      t.marker.position.set(mpos[0], mpos[1], mpos[2] + 14)
     }
-    // origin is the tail; tip = origin + dir*len lands exactly on the position
-    t.marker.position.set(mpos[0], mpos[1], mpos[2] + 14)
-  }, [mpos, stock, axes, wcs, wcsOffsets, rotaryView])
+    // Follow: pan the camera so the marker stays centred (its real world position
+    // accounts for the rotated/spinning group), keeping the user's zoom + orientation.
+    if (follow) {
+      t.marker.updateWorldMatrix(true, false)
+      const wp = t.marker.getWorldPosition(new THREE.Vector3())
+      t.camera.position.set(
+        t.camera.position.x + (wp.x - t.controls.target.x),
+        t.camera.position.y + (wp.y - t.controls.target.y),
+        t.camera.position.z + (wp.z - t.controls.target.z)
+      )
+      t.controls.target.set(wp.x, wp.y, wp.z)
+      t.controls.update()
+    }
+  }, [mpos, stock, axes, wcs, wcsOffsets, rotaryView, follow])
 
   // --- spin the material (cylinder + wrapped toolpath) to the live A angle ---
   // The rotaryGroup sits at the work origin and turns about the rotary axis. Its spin
@@ -606,25 +846,33 @@ export function Visualizer(): JSX.Element {
     <div className="relative h-full w-full overflow-hidden rounded-lg border border-border bg-panel2">
       <div ref={mountRef} className="h-full w-full" />
 
-      {/* view preset tabs */}
-      <div className="absolute right-3 top-2 flex overflow-hidden rounded-md border border-border bg-panel/80 backdrop-blur">
-        {(
-          [
-            ['top', 'Top'],
-            ['front', 'Front'],
-            ['iso', '3D']
-          ] as const
-        ).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => applyView(v)}
-            className={`px-3 py-1 font-mono text-xs transition ${
-              view === v ? 'bg-brand text-base' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* static CAD-style ViewCube (top-right) */}
+      <div className="absolute right-2 top-1">
+        <ViewCube active={activeView} onPick={applyView} />
+      </div>
+
+      {/* Fit / Follow, top row (level with Load), just left of the cube */}
+      <div className="absolute flex items-center gap-2" style={{ top: 8, right: 132 }}>
+        {/* Fit: frame the whole program now */}
+        <button
+          onClick={fitView}
+          title="Fit the whole program in view"
+          className="rounded-md border border-border bg-panel/80 px-3 py-1 font-mono text-xs text-slate-400 backdrop-blur transition hover:text-slate-200"
+        >
+          Fit
+        </button>
+        {/* Follow: keep the tool centred while it runs */}
+        <button
+          onClick={() => setFollow((f) => !f)}
+          title="Keep the camera on the moving tool"
+          className={`rounded-md border px-3 py-1 font-mono text-xs backdrop-blur transition ${
+            follow
+              ? 'border-brand bg-brand text-base'
+              : 'border-border bg-panel/80 text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          Follow
+        </button>
       </div>
 
       <ViewerControls />

@@ -17,6 +17,7 @@ import type { ConnectOptions, ControllerEvent, MachineInfo, ResumeMap, Transport
 import type { Transport } from './transport'
 import { SerialTransport, listPorts } from './transport/serial'
 import { EthernetTransport } from './transport/ethernet'
+import { SettingsBackup } from './settingsBackup'
 
 const POLL_MS = 200 // idle status '?' interval (~5 Hz)
 const JOB_POLL_MS = 50 // status '?' interval while running (~20 Hz) — finer tool
@@ -38,6 +39,8 @@ export class Controller {
   // like š/ž/č); StringDecoder buffers multibyte sequences split across packets.
   private decoder = new StringDecoder('utf8')
   private rxBuf = ''
+  /** mirrors every $$ dump to disk (see settingsBackup.ts) */
+  private backup = new SettingsBackup()
   private pollTimer: ReturnType<typeof setInterval> | null = null
 
   // streaming state
@@ -142,6 +145,7 @@ export class Controller {
   private onClose(reason?: string): void {
     this.stopPoll()
     this.resetJob()
+    this.backup.reset() // a dump cut off by the disconnect is not a backup
     this.motionActive = false
     this.transport = null
     this.emit({ type: 'disconnected', data: { reason } })
@@ -311,6 +315,8 @@ export class Controller {
       }
       return
     }
+
+    this.backup.feed(line)
 
     // A welcome banner means the controller restarted. grblHAL drops the homed
     // reference on a reset that lost position ($676 bit 0) but does NOT announce

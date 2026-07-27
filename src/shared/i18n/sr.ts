@@ -101,13 +101,13 @@ export const sr: Record<string, string> = {
     'Sam otvori prozor za oporavak kad se desi alarm ili greška. Isključi da ostane samo obaveštenje u statusnoj traci + dugme „Šta da uradim?”.',
   'ui.errors.cause': 'Kada iskoči',
   'ui.errors.recovery': 'Šta uraditi',
-  'ui.errors.act.unlock': 'Otključaj ($X)',
-  'ui.errors.act.home': 'Bazanje ($H)',
-  'ui.errors.act.reset': 'Reset',
   // vođeni oporavak
   'ui.errors.procedure': 'Korak po korak',
   'ui.errors.stepOf': 'Korak {n} od {total}',
   'ui.errors.resetFirst': 'Prvo Reset — dok je kritičan događaj aktivan kontroler ovo odbija (error:79).',
+  // Unlock / Home / Reset are deliberately NOT translated — machine commands keep
+  // their fixed English labels (see useLabel). This one is our own action, not a
+  // grbl command, so it does follow the language.
   'ui.errors.act.freeSwitch': 'Oslobodi prekidač',
   'ui.errors.escapeHint':
     'Izaberi smer — gledaj mašinu, samo ti vidiš na kom je kraju. Pogrešan smer? Pritisni drugi. Hard limiti se gase samo za taj potez.',

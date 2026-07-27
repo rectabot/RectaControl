@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { listAlarms, listErrors, type CodeGroup, type RecoveryAction, type ResolvedCode } from '@shared/messages'
 import { useStore } from '../store'
-import { useLang, useT } from '../i18n'
+import { useLabel, useLang, useT } from '../i18n'
 import { AlertIcon } from './icons'
 
 /** Order the error groups appear in, so related codes sit together. */
@@ -241,6 +241,9 @@ function CodeCard({
 
 /** Small pill showing which quick-recovery action applies to a code. */
 function ActionBadge({ action }: { action: RecoveryAction }): JSX.Element {
+  // same fixed English command name as the button it stands for ("Free the switch"
+  // is ours, not a grbl command, so that one follows the language)
+  const L = useLabel()
   const t = useT()
   const tone =
     action === 'reset'
@@ -252,7 +255,7 @@ function ActionBadge({ action }: { action: RecoveryAction }): JSX.Element {
     <span
       className={`hidden shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] sm:inline ${tone}`}
     >
-      {t(`ui.errors.act.${action}`)}
+      {action === 'freeSwitch' ? t('ui.errors.act.freeSwitch') : L(`ui.errors.act.${action}`)}
     </span>
   )
 }

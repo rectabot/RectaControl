@@ -20,7 +20,11 @@ module.exports = {
         ok: '#10b981',
         warn: '#fbbf24',
         danger: '#ef4444',
-        purple: '#a855f7'
+        purple: '#a855f7',  // Park (an app concept, not a machine state)
+        // Homing state — blue is the convention senders share (ioSender). NOT named
+        // `blue`: that would replace Tailwind's whole blue scale and silently kill
+        // the `blue-400` used elsewhere.
+        homing: '#3b82f6'
       },
       fontFamily: {
         display: ['Orbitron', 'sans-serif'],

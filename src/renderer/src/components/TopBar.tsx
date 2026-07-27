@@ -3,17 +3,7 @@ import { useStore } from '../store'
 import type { SerialPortInfo } from '@shared/types'
 import { useT, useLabel } from '../i18n'
 import appIcon from '../assets/icon.png'
-
-const STATE_COLOR: Record<string, string> = {
-  Idle: 'text-ok',
-  Run: 'text-brand',
-  Jog: 'text-brand',
-  Hold: 'text-warn',
-  Alarm: 'text-danger',
-  Home: 'text-purple',
-  Door: 'text-warn',
-  Check: 'text-slate-400'
-}
+import { stateColor as colorForState } from '../machineState'
 
 export function TopBar(): JSX.Element {
   const t = useT()
@@ -113,8 +103,12 @@ export function TopBar(): JSX.Element {
     }
     window.recta.disconnect()
   }
-  const state = connected ? raw : 'Disconnected'
-  const stateColor = connected ? (STATE_COLOR[raw.split(':')[0]] ?? 'text-slate-200') : 'text-slate-500'
+  // The state readout is a label, so it stays English in every language, exactly
+  // like grblHAL's own Idle / Run / Home. "Offline" rather than "Disconnected":
+  // shorter (this centred text is the widest thing in the bar) and it does not
+  // echo the Connect button sitting next to it.
+  const state = connected ? raw : L('ui.top.offline')
+  const stateColor = connected ? colorForState(raw) : 'text-slate-500'
 
   return (
     <div className="relative flex items-center gap-3 rounded-lg border border-border bg-panel px-4 py-2">
@@ -139,7 +133,9 @@ export function TopBar(): JSX.Element {
 
       {/* center: machine state */}
       <div className="pointer-events-none absolute left-1/2 -translate-x-1/2">
-        <span className={`font-display text-2xl font-bold tracking-wide ${stateColor}`}>{state}</span>
+        {/* the machine state is the one thing worth reading from across the shop —
+            sized to be legible at a glance, not to fit the bar's other content */}
+        <span className={`font-display text-3xl font-bold tracking-wide ${stateColor}`}>{state}</span>
       </div>
 
       {/* right: settings + connect (theme moved to Settings → System → Theme) */}

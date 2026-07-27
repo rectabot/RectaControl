@@ -442,6 +442,7 @@ export const en: Record<string, string> = {
 
   // ── Top bar / connection ───────────────────────────────────────────────────
   'ui.top.connected': 'Connected',
+  'ui.top.offline': 'Offline',
   'ui.top.notConnected': 'Not connected',
   'ui.top.unitTitle': 'Measurement unit ($13) — change it in Settings',
   'ui.top.unit': 'Unit:',

@@ -811,14 +811,19 @@ export const useStore = create<AppState>((set, get) => ({
           // the recovery popup, but ONLY for alarms or errors hit during a job —
           // an idle MDI typo just shows in the footer, no popup in your face.
           const parsed = parseCode(e.data, s.lang)
-          // error:79 ("not allowed while critical event is active") is a SYMPTOM of
-          // the alarm already on screen — the operator pressed Unlock too early.
-          // Letting it take over the popup would replace the real problem with its
-          // echo, so it never becomes the alert while the alarm still stands.
+          // An ALARM outranks any error it drags behind it. A tripped limit mid-job
+          // answers error:9 to every line still draining out of the controller's
+          // buffer, and error:79 to a too-early $X — all of it is the alarm's own
+          // wake. Letting those become the alert would swap the real problem for
+          // its echo AND swap in a shorter procedure (that is how the popup came to
+          // vanish after Unlock, with the machine still sitting on the switch).
+          // They stay visible in the console and the footer; they just do not take
+          // the stage while the alarm still stands.
+          const alarmState = (s.status?.state ?? '').split(':')[0] === 'Alarm'
           const echo =
             parsed?.kind === 'error' &&
-            parsed.detail.code === 79 &&
-            (s.resetRequired || critical || s.alert?.kind === 'alarm')
+            ((s.alert?.kind === 'alarm' && (alarmState || s.resetRequired || critical)) ||
+              (parsed.detail.code === 79 && (s.resetRequired || critical)))
           const recover =
             parsed && !echo && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
           const sameAlert =

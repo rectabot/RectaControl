@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { RT } from '@shared/grbl'
 import { getAlarm, getError, type RecoveryAction, type RecoveryStep } from '@shared/messages'
 import { useStore, hasLimitPin, ESCAPE_MM } from '../store'
-import { useLang, useT } from '../i18n'
+import { useLabel, useLang, useT } from '../i18n'
 
 /** The one-tap recovery buttons, wired to the controller. */
 function runAction(action: RecoveryAction): void {
@@ -65,11 +65,15 @@ function ActionBtn({
  *  read; the catalogue (Settings → Errors) is where the whole procedure is studied
  *  at leisure. Steps the machine has already satisfied are skipped automatically.
  *
- *  The small command row at the bottom stays live the whole time: guidance must
- *  never become a cage — if our procedure is wrong for someone's machine, they can
- *  still press Reset / Unlock / Home. */
+ *  Guidance must never become a cage: if the procedure is wrong for someone's
+ *  machine, Reset (status bar) and Unlock / Home (Jog panel) stay reachable behind
+ *  this dialog, so there is no need to duplicate them inside it. */
 export function WhatToDo(): JSX.Element | null {
   const t = useT()
+  // Machine commands keep their fixed English labels in every language (see
+  // useLabel): the operator sees the same Unlock / Home / Reset here, on the Jog
+  // panel and in the manual. Only the explaining text follows the language.
+  const L = useLabel()
   const lang = useLang()
   const alert = useStore((s) => s.alert)
   const open = useStore((s) => s.recoveryOpen)
@@ -120,8 +124,10 @@ export function WhatToDo(): JSX.Element | null {
   // mid-recovery lands on the step that is actually left. A leading Reset step is
   // "done" once the controller is out of its blocking loop (`resetRequired` is
   // lifted by the welcome banner) — the operator may have pressed Reset anywhere.
-  const satisfied = (s: RecoveryStep): boolean =>
-    s.do === 'unlock'
+  const satisfied = (s: RecoveryStep | undefined): boolean =>
+    !s
+      ? false // out of range — never let an index slip take the UI down again
+      : s.do === 'unlock'
       ? !resetRequired && base !== '' && base !== 'Alarm'
       : s.do === 'home'
         ? homed
@@ -133,7 +139,14 @@ export function WhatToDo(): JSX.Element | null {
             s.do === 'freeSwitch'
             ? !limitEngaged
             : false
-  let cur = advanced
+  // `advanced` belongs to the PREVIOUS code until the reset effect runs — and
+  // effects run after the render, so a new alert with a shorter procedure would be
+  // walked with a stale index and index past the end. That happened for real: an
+  // alarm during a job raises a second code right behind it (the abort's error),
+  // the popup re-rendered against the new code with the old position, and reading
+  // `usable[4]` of a 2-step procedure took the whole UI down. Clamp here; the
+  // effect below is then only a convenience, never load-bearing.
+  let cur = Math.min(advanced, usable.length)
   while (cur < usable.length && satisfied(usable[cur])) cur++
   const finished = cur >= usable.length
   const step = finished ? null : usable[cur]
@@ -141,6 +154,12 @@ export function WhatToDo(): JSX.Element | null {
   // stepping back is offered only where it can actually take effect (a machine-
   // satisfied step would be skipped forward again the moment we render)
   const canGoBack = cur > 0 && !satisfied(usable[cur - 1])
+
+  // Unlock / Home / Reset are the worldwide command set — fixed English, like the
+  // Jog panel. "Free the switch" is our own invention, not a grbl command, so it
+  // speaks the operator's language.
+  const cmdLabel = (a: RecoveryAction): string =>
+    a === 'freeSwitch' ? t('ui.errors.act.freeSwitch') : L(`ui.errors.act.${a}`)
 
   const nextStep = (): void => setAdvanced(cur + 1)
   const onCommand = (a: RecoveryAction, isStep: boolean): void => {
@@ -277,7 +296,7 @@ export function WhatToDo(): JSX.Element | null {
                     disabled={!connected || blocked(step.do as RecoveryAction)}
                     title={blocked(step.do as RecoveryAction) ? t('ui.errors.resetFirst') : undefined}
                     onClick={() => onCommand(step.do as RecoveryAction, true)}
-                    label={t(`ui.errors.act.${step.do}`)}
+                    label={cmdLabel(step.do as RecoveryAction)}
                   />
                 ) : (
                   <ActionBtn
@@ -322,7 +341,7 @@ export function WhatToDo(): JSX.Element | null {
                       runAction('home')
                       close()
                     }}
-                    label={t('ui.errors.act.home')}
+                    label={cmdLabel('home')}
                   />
                 )}
               </div>

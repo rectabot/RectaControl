@@ -6,6 +6,7 @@ import { clampContinuousJog } from '../jogLimits'
 import { parkForAccess, resumeFromPark, goToPark } from '../controlActions'
 import { useT, useLabel } from '../i18n'
 import { Panel } from './Panel'
+import { InfoTip } from './InfoTip'
 
 const STEPS = [0.1, 1, 10]
 const FEED_PRESETS = [500, 1000, 2000, 3000, 4000]
@@ -31,8 +32,12 @@ export function JogPanel(): JSX.Element {
   // and 'Jog' pass (so a hold-jog's pointer-up still fires the cancel); but if a
   // program is latched, even a stray 'Jog' state stays blocked.
   const canJog = connected && !programActive && base !== 'Alarm'
-  // Home / Unlock: fine from Idle or Alarm, but never while a program is active.
-  const canRecover = connected && !programActive
+  // Home / Unlock: fine from Idle or Alarm, but never while a program is active —
+  // and never while grblHAL is blocking on a critical event (hard/soft limit,
+  // E-stop, motor fault): there it answers error:79 until a Reset, so an enabled
+  // button would only teach the operator that Unlock "does nothing".
+  const resetRequired = useStore((s) => s.resetRequired)
+  const canRecover = connected && !programActive && !resetRequired
   // Units are owned by $13 (set in Settings); the Jog panel only reflects it.
   const units = useStore((s) => s.units)
   // for clamping continuous jog to soft-limit travel once homed
@@ -204,17 +209,23 @@ export function JogPanel(): JSX.Element {
         <div className="flex flex-1 gap-1">
           <div className="flex flex-1 flex-col gap-1">
             <ActionBtn
+              tone="ok"
               icon={<HomeIcon />}
               label={L('ui.jog.home')}
-              title={t(homed ? 'ui.jog.homedTitle' : 'ui.jog.homeTitle')}
+              title={
+                resetRequired
+                  ? t('ui.errors.resetFirst')
+                  : t(homed ? 'ui.jog.homedTitle' : 'ui.jog.homeTitle')
+              }
               disabled={!canRecover}
               onClick={() => window.recta.send('$H')}
               active={homed}
             />
             <ActionBtn
+              tone="warn"
               icon={<UnlockIcon />}
               label={L('ui.jog.unlock')}
-              title={t('ui.jog.unlockTitle')}
+              title={resetRequired ? t('ui.errors.resetFirst') : t('ui.jog.unlockTitle')}
               disabled={!canRecover}
               onClick={() => window.recta.send('$X')}
             />
@@ -227,9 +238,14 @@ export function JogPanel(): JSX.Element {
 }
 
 /** A uniform machine-action button (icon + label) for the Jog panel's action
- *  column — Home / Unlock, filling the freed width. `active` recolours it green
- *  as a status light (used by Home when the machine is homed / referenced). */
+ *  column — Home / Unlock, filling the freed width.
+ *
+ *  Colour is the ACTION, not the state: the same green Home / amber Unlock as the
+ *  alarm recovery popup and the error reference table, so a button means the same
+ *  thing wherever it is met. State is carried by weight instead — Home dims until
+ *  the machine is referenced, then lights up with the ● dot. */
 function ActionBtn({
+  tone,
   icon,
   label,
   title,
@@ -237,6 +253,7 @@ function ActionBtn({
   onClick,
   active
 }: {
+  tone: 'ok' | 'warn'
   icon: JSX.Element
   label: string
   title: string
@@ -244,11 +261,13 @@ function ActionBtn({
   onClick: () => void
   active?: boolean
 }): JSX.Element {
-  // green when "on" (e.g. homed), brand otherwise. Kept as a full class swap so
-  // Tailwind's JIT keeps both colour sets in the build.
-  const accent = active
-    ? 'border-emerald-400/60 text-emerald-400 enabled:hover:bg-emerald-400 enabled:hover:text-[#020617]'
-    : 'border-brand/50 text-brand enabled:hover:bg-brand enabled:hover:text-[#020617]'
+  // full class strings (no interpolation) so Tailwind's JIT keeps every variant
+  const accent =
+    tone === 'warn'
+      ? 'border-warn/50 text-warn enabled:hover:bg-warn enabled:hover:text-[#020617]'
+      : active
+        ? 'border-ok/60 bg-ok/10 text-ok enabled:hover:bg-ok enabled:hover:text-[#020617]'
+        : 'border-ok/35 text-ok/70 enabled:hover:bg-ok enabled:hover:text-[#020617]'
   return (
     <button
       className={`flex flex-1 items-center justify-center gap-2 rounded-md border bg-panel2 font-mono transition disabled:opacity-40 ${accent}`}
@@ -266,7 +285,11 @@ function ActionBtn({
 /** Park & Resume: a tall vertical button (stacked letters, like ZERO ALL) filling
  *  the action column. While a job cuts it PARKS (feed-hold → abort to Idle so you can
  *  jog the head free to clear chips); once parked it RESUMES (returns to the stopped
- *  line and continues). Amber while running, green when a resume is pending. */
+ *  line and continues).
+ *
+ *  Purple while it parks, green once a resume is pending. Purple because amber is
+ *  taken: it is the alarm family's colour (Hold / Door / Unlock), and Park sits
+ *  right next to Unlock — two amber buttons side by side would read as one thing. */
 function ParkBtn(): JSX.Element {
   const t = useT()
   const L = useLabel()
@@ -290,16 +313,21 @@ function ParkBtn(): JSX.Element {
   const canGoPark =
     connected && !jobRunning && !sdRunning && !parked && base === 'Idle' && homed && parkPos != null
   const enabled = canPark || resumeMode || canGoPark
+  // Nobody is born knowing that "park" lives in G30. When the button would otherwise
+  // just sit there grey — idle machine, no park saved — it turns into a teacher: same
+  // shape, muted, and it explains what Park is and walks you to where you set it.
+  const needsSetup =
+    connected && !jobRunning && !sdRunning && !parked && base === 'Idle' && parkPos == null
   const label = (resumeMode ? L('ui.jog.resume') : L('ui.jog.park')).toUpperCase()
   const accent = resumeMode
-    ? 'border-emerald-400/60 text-emerald-400 enabled:hover:bg-emerald-400 enabled:hover:text-[#020617]'
+    ? 'border-ok/60 text-ok enabled:hover:bg-ok enabled:hover:text-[#020617]'
     : canGoPark
-      ? 'border-amber-400/60 text-amber-400' // hold-to-go: the rising fill is the feedback, no hover flood
-      : 'border-amber-400/60 text-amber-400 enabled:hover:bg-amber-400 enabled:hover:text-[#020617]'
+      ? 'border-purple/60 text-purple' // hold-to-go: the rising fill is the feedback, no hover flood
+      : 'border-purple/60 text-purple enabled:hover:bg-purple enabled:hover:text-[#020617]'
 
   // goToPark MOVES the head across the table the instant it fires, so — unlike Park
   // (from a paused job) and Resume, which are deliberate steps in a job flow — it must
-  // NOT act on a stray tap. Gate it behind a press-and-hold: a rising amber fill shows
+  // NOT act on a stray tap. Gate it behind a press-and-hold: a rising fill shows
   // the hold progressing, and only a full hold (PARK_HOLD_MS) triggers the move.
   const holdMode = canGoPark
   const handlers = holdMode
@@ -310,6 +338,41 @@ function ParkBtn(): JSX.Element {
       }
     : { onClick: () => (resumeMode ? resumeFromPark() : parkForAccess()) }
 
+  // teach state: the button becomes the ⓘ trigger itself (it moves nothing, so it is
+  // safe to leave clickable), and the popover hands over to the offsets table
+  if (needsSetup)
+    return (
+      <div className="flex w-12 shrink-0">
+        <InfoTip
+          className="h-full w-full"
+          width="w-72"
+          placement="top-right"
+          triggerTitle={t('ui.jog.parkSetupTitle')}
+          title={t('ui.jog.parkSetupHead')}
+          body={[t('ui.jog.parkSetupP1'), t('ui.jog.parkSetupP2')]}
+          note={homed ? undefined : t('ui.jog.parkSetupHome')}
+          action={{
+            label: `→ ${L('ui.offsets.open')}`,
+            onClick: () => useStore.getState().setOffsetsOpen(true)
+          }}
+          trigger={(open) => (
+            <span
+              className={`relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-md border bg-panel2 font-mono text-sm font-bold uppercase leading-tight transition ${
+                open ? 'border-purple/60 text-purple' : 'border-border2 text-slate-500 hover:text-purple'
+              }`}
+            >
+              {/* corner badge, not a stacked row — the vertical PARK letters keep
+                  their exact spacing whether the button is armed or teaching */}
+              <span className="absolute right-1 top-1 text-[10px] font-bold leading-none">?</span>
+              {label.split('').map((ch, i) => (
+                <span key={i}>{ch}</span>
+              ))}
+            </span>
+          )}
+        />
+      </div>
+    )
+
   return (
     <button
       disabled={!enabled}
@@ -319,7 +382,7 @@ function ParkBtn(): JSX.Element {
     >
       {holdMode && (
         <span
-          className="pointer-events-none absolute inset-x-0 bottom-0 bg-amber-400/25"
+          className="pointer-events-none absolute inset-x-0 bottom-0 bg-purple/25"
           style={{
             height: holding ? '100%' : '0%',
             transition: `height ${holding ? PARK_HOLD_MS : 140}ms linear`

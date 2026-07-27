@@ -23,6 +23,14 @@ const JOB_POLL_MS = 50 // status '?' interval while running (~20 Hz) — finer t
 // position sampling so the editor highlight scrolls through lines, not just a few
 const RX_BUFFER = 127 // conservative serial RX buffer size for flow control
 
+/** Realtime bytes worth echoing into the console, by the name the operator
+ *  pressed. Deliberately excludes '?' polls and the override nudges. */
+const ECHOED_REALTIME: Record<number, string> = {
+  [RT.softReset]: 'Reset',
+  [RT.feedHold]: 'Hold',
+  [RT.resume]: 'Resume' // '~' — cycle start / resume
+}
+
 export class Controller {
   private transport: Transport | null = null
   private parser = new StatusParser()
@@ -157,7 +165,14 @@ export class Controller {
   }
 
   sendRealtime(byte: number): void {
-    if (this.transport?.isOpen) this.transport.write(Buffer.from([byte]))
+    if (!this.transport?.isOpen) return
+    this.transport.write(Buffer.from([byte]))
+    // Realtime bytes are invisible characters, so a console showing only `$`
+    // lines makes a Reset look like nothing happened (it is exactly what the
+    // controller needs after a hard limit). Echo the ones the operator presses;
+    // status polls and override nudges stay silent — they would flood.
+    const name = ECHOED_REALTIME[byte]
+    if (name) this.emit({ type: 'sent', data: `[${name}]` })
   }
 
   // -------------------------------------------------------------------- jobs

@@ -17,7 +17,7 @@
 import type { Lang } from './i18n'
 
 /** One-tap recovery the UI can surface for a live alarm/error. */
-export type RecoveryAction = 'unlock' | 'home' | 'reset'
+export type RecoveryAction = 'unlock' | 'home' | 'reset' | 'freeSwitch'
 
 /** Where a code belongs in the reference, for grouped display. */
 export type CodeGroup =
@@ -29,16 +29,39 @@ export type CodeGroup =
   | 'macro' // expressions & flow-control (macros)
   | 'other'
 
+/** One step of a guided recovery.
+ *
+ *  `do` is either a wired machine command (the popup arms that button) or
+ *  'manual' — something the operator does at the machine, confirmed by hand.
+ *  `goto` deep-links into the Settings category where the fix lives, so the
+ *  operator is taken to the control instead of being told its number. */
+export interface RecoveryStep {
+  do: RecoveryAction | 'manual'
+  text: string
+  goto?: string
+  /** Only shown on machines with homing DISABLED ($22 off). Some remedies exist
+   *  purely because $H isn't available — e.g. crawling off a hard-limit switch by
+   *  hand, which homing does on its own. */
+  ifNoHoming?: boolean
+}
+
 export interface CodeDetail {
   title: string
   cause: string
   recovery: string
   group: CodeGroup
+  /** the ordered procedure; when present it is the source of truth and `actions`
+   *  is derived from it (so the badges and the popup can never disagree) */
+  steps?: RecoveryStep[]
   actions?: RecoveryAction[]
 }
 
-/** SR overrides may fill any subset of the text fields; the rest fall back to EN. */
-type CodeDetailSR = Partial<Pick<CodeDetail, 'title' | 'cause' | 'recovery'>>
+/** SR overrides may fill any subset of the text fields; the rest fall back to EN.
+ *  `steps` is the parallel list of step texts, in the same order as the EN steps —
+ *  only the wording is translated, never the procedure. */
+type CodeDetailSR = Partial<Pick<CodeDetail, 'title' | 'cause' | 'recovery'>> & {
+  steps?: string[]
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALARMS — machine-halting events. All require the operator to clear/unlock or
@@ -51,18 +74,46 @@ export const ALARMS: Record<number, CodeDetail> = {
     cause:
       'A limit switch was hit during motion. The machine halts immediately, so the position is no longer trusted.',
     recovery:
-      'Unlock ($X), jog away from the switch, then re-home ($H) to restore an accurate position. If it fires with nothing near the switch, check wiring/noise.',
+      'Reset first — a hard limit is a critical event, so nothing else is accepted. Then unlock ($X), get the axis clear of the switch (with hard limits temporarily off, or by hand), and re-home ($H). If it fires with nothing near the switch, check wiring/noise.',
     group: 'motion',
-    actions: ['unlock', 'home']
+    steps: [
+      {
+        do: 'reset',
+        text: 'Reset first — nothing else is accepted while a critical event is active.'
+      },
+      {
+        do: 'unlock',
+        text: 'Unlock. The lock is cleared, but the position is not trusted yet.'
+      },
+      {
+        do: 'freeSwitch',
+        text: 'Back the axis off the switch. While it is pressed nothing moves — not even homing.'
+      },
+      { do: 'home', text: 'Home to restore an accurate machine position.' }
+    ]
   },
   2: {
     title: 'Soft limit reached',
     cause:
       'A commanded move would have taken an axis past its configured travel ($130–$132). The move was blocked before it started; position is retained.',
     recovery:
-      'Unlock ($X) — the machine did not move. Adjust your work origin or the G-code so all moves stay inside the work area.',
+      'Reset first — a soft limit is a critical event as well — then unlock ($X); the machine did not move. Adjust your work origin or the G-code so all moves stay inside the work area.',
     group: 'motion',
-    actions: ['unlock']
+    steps: [
+      {
+        do: 'reset',
+        text: 'Reset first — nothing else is accepted while a critical event is active.'
+      },
+      {
+        do: 'unlock',
+        text: 'Unlock. The machine never moved, so the position is still good.'
+      },
+      {
+        do: 'manual',
+        text: 'Move the work origin, or edit the program, so every move stays inside the travel.',
+        goto: 'limits'
+      }
+    ]
   },
   3: {
     title: 'Reset while in motion',
@@ -70,88 +121,154 @@ export const ALARMS: Record<number, CodeDetail> = {
       'A soft reset or E-stop happened while the machine was moving, so it stopped abruptly and lost its position.',
     recovery: 'Unlock ($X), then re-home ($H) before running any job.',
     group: 'motion',
-    actions: ['unlock', 'home']
+    steps: [
+      { do: 'unlock', text: 'Unlock to clear the alarm lock.' },
+      { do: 'home', text: 'Home — the abrupt stop lost the position.' }
+    ]
   },
   4: {
     title: 'Probe fail — already triggered',
-    cause:
-      'The probe was already in its triggered state when a probing cycle (G38.2/G38.3) began.',
+    cause: 'The probe was already in its triggered state when a probing cycle (G38.2/G38.3) began.',
     recovery:
       'Check the probe is clear of the workpiece and wired correctly (not stuck closed). Unlock ($X) and retry the probe.',
     group: 'state',
-    actions: ['unlock']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Free the probe. It must read OPEN before a cycle — not stuck on the work or shorted.',
+        goto: 'probe'
+      },
+      { do: 'unlock', text: 'Unlock, then run the probe again.' }
+    ]
   },
   5: {
     title: 'Probe fail — no contact',
-    cause:
-      'The probe did not touch the workpiece within the programmed probing distance (G38.2/G38.4).',
+    cause: 'The probe did not touch the workpiece within the programmed probing distance (G38.2/G38.4).',
     recovery:
       'Unlock ($X). Position the probe closer, increase the probing distance, and confirm the probe signal responds before retrying.',
     group: 'state',
-    actions: ['unlock']
+    steps: [
+      { do: 'unlock', text: 'Unlock.' },
+      {
+        do: 'manual',
+        text: 'Start closer, or increase the probing distance. Check the probe reacts to a touch.',
+        goto: 'probe'
+      }
+    ]
   },
   6: {
     title: 'Homing failed — reset',
     cause: 'A reset was received while the homing cycle was running.',
     recovery: 'Run homing again ($H). If it keeps aborting, check for E-stop or noise on the reset line.',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Find what reset the controller mid-cycle: E-stop, a loose reset line, noise.'
+      },
+      { do: 'home', text: 'Run homing again.' }
+    ]
   },
   7: {
     title: 'Homing failed — door opened',
     cause: 'The safety door was opened during the homing cycle.',
     recovery: 'Close the safety door, then run homing again ($H).',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Close the safety door and keep it closed for the whole cycle.'
+      },
+      { do: 'home', text: 'Run homing again.' }
+    ]
   },
   8: {
     title: 'Homing failed — pull-off',
-    cause:
-      'After touching the limit switch the axis could not back off far enough to release it.',
-    recovery:
-      'Check the switch and wiring. Increase the pull-off distance ($27), then re-home ($H).',
+    cause: 'After touching the limit switch the axis could not back off far enough to release it.',
+    recovery: 'Check the switch and wiring. Increase the pull-off distance ($27), then re-home ($H).',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Check the switch releases when the axis backs off. If not, raise the pull-off ($27).',
+        goto: 'homing'
+      },
+      { do: 'home', text: 'Home again.' }
+    ]
   },
   9: {
     title: 'Homing failed — switch not found',
-    cause:
-      'The axis travelled the full search distance without reaching a limit switch.',
+    cause: 'The axis travelled the full search distance without reaching a limit switch.',
     recovery:
       'Confirm the switch triggers (check wiring / $ status), increase max travel or homing feed, then re-home ($H).',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Press the switch by hand and watch Pn: in the status bar. Nothing? It is wiring.',
+        goto: 'limits'
+      },
+      {
+        do: 'manual',
+        text: 'It reacts? Then the axis never reaches it — check max travel and the seek rate.',
+        goto: 'homing'
+      },
+      { do: 'home', text: 'Home again.' }
+    ]
   },
   10: {
     title: 'Emergency stop active',
     cause: 'The E-stop input is asserted.',
     recovery: 'Release the E-stop button, then reset the controller to clear the alarm.',
     group: 'state',
-    actions: ['reset']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Release the E-stop button — the input must be clear first.'
+      },
+      { do: 'reset', text: 'Reset to clear the alarm.' }
+    ]
   },
   11: {
     title: 'Homing required',
-    cause:
-      'The machine has not been homed since power-up and a move needs a known position.',
+    cause: 'The machine has not been homed since power-up and a move needs a known position.',
     recovery: 'Run homing ($H) before working.',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'home',
+        text: 'Run homing ($H) — nothing else is needed, the machine just wants a reference.'
+      }
+    ]
   },
   12: {
     title: 'Limit switch engaged at start',
-    cause:
-      'A limit switch is already active — the machine is likely sitting on a switch after power-on.',
+    cause: 'A limit switch is already active — the machine is likely sitting on a switch after power-on.',
     recovery:
       'Unlock ($X) and jog the axis off the switch, then re-home ($H). If nothing is on the switch, check wiring/noise.',
     group: 'motion',
-    actions: ['unlock', 'home']
+    steps: [
+      { do: 'unlock', text: 'Unlock so the machine will take a move.' },
+      {
+        do: 'freeSwitch',
+        text: 'Back the axis off the switch. While it is pressed nothing moves — not even homing.'
+      },
+      { do: 'home', text: 'Home to restore an accurate machine position.' }
+    ]
   },
   13: {
     title: 'Probe protection triggered',
     cause: 'The probe was hit unexpectedly outside a probing cycle.',
     recovery: 'Clear the obstruction, unlock ($X), and check the probe wiring.',
     group: 'state',
-    actions: ['unlock']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Clear whatever touched the probe and check its cable — a loose wire trips this.',
+        goto: 'probe'
+      },
+      { do: 'unlock', text: 'Unlock.' }
+    ]
   },
   14: {
     title: 'Spindle at-speed timeout',
@@ -160,38 +277,76 @@ export const ALARMS: Record<number, CodeDetail> = {
     recovery:
       'Check the VFD/spindle and the at-speed signal. Reset to clear, then retry. Increase the tolerance/timeout if the spindle simply needs longer to spin up.',
     group: 'state',
-    actions: ['reset']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Check the spindle reaches the commanded speed and the at-speed signal arrives.',
+        goto: 'spindle'
+      },
+      { do: 'reset', text: 'Reset to clear, then start again.' }
+    ]
   },
   15: {
     title: 'Homing failed — second switch (auto-square)',
-    cause:
-      'On an auto-squared axis the second limit switch was not found within the search distance.',
-    recovery:
-      'Check the second motor’s switch and wiring, adjust travel/pull-off, then re-home ($H).',
+    cause: 'On an auto-squared axis the second limit switch was not found within the search distance.',
+    recovery: 'Check the second motor’s switch and wiring, adjust travel/pull-off, then re-home ($H).',
     group: 'motion',
-    actions: ['home']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Press the SECOND motor’s switch by hand — auto-square needs both to be seen.',
+        goto: 'autosquare'
+      },
+      {
+        do: 'manual',
+        text: 'It reacts? Give the axis room: check travel and pull-off for the squaring move.',
+        goto: 'homing'
+      },
+      { do: 'home', text: 'Home again.' }
+    ]
   },
   16: {
     title: 'Power-on self-test failed',
     cause: 'The controller’s power-on self-test (POS) did not pass.',
     recovery: 'Reset the controller. If it persists it points to a firmware/hardware fault.',
     group: 'system',
-    actions: ['reset']
+    steps: [
+      { do: 'reset', text: 'Reset the controller.' },
+      {
+        do: 'manual',
+        text: 'Back after every reset? Not an operating mistake — re-flash and check the board.',
+        goto: 'firmware'
+      }
+    ]
   },
   17: {
     title: 'Motor fault',
     cause: 'A driver reported a fault (e.g. a stepper driver fault/alarm output).',
-    recovery:
-      'Check driver power, wiring and temperature. Reset once the driver is healthy.',
+    recovery: 'Check driver power, wiring and temperature. Reset once the driver is healthy.',
     group: 'system',
-    actions: ['reset']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Check the driver that faulted: power, step/dir wiring, temperature, fault output.',
+        goto: 'motors'
+      },
+      { do: 'reset', text: 'Reset once the driver is healthy again.' }
+    ]
   },
   18: {
     title: 'Homing failed — bad configuration',
     cause: 'The homing configuration is invalid (e.g. no homing switches assigned).',
     recovery:
       'Review the homing settings ($22 and the $44–$47 cycle masks) and the limit-switch inputs, then re-home.',
-    group: 'motion'
+    group: 'motion',
+    steps: [
+      {
+        do: 'manual',
+        text: 'Fix the homing setup: the cycle masks must name axes that actually have switches.',
+        goto: 'homing'
+      },
+      { do: 'home', text: 'Home once the configuration is valid.' }
+    ]
   },
   19: {
     title: 'Modbus exception',
@@ -199,14 +354,32 @@ export const ALARMS: Record<number, CodeDetail> = {
     recovery:
       'Check the RS-485 wiring, VFD address and baud rate. Reset to clear once communication is restored.',
     group: 'system',
-    actions: ['reset']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Power the VFD and check RS-485 on CN32: A+/B− not swapped, shared GND, wired up.'
+      },
+      {
+        do: 'manual',
+        text: 'Match the settings to the VFD: Modbus address, baud rate, spindle selection.',
+        goto: 'spindle'
+      },
+      { do: 'reset', text: 'Reset once communication is restored.' }
+    ]
   },
   20: {
     title: 'I/O expander fault',
     cause: 'Communication with an I/O expander failed.',
     recovery: 'Check the expander’s wiring/power, then reset.',
     group: 'system',
-    actions: ['reset']
+    steps: [
+      {
+        do: 'manual',
+        text: 'Check the expander’s power and bus wiring.',
+        goto: 'inputs'
+      },
+      { do: 'reset', text: 'Reset once it is wired and powered.' }
+    ]
   },
   21: {
     title: 'Storage (EEPROM) failure',
@@ -214,7 +387,14 @@ export const ALARMS: Record<number, CodeDetail> = {
     recovery:
       'Reset. If settings do not persist, re-flash / restore defaults; a persistent failure points to the storage chip.',
     group: 'system',
-    actions: ['reset']
+    steps: [
+      { do: 'reset', text: 'Reset the controller.' },
+      {
+        do: 'manual',
+        text: 'Settings keep reverting? Restore defaults or re-flash — otherwise it is the chip.',
+        goto: 'advanced'
+      }
+    ]
   }
 }
 
@@ -224,117 +404,183 @@ const ALARMS_SR: Record<number, CodeDetailSR> = {
     cause:
       'Krajnji (limit) prekidač je pogođen tokom kretanja. Mašina se odmah zaustavlja pa se pozicija više ne smatra tačnom.',
     recovery:
-      'Otključaj ($X), odmakni osu od prekidača, pa ponovo homuj ($H) da vratiš tačnu poziciju. Ako okida a ništa nije blizu prekidača — proveri ožičenje/smetnje.'
+      'Prvo Reset — hard limit je kritičan događaj pa ništa drugo nije prihvaćeno. Onda otključaj ($X), skloni osu sa prekidača (privremeno bez hard limita ili rukom) i homuj ($H). Ako okida a ništa nije blizu prekidača — proveri ožičenje/smetnje.',
+    steps: [
+      'Prvo Reset — dok je kritičan događaj aktivan ništa drugo ne prolazi.',
+      'Otključaj. Brava je skinuta, ali pozicija još nije pouzdana.',
+      'Odmakni osu sa prekidača. Dok je pritisnut ništa se ne miče — ni homing.',
+      'Homuj da vratiš tačnu mašinsku poziciju.'
+    ]
   },
   2: {
     title: 'Dostignut soft limit',
     cause:
       'Komandni potez bi izveo osu van podešenog radnog hoda ($130–$132). Potez je blokiran pre početka; pozicija je sačuvana.',
     recovery:
-      'Otključaj ($X) — mašina se nije pomerila. Pomeri nulu obratka ili izmeni G-code tako da svi potezi ostanu u radnom prostoru.'
+      'Prvo Reset — i soft limit je kritičan događaj — pa otključaj ($X); mašina se nije pomerila. Pomeri nulu obratka ili izmeni G-code tako da svi potezi ostanu u radnom prostoru.',
+    steps: [
+      'Prvo Reset — dok je kritičan događaj aktivan ništa drugo ne prolazi.',
+      'Otključaj. Mašina se nije pomerila, pozicija je i dalje dobra.',
+      'Pomeri nulu obratka ili izmeni program tako da svi potezi ostanu unutar hoda.'
+    ]
   },
   3: {
     title: 'Reset tokom kretanja',
-    cause:
-      'Soft reset ili E-stop se desio dok se mašina kretala, pa je naglo stala i izgubila poziciju.',
-    recovery: 'Otključaj ($X), pa ponovo homuj ($H) pre pokretanja bilo kog posla.'
+    cause: 'Soft reset ili E-stop se desio dok se mašina kretala, pa je naglo stala i izgubila poziciju.',
+    recovery: 'Otključaj ($X), pa ponovo homuj ($H) pre pokretanja bilo kog posla.',
+    steps: ['Otključaj da skineš bravu alarma.', 'Homuj — nagli stop je izgubio poziciju.']
   },
   4: {
     title: 'Probe greška — već okinut',
     cause: 'Probe je već bio u okinutom stanju kada je probni ciklus (G38.2/G38.3) počeo.',
     recovery:
-      'Proveri da je probe slobodan i pravilno ožičen (nije zaglavljen). Otključaj ($X) i ponovi probanje.'
+      'Proveri da je probe slobodan i pravilno ožičen (nije zaglavljen). Otključaj ($X) i ponovi probanje.',
+    steps: [
+      'Oslobodi sondu. Mora da bude OTVORENA pre ciklusa — ne zaglavljena ni u kratkom.',
+      'Otključaj pa ponovi probanje.'
+    ]
   },
   5: {
     title: 'Probe greška — nema kontakta',
-    cause:
-      'Probe nije dodirnuo obradak u okviru zadate razdaljine probanja (G38.2/G38.4).',
+    cause: 'Probe nije dodirnuo obradak u okviru zadate razdaljine probanja (G38.2/G38.4).',
     recovery:
-      'Otključaj ($X). Primakni probe bliže, povećaj razdaljinu probanja i potvrdi da signal probe reaguje pre ponovnog pokušaja.'
+      'Otključaj ($X). Primakni probe bliže, povećaj razdaljinu probanja i potvrdi da signal probe reaguje pre ponovnog pokušaja.',
+    steps: ['Otključaj.', 'Kreni bliže ili povećaj razdaljinu probanja. Proveri da sonda reaguje na dodir.']
   },
   6: {
     title: 'Homing neuspešan — reset',
     cause: 'Reset je stigao dok je homing ciklus bio u toku.',
-    recovery: 'Pokreni homing ponovo ($H). Ako stalno prekida — proveri E-stop ili smetnje na reset liniji.'
+    recovery: 'Pokreni homing ponovo ($H). Ako stalno prekida — proveri E-stop ili smetnje na reset liniji.',
+    steps: [
+      'Nađi šta je resetovalo kontroler usred ciklusa: E-stop, labava reset linija, smetnje.',
+      'Pokreni homing ponovo.'
+    ]
   },
   7: {
     title: 'Homing neuspešan — vrata otvorena',
     cause: 'Safety door je otvoren tokom homing ciklusa.',
-    recovery: 'Zatvori safety door, pa pokreni homing ponovo ($H).'
+    recovery: 'Zatvori safety door, pa pokreni homing ponovo ($H).',
+    steps: ['Zatvori safety door i drži ga zatvorenog ceo homing ciklus.', 'Pokreni homing ponovo ($H).']
   },
   8: {
     title: 'Homing neuspešan — pull-off',
     cause: 'Posle dodira sa prekidačem osa nije mogla dovoljno da se odmakne da ga otpusti.',
-    recovery: 'Proveri prekidač i ožičenje. Povećaj pull-off razdaljinu ($27), pa ponovo homuj ($H).'
+    recovery: 'Proveri prekidač i ožičenje. Povećaj pull-off razdaljinu ($27), pa ponovo homuj ($H).',
+    steps: [
+      'Proveri da se prekidač otpušta kad se osa odmakne. Ako ne — povećaj pull-off ($27).',
+      'Homuj ponovo.'
+    ]
   },
   9: {
     title: 'Homing neuspešan — prekidač nije nađen',
     cause: 'Osa je prešla celu razdaljinu pretrage a nije stigla do krajnjeg prekidača.',
     recovery:
-      'Potvrdi da prekidač okida (ožičenje / $ status), povećaj max hod ili homing brzinu, pa ponovo homuj ($H).'
+      'Potvrdi da prekidač okida (ožičenje / $ status), povećaj max hod ili homing brzinu, pa ponovo homuj ($H).',
+    steps: [
+      'Pritisni prekidač rukom i gledaj Pn: u statusnoj traci. Ništa? Problem je ožičenje.',
+      'Reaguje? Onda osa ne stiže do njega — proveri max hod i seek brzinu.',
+      'Homuj ponovo.'
+    ]
   },
   10: {
     title: 'Sigurnosni stop (E-stop) aktivan',
     cause: 'E-stop ulaz je aktiviran.',
-    recovery: 'Otpusti E-stop taster, pa resetuj kontroler da obrišeš alarm.'
+    recovery: 'Otpusti E-stop taster, pa resetuj kontroler da obrišeš alarm.',
+    steps: ['Otpusti E-stop taster — ulaz prvo mora da bude čist.', 'Resetuj da obrišeš alarm.']
   },
   11: {
     title: 'Potreban homing',
     cause: 'Mašina nije homovana od paljenja, a potez zahteva poznatu poziciju.',
-    recovery: 'Pokreni homing ($H) pre rada.'
+    recovery: 'Pokreni homing ($H) pre rada.',
+    steps: ['Pokreni homing ($H) — ništa drugo ne treba, mašina samo traži referencu.']
   },
   12: {
     title: 'Limit prekidač aktivan na startu',
     cause: 'Krajnji prekidač je već aktivan — mašina verovatno stoji na prekidaču posle paljenja.',
     recovery:
-      'Otključaj ($X) i odjoguj osu sa prekidača, pa ponovo homuj ($H). Ako ništa nije na prekidaču — proveri ožičenje/smetnje.'
+      'Otključaj ($X) i odjoguj osu sa prekidača, pa ponovo homuj ($H). Ako ništa nije na prekidaču — proveri ožičenje/smetnje.',
+    steps: [
+      'Otključaj da mašina prihvati potez.',
+      'Odmakni osu sa prekidača. Dok je pritisnut ništa se ne miče — ni homing.',
+      'Homuj da vratiš tačnu mašinsku poziciju.'
+    ]
   },
   13: {
     title: 'Zaštita probe okinuta',
     cause: 'Probe je neočekivano pogođen van probnog ciklusa.',
-    recovery: 'Ukloni prepreku, otključaj ($X) i proveri ožičenje probe.'
+    recovery: 'Ukloni prepreku, otključaj ($X) i proveri ožičenje probe.',
+    steps: ['Ukloni ono što je dodirnulo sondu i proveri kabl — labava žica okida ovo sama.', 'Otključaj.']
   },
   14: {
     title: 'Istek vremena „spindle at speed”',
     cause: 'Spindl nije dostigao komandovanu brzinu u dozvoljenom vremenu (at-speed povratni signal).',
     recovery:
-      'Proveri VFD/spindl i at-speed signal. Resetuj da obrišeš pa ponovi. Povećaj toleranciju/timeout ako spindlu jednostavno treba više vremena da se zavrti.'
+      'Proveri VFD/spindl i at-speed signal. Resetuj da obrišeš pa ponovi. Povećaj toleranciju/timeout ako spindlu jednostavno treba više vremena da se zavrti.',
+    steps: [
+      'Proveri da spindl dostiže komandovanu brzinu i da at-speed signal stiže.',
+      'Resetuj da obrišeš, pa kreni ponovo.'
+    ]
   },
   15: {
     title: 'Homing neuspešan — drugi prekidač (auto-square)',
     cause: 'Na auto-square osi drugi krajnji prekidač nije nađen u razdaljini pretrage.',
-    recovery: 'Proveri prekidač i ožičenje drugog motora, podesi hod/pull-off, pa ponovo homuj ($H).'
+    recovery: 'Proveri prekidač i ožičenje drugog motora, podesi hod/pull-off, pa ponovo homuj ($H).',
+    steps: [
+      'Pritisni rukom prekidač DRUGOG motora — auto-square traži da se vide oba.',
+      'Reaguje? Daj osi prostora: proveri hod i pull-off za poravnavajući potez.',
+      'Homuj ponovo.'
+    ]
   },
   16: {
     title: 'Self-test na paljenju neuspešan',
     cause: 'Power-on self-test (POS) kontrolera nije prošao.',
-    recovery: 'Resetuj kontroler. Ako se ponavlja — ukazuje na firmware/hardver kvar.'
+    recovery: 'Resetuj kontroler. Ako se ponavlja — ukazuje na firmware/hardver kvar.',
+    steps: [
+      'Resetuj kontroler.',
+      'Vraća se posle svakog reseta? Nije greška u radu — reflešuj i proveri ploču.'
+    ]
   },
   17: {
     title: 'Kvar motora',
     cause: 'Drajver je prijavio kvar (npr. fault/alarm izlaz stepper drajvera).',
-    recovery: 'Proveri napajanje drajvera, ožičenje i temperaturu. Resetuj kad je drajver ispravan.'
+    recovery: 'Proveri napajanje drajvera, ožičenje i temperaturu. Resetuj kad je drajver ispravan.',
+    steps: [
+      'Proveri drajver koji je pao: napajanje, step/dir ožičenje, temperatura, fault izlaz.',
+      'Resetuj kad je drajver ponovo ispravan.'
+    ]
   },
   18: {
     title: 'Homing neuspešan — loša konfiguracija',
     cause: 'Homing konfiguracija je nevažeća (npr. nisu dodeljeni homing prekidači).',
-    recovery: 'Pregledaj homing podešavanja ($22 i maske ciklusa $44–$47) i limit ulaze, pa ponovo homuj.'
+    recovery: 'Pregledaj homing podešavanja ($22 i maske ciklusa $44–$47) i limit ulaze, pa ponovo homuj.',
+    steps: [
+      'Ispravi homing podešavanja: maske ciklusa moraju da imenuju ose koje imaju prekidače.',
+      'Homuj kad je konfiguracija ispravna.'
+    ]
   },
   19: {
     title: 'Modbus izuzetak',
     cause: 'Modbus timeout ili greška poruke (najčešće komunikacija sa VFD spindlom).',
-    recovery: 'Proveri RS-485 ožičenje, adresu VFD-a i baud rate. Resetuj da obrišeš kad se komunikacija uspostavi.'
+    recovery:
+      'Proveri RS-485 ožičenje, adresu VFD-a i baud rate. Resetuj da obrišeš kad se komunikacija uspostavi.',
+    steps: [
+      'Napoji VFD i proveri RS-485 na CN32: A+/B− nisu zamenjeni, zajednička GND, povezano.',
+      'Uskladi podešavanja sa VFD-om: Modbus adresa, baud rate, izbor spindla.',
+      'Resetuj kad je komunikacija uspostavljena.'
+    ]
   },
   20: {
     title: 'Kvar I/O ekspandera',
     cause: 'Komunikacija sa I/O ekspanderom je otkazala.',
-    recovery: 'Proveri ožičenje/napajanje ekspandera, pa resetuj.'
+    recovery: 'Proveri ožičenje/napajanje ekspandera, pa resetuj.',
+    steps: ['Proveri napajanje ekspandera i ožičenje magistrale.', 'Resetuj kad je povezan i napajan.']
   },
   21: {
     title: 'Otkaz memorije (EEPROM)',
     cause: 'Trajna memorija (memorija podešavanja) nije mogla da se pročita ili upiše.',
     recovery:
-      'Resetuj. Ako podešavanja ne ostaju — re-flešuj / vrati fabrička; trajni otkaz ukazuje na memorijski čip.'
+      'Resetuj. Ako podešavanja ne ostaju — re-flešuj / vrati fabrička; trajni otkaz ukazuje na memorijski čip.',
+    steps: ['Resetuj kontroler.', 'Podešavanja se vraćaju? Vrati fabrička ili reflešuj — inače je sam čip.']
   }
 }
 
@@ -612,10 +858,23 @@ export const ERRORS: Record<number, CodeDetail> = {
   },
   45: {
     title: 'Limit switch engaged',
-    cause: 'A limit switch is active, so only homing is allowed until it’s cleared.',
-    recovery: 'Unlock ($X) and jog off the switch, or home ($H).',
+    cause:
+      'A limit switch is pressed and hard limits are in strict mode ($21 bit 1), so the controller refuses everything but homing — this is the answer to a $X sent while sitting on a switch.',
+    recovery:
+      'Home ($H): homing ignores the limit inputs and drives off the switch. If homing is not an option, turn strict mode (or hard limits) off in Settings, jog clear, then turn it back on.',
     group: 'motion',
-    actions: ['unlock', 'home']
+    steps: [
+      {
+        do: 'home',
+        text: 'Home ($H) — the only thing allowed while a switch is engaged. Homing ignores the limit inputs, so it drives off the switch by itself.'
+      },
+      {
+        do: 'manual',
+        text: 'No homing on this machine? Turn strict mode off ($21 bit 1) — or hard limits off entirely — jog clear of the switch, then switch it back on.',
+        goto: 'limits',
+        ifNoHoming: true
+      }
+    ]
   },
   46: {
     title: 'Homing required',
@@ -800,10 +1059,11 @@ export const ERRORS: Record<number, CodeDetail> = {
   },
   79: {
     title: 'Blocked by critical event',
-    cause: 'The action is not allowed while a critical event (alarm) is active.',
-    recovery: 'Clear the alarm first — reset / unlock — then retry.',
+    cause:
+      'A critical event is active — hard limit, soft limit, E-stop, motor fault or an expander fault. grblHAL blocks everything except a soft reset (and read-only $ queries), so $X and $H are refused. This is what a too-early Unlock looks like.',
+    recovery: 'Reset the controller, then unlock ($X) and follow the alarm’s own procedure.',
     group: 'state',
-    actions: ['reset', 'unlock']
+    actions: ['reset']
   },
   80: {
     title: 'Flow statement outside macro',
@@ -1084,8 +1344,14 @@ const ERRORS_SR: Record<number, CodeDetailSR> = {
   },
   45: {
     title: 'Limit prekidač aktivan',
-    cause: 'Krajnji prekidač je aktivan, pa je dozvoljen samo homing dok se ne obriše.',
-    recovery: 'Otključaj ($X) i odjoguj sa prekidača, ili homuj ($H).'
+    cause:
+      'Krajnji prekidač je pritisnut a hard limiti su u strogom režimu ($21 bit 1), pa kontroler prihvata samo homing — ovo je odgovor na $X poslat dok stojiš na prekidaču.',
+    recovery:
+      'Homuj ($H): homing ignoriše limit ulaze i sam se odveze sa prekidača. Ako homing nije opcija, isključi strogi režim (ili hard limite) u podešavanjima, odjoguj se, pa vrati nazad.',
+    steps: [
+      'Homuj ($H) — jedino što je dozvoljeno dok je prekidač pritisnut. Homing ignoriše limit ulaze pa sam siđe sa prekidača.',
+      'Mašina nema homing? Isključi strogi režim ($21 bit 1) — ili hard limite u celosti — odjoguj se sa prekidača, pa vrati nazad.'
+    ]
   },
   46: {
     title: 'Potreban homing',
@@ -1155,7 +1421,8 @@ const ERRORS_SR: Record<number, CodeDetailSR> = {
   60: {
     title: 'SD kartica — mount neuspešan',
     cause: 'SD kartica nije mogla da se montira.',
-    recovery: 'Ponovo ubaci karticu, proveri da je FAT32 i povezana na pravu SPI magistralu. Resetuj i ponovi.'
+    recovery:
+      'Ponovo ubaci karticu, proveri da je FAT32 i povezana na pravu SPI magistralu. Resetuj i ponovi.'
   },
   61: {
     title: 'Greška čitanja fajla',
@@ -1234,8 +1501,9 @@ const ERRORS_SR: Record<number, CodeDetailSR> = {
   },
   79: {
     title: 'Blokirano kritičnim događajem',
-    cause: 'Akcija nije dozvoljena dok je aktivan kritični događaj (alarm).',
-    recovery: 'Prvo obriši alarm — reset / otključaj — pa ponovi.'
+    cause:
+      'Aktivan je kritičan događaj — hard limit, soft limit, E-stop, kvar motora ili ekspandera. grblHAL blokira sve osim soft reseta (i read-only $ upita), pa $X i $H budu odbijeni. Ovako izgleda prerano otključavanje.',
+    recovery: 'Resetuj kontroler, pa otključaj ($X) i prati proceduru samog alarma.'
   },
   80: {
     title: 'Flow naredba van makroa',
@@ -1288,8 +1556,14 @@ const ERRORS_SR: Record<number, CodeDetailSR> = {
 // Lookups
 // ─────────────────────────────────────────────────────────────────────────────
 
-const UNKNOWN_ALARM: Record<Lang, string> = { en: 'Unknown alarm', sr: 'Nepoznat alarm' }
-const UNKNOWN_ERROR: Record<Lang, string> = { en: 'Unknown error', sr: 'Nepoznata greška' }
+const UNKNOWN_ALARM: Record<Lang, string> = {
+  en: 'Unknown alarm',
+  sr: 'Nepoznat alarm'
+}
+const UNKNOWN_ERROR: Record<Lang, string> = {
+  en: 'Unknown error',
+  sr: 'Nepoznata greška'
+}
 
 export interface ResolvedCode extends CodeDetail {
   code: number
@@ -1305,8 +1579,30 @@ function resolve(
 ): ResolvedCode {
   const b = base[code]
   if (!b) {
-    return { code, title: `${unknown} (${code})`, cause: '', recovery: '', group: 'other' }
+    return {
+      code,
+      title: `${unknown} (${code})`,
+      cause: '',
+      recovery: '',
+      group: 'other'
+    }
   }
+  // the procedure is defined ONCE (in EN); a translation only swaps the wording of
+  // each step, position by position, so a missing SR line degrades to the EN text
+  // instead of shifting the sequence
+  const steps =
+    lang === 'sr' && sr[code]?.steps
+      ? b.steps?.map((st, i) => ({
+          ...st,
+          text: sr[code].steps![i] ?? st.text
+        }))
+      : b.steps
+  // badges/buttons always follow the procedure when there is one
+  const actions = b.steps
+    ? (b.steps
+        .map((s) => s.do)
+        .filter((d, i, all) => d !== 'manual' && all.indexOf(d) === i) as RecoveryAction[])
+    : b.actions
   if (lang === 'sr' && sr[code]) {
     const o = sr[code]
     return {
@@ -1315,10 +1611,11 @@ function resolve(
       cause: o.cause ?? b.cause,
       recovery: o.recovery ?? b.recovery,
       group: b.group,
-      actions: b.actions
+      steps,
+      actions
     }
   }
-  return { code, ...b }
+  return { code, ...b, steps, actions }
 }
 
 /** One alarm resolved for `lang` (falls back to EN per field). */

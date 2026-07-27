@@ -37,6 +37,8 @@ export function StatusBar(): JSX.Element {
   const alert = useStore((s) => s.alert)
   const clearAlert = useStore((s) => s.clearAlert)
   const setRecoveryOpen = useStore((s) => s.setRecoveryOpen)
+  const limitsSuspended = useStore((s) => s.limitsSuspended != null)
+  const restoreLimits = useStore((s) => s.restoreLimits)
   const lang = useLang()
   // the persistent alert (survives the reset banner) drives the footer text +
   // the "what do I do?" button; fall back to the transient message otherwise
@@ -77,6 +79,21 @@ export function StatusBar(): JSX.Element {
           Pn:{pins || '–'}
         </span>
       </div>
+
+      {/* Hard limits suspended — the machine is unguarded, so this outranks the
+          alarm text and stays put until $21 is back (it re-arms itself when the
+          switch releases; this is the visible proof, plus a manual way out). */}
+      {limitsSuspended && (
+        <span
+          className="flex shrink-0 items-center gap-2 rounded border border-warn/60 bg-warn/10 px-2 py-0.5 font-mono text-[10px] font-bold text-warn"
+          title={t('ui.status.limitsOffTitle')}
+        >
+          ⚠ {t('ui.status.limitsOff')}
+          <button className="underline transition hover:text-slate-100" onClick={restoreLimits}>
+            {t('ui.status.limitsRestore')}
+          </button>
+        </span>
+      )}
 
       {(alert || message) && (
         <span className="flex min-w-0 flex-1 items-center gap-2 font-mono text-xs text-danger">

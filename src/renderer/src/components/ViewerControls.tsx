@@ -32,6 +32,7 @@ export function ViewerControls(): JSX.Element {
   const setRotationDeg = useStore((s) => s.setRotationDeg)
   const askConfirm = useStore((s) => s.askConfirm)
   const parked = useStore((s) => s.parked)
+  const limitsSuspended = useStore((s) => s.limitsSuspended != null)
 
   // progress by DISTANCE covered along the path (the Tracker follows the real tool
   // position by arc-length), NOT by lines acked — grblHAL acks a line the moment it
@@ -148,9 +149,13 @@ export function ViewerControls(): JSX.Element {
           disabled={
             !connected ||
             running ||
+            // hard limits are suspended for a switch rescue — nothing may run on an
+            // unguarded machine, and the suspension ends on its own in seconds
+            limitsSuspended ||
             // while parked the button IS Resume — only clickable once back in Idle
             (parked ? base !== 'Idle' : !held && (alarmed || (!gcode && !sdFile)))
           }
+          title={limitsSuspended ? t('ui.status.limitsOffTitle') : undefined}
           onClick={async () => {
             if (parked) {
               // parked (aborted to Idle for jogging) → this button resumes from the

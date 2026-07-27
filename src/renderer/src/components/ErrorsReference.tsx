@@ -214,6 +214,25 @@ function CodeCard({
               {item.recovery}
             </p>
           )}
+          {/* the same procedure the live popup walks you through — reading it here
+              beforehand is how an operator learns the machine, not only in a panic */}
+          {item.steps && item.steps.length > 0 && (
+            <div className="mt-1">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-brand/80 text-[10px]">
+                {t('ui.errors.procedure')}
+              </div>
+              <ol className="space-y-1">
+                {item.steps.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2 text-slate-400">
+                    <span className="mt-[3px] flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border2 text-[9px] font-bold text-slate-500">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1">{s.text}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
       )}
     </div>

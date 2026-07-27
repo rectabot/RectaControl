@@ -269,7 +269,7 @@ export const SETTING_DESC: Record<number, string> = {
   12: 'Arc tolerance — arc accuracy (mm). Lower = smoother arc.',
   13: 'Report position in inches (0 = mm, 1 = inch).',
   20: 'Soft limits — stop before leaving the work envelope (requires homing).',
-  21: 'Hard limits — stop on the physical limit switches.',
+  21: 'Hard limits — stop on the physical limit switches. Strict mode additionally refuses to unlock while a switch is still engaged (without it, unlock is allowed but moving re-trips the limit — homing is the way off the switch).',
   22: 'Enable the homing cycle (limit switches required).',
   23: 'Bitmask: homing direction per axis (which end it goes to).',
   24: 'Slow feed rate for accurately locating zero (mm/min).',
@@ -330,7 +330,7 @@ export const SETTING_DESC_SR: Record<number, string> = {
   12: 'Arc tolerance — tačnost lukova (mm). Manje = glatkiji luk.',
   13: 'Izveštaj pozicije u inčima (0=mm, 1=inch).',
   20: 'Soft limits — zaustavi pre nego pređeš radni prostor (zahteva homing).',
-  21: 'Hard limits — zaustavi na fizičkim limit prekidačima.',
+  21: 'Hard limits — zaustavi na fizičkim limit prekidačima. „Strogi režim" dodatno odbija otključavanje dok je prekidač još pritisnut (bez njega otključavanje prolazi, ali prvi pokret ponovo okine limit — sa prekidača se silazi homingom).',
   22: 'Uključi homing ciklus (potrebni limit prekidači).',
   23: 'Bitmaska: smer homing-a po osama (ka kom kraju ide).',
   24: 'Spora brzina pri preciznom nalaženju nule (mm/min).',
@@ -382,7 +382,7 @@ export function settingDesc(n: number, lang: Lang = 'en'): string | undefined {
 
 /** Simple on/off (0/1) settings — rendered as a toggle, not a typed value. */
 export const BOOL_SETTINGS = new Set<number>([
-  6, 19, 20, 21, 39, 40, 60, 62, 64, 336, 384, 483, 484, 485, 732
+  6, 19, 20, 39, 40, 60, 62, 64, 336, 384, 483, 484, 485, 732
 ])
 
 /** Per-axis bitmask settings (bit i = axis i) — rendered as one switch per axis. */
@@ -403,6 +403,9 @@ export const MASK_BITS: Record<number, string[]> = {
     'Alarm substatus', 'Run substatus', 'Enable when homing', 'Distance-to-go'
   ],
   16: ['Spindle enable', 'Spindle direction', 'PWM'],
+  // $21 is an XBitfield in grblHAL, not a plain on/off: bit 0 is the master enable,
+  // the rest only apply while it is on. Bit 2 exists only on 4+ axis builds.
+  21: ['Enable', 'Strict mode (no unlock while a switch is engaged)', 'Disable for rotary axes (4+ axes)'],
   41: ['Enable', 'Deactivate on init', 'Parking override control'],
   486: ['G59.1', 'G59.2', 'G59.3'],
   // Only Telnet/Websocket/FTP are compiled in this build (my_machine.h); the rest
@@ -427,6 +430,7 @@ export const MASK_BITS: Record<number, string[]> = {
 
 /** Serbian overrides for mask bit labels; missing entries fall back to English. */
 export const MASK_BITS_SR: Record<number, string[]> = {
+  21: ['Uključeno', 'Strogi režim (nema otključavanja dok je prekidač pritisnut)', 'Isključi za rotacione ose (4+ ose)'],
   650: ['Auto-mount SD na startu', 'Sakrij LittleFS', 'Hijerarhijski listing']
 }
 

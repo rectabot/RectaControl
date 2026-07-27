@@ -173,7 +173,11 @@ export function runControlAction(id: string): void {
   //  - home/unlock: fine from Idle or Alarm, but not while moving / streaming.
   //  - zero* / spindle / coolant: Idle-only (mid-job they'd inject into the stream).
   const moving = s.job.running || s.sdRunning || ['Run', 'Jog', 'Hold', 'Home', 'Door'].includes(base)
-  if ((id === 'home' || id === 'unlock') && moving) return
+  // …and while a critical event blocks the controller, $X/$H only answer error:79
+  if ((id === 'home' || id === 'unlock') && (moving || s.resetRequired)) return
+  // never start a program on a machine whose hard limits are suspended for a
+  // switch rescue (the keyboard/gamepad path must respect the same rule as the UI)
+  if (id === 'start' && s.limitsSuspended != null && !s.job.paused) return
   if (
     ['zeroX', 'zeroY', 'zeroZ', 'zeroAll', 'spindle', 'flood', 'mist'].includes(id) &&
     (s.job.running || s.sdRunning || base !== 'Idle')

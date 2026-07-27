@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useT } from '../i18n'
 
 type Group = 'input' | 'stepper' | 'power' | 'comm' | 'output' | 'storage' | 'adjust'
@@ -70,107 +70,130 @@ const CONNECTORS: Connector[] = [
 
 /** Interactive board pinout: click a connector on the RectaBot render to see what
  *  to wire and the pin order. Image lives in src/renderer/public/board.png and is
- *  loaded at runtime (graceful placeholder if missing). Calibration mode shows
- *  click %-coordinates so hotspot positions can be fine-tuned. */
+ *  loaded at runtime (graceful placeholder if missing).
+ *
+ *  This is a reference screen, so it fills the pane instead of scrolling: the
+ *  detail box below keeps a fixed height and the board fits (letterboxed) into
+ *  the height that is left. The hotspot layer is sized to the FITTED box —
+ *  hotspot %-positions only line up if their parent is exactly the rendered
+ *  image, never the empty space around it. */
 export function BoardDiagram(): JSX.Element {
   const t = useT()
   const [selected, setSelected] = useState<string | null>(null)
-  const [calib, setCalib] = useState(false)
-  const [click, setClick] = useState<{ x: number; y: number } | null>(null)
   const [imgError, setImgError] = useState(false)
+  // natural aspect of board.png; the 3:2 default only applies until it loads
+  const [ratio, setRatio] = useState(3 / 2)
+  const [fit, setFit] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
+  const boxRef = useRef<HTMLDivElement>(null)
 
   const sel = CONNECTORS.find((c) => c.id === selected) ?? null
 
-  const onImgClick = (e: React.MouseEvent<HTMLDivElement>): void => {
-    if (!calib) return
-    const r = e.currentTarget.getBoundingClientRect()
-    const x = Number((((e.clientX - r.left) / r.width) * 100).toFixed(1))
-    const y = Number((((e.clientY - r.top) / r.height) * 100).toFixed(1))
-    setClick({ x, y })
-    navigator.clipboard?.writeText(`x: ${x}, y: ${y}`)
-  }
+  // fit the image into the free space, remeasuring on any window/pane resize
+  useEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const measure = (): void => {
+      const { width, height } = el.getBoundingClientRect()
+      if (!width || !height) return
+      const w = Math.min(width, height * ratio)
+      setFit({ w, h: w / ratio })
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ratio])
 
   return (
-    <div className="flex flex-col gap-3 p-4">
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-[11px] text-slate-400">{t('board.hint')}</span>
-        <label className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-slate-500">
-          <input type="checkbox" className="accent-brand" checked={calib} onChange={(e) => setCalib(e.target.checked)} />
-          {t('board.calib')}
-        </label>
-        {calib && click && (
-          <span className="font-mono text-[10px] text-brand">
-            x: {click.x}, y: {click.y} {t('board.copied')}
-          </span>
-        )}
-      </div>
-
-      {/* board image + hotspots */}
-      <div className="relative w-full select-none overflow-hidden rounded-lg border border-border bg-panel2" onClick={onImgClick}>
+    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
+      {/* board: takes everything the detail box below does not need */}
+      <div ref={boxRef} className="relative flex min-h-0 flex-1 items-center justify-center">
         {imgError ? (
-          <div className="flex aspect-[3/2] items-center justify-center p-8 text-center font-mono text-xs text-slate-500">
+          <div className="flex h-full w-full items-center justify-center rounded-lg border border-border bg-panel2 p-8 text-center font-mono text-xs text-slate-500">
             {t('board.imgMissing')}
           </div>
         ) : (
-          <img src="./board.png" alt="RectaBot v1.0" className="block w-full" onError={() => setImgError(true)} />
-        )}
+          <div
+            className="relative select-none overflow-hidden rounded-lg border border-border bg-panel2"
+            style={{ width: fit.w, height: fit.h }}
+          >
+            <img
+              src="./board.png"
+              alt="RectaBot v1.0"
+              className="block h-full w-full"
+              onLoad={(e) => {
+                const el = e.currentTarget
+                if (el.naturalWidth && el.naturalHeight) setRatio(el.naturalWidth / el.naturalHeight)
+              }}
+              onError={() => setImgError(true)}
+            />
 
-        {!imgError &&
-          CONNECTORS.map((c) => {
-            const active = c.id === selected
-            return (
-              <button
-                key={c.id}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setSelected(active ? null : c.id)
-                }}
-                title={c.label}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition ${
-                  active ? 'h-5 w-5 ring-2 ring-white' : 'h-4 w-4 hover:scale-125'
-                }`}
-                style={{
-                  left: `${c.x}%`,
-                  top: `${c.y}%`,
-                  borderColor: GROUP_COLOR[c.group],
-                  backgroundColor: active ? GROUP_COLOR[c.group] : `${GROUP_COLOR[c.group]}66`
-                }}
-              />
-            )
-          })}
+            {CONNECTORS.map((c) => {
+              const active = c.id === selected
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => setSelected(active ? null : c.id)}
+                  title={c.label}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition ${
+                    active ? 'h-5 w-5 ring-2 ring-white' : 'h-4 w-4 hover:scale-125'
+                  }`}
+                  style={{
+                    left: `${c.x}%`,
+                    top: `${c.y}%`,
+                    borderColor: GROUP_COLOR[c.group],
+                    backgroundColor: active ? GROUP_COLOR[c.group] : `${GROUP_COLOR[c.group]}66`
+                  }}
+                />
+              )
+            })}
+          </div>
+        )}
       </div>
 
-      {/* legend */}
-      <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {/* legend + hint on one slim line between the board and the detail box */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1">
         {GROUPS.map((g) => (
           <span key={g} className="flex items-center gap-1.5 font-mono text-[10px] text-slate-500">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GROUP_COLOR[g] }} />
             {t(`board.grp.${g}`)}
           </span>
         ))}
+        <span className="ml-auto font-mono text-[10px] text-slate-500">{t('board.hint')}</span>
       </div>
 
-      {/* detail */}
+      {/* detail box — full width, FIXED height: the board fits into what is left,
+          so selecting a connector never resizes the board and nothing scrolls */}
       {sel ? (
-        <div className="rounded-lg border border-border bg-panel2 p-4" style={{ borderColor: `${GROUP_COLOR[sel.group]}88` }}>
-          <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: GROUP_COLOR[sel.group] }} />
-            <span className="font-display text-base font-bold text-slate-100">{sel.label}</span>
-            <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-slate-500">
+        <div
+          className="flex h-[9.5rem] shrink-0 gap-4 rounded-lg border border-border bg-panel2 p-4"
+          style={{ borderColor: `${GROUP_COLOR[sel.group]}88` }}
+        >
+          {/* identity: name, group, pin order */}
+          <div className="flex w-[20rem] shrink-0 flex-col gap-2 border-r border-border2 pr-4">
+            <div className="flex items-center gap-2">
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: GROUP_COLOR[sel.group] }} />
+              <span className="truncate font-display text-base font-bold text-slate-100">{sel.label}</span>
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">
               {t(`board.grp.${sel.group}`)}
             </span>
+            <div className="rounded bg-base px-2.5 py-1 text-center font-mono text-sm text-brand">{sel.pins}</div>
           </div>
-          <div className="mt-2 inline-block rounded bg-base px-2.5 py-1 font-mono text-sm text-brand">{sel.pins}</div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-300">{t(`board.${sel.id}.desc`)}</p>
-          {sel.group === 'input' && (
-            <div className="mt-3 flex gap-2 rounded-md border border-border2 bg-base p-2.5 text-[11px] leading-snug text-slate-400">
-              <span className="shrink-0 text-sm">💡</span>
-              <span>{t('board.inputHint')}</span>
-            </div>
-          )}
+
+          {/* what it does */}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="text-sm leading-relaxed text-slate-300">{t(`board.${sel.id}.desc`)}</p>
+            {sel.group === 'input' && (
+              <div className="mt-auto flex gap-2 rounded-md border border-border2 bg-base p-2.5 text-[11px] leading-snug text-slate-400">
+                <span className="shrink-0 text-sm">💡</span>
+                <span>{t('board.inputHint')}</span>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border p-4 text-center font-mono text-xs text-slate-500">
+        <div className="flex h-[9.5rem] shrink-0 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center font-mono text-xs text-slate-500">
           {t('board.pickPrompt')}
         </div>
       )}

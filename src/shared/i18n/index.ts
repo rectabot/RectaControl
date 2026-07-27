@@ -11,9 +11,11 @@ import { sr } from './sr'
 
 export type Lang = 'en' | 'sr'
 
-export const LANGUAGES: { code: Lang; label: string; flag: string }[] = [
-  { code: 'en', label: 'English', flag: '🇬🇧' },
-  { code: 'sr', label: 'Srpski', flag: '🇷🇸' }
+/** Each language names itself, in its own language. No flags: they stand for
+ *  countries, not languages, and one flag can never speak for every speaker. */
+export const LANGUAGES: { code: Lang; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'sr', label: 'Srpski' }
 ]
 
 /** English is the base; each other language overrides only what it translates. */

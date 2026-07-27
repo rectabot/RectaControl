@@ -194,15 +194,32 @@ function loadStock(): StockConfig {
   }
 }
 
-/** The saved Park position (machine coords [X,Y,Z]) or null. Kept in the APP (not the
- *  controller's G30) because some grblHAL builds don't persist G28/G30 across a power
- *  cycle — storing it here makes the park spot survive a restart regardless. */
+/** The saved Park position (machine coords [X,Y,Z]) or null. The BOARD's G30 is the
+ *  durable truth (verified: it survives a power cycle) and is adopted into this cache
+ *  on connect; the cache only stands in for a board with nothing stored, because
+ *  `G30.1` can write the current position only — the app can never push a value back.
+ *  See renderer/src/offsets.ts. */
 function loadParkPos(): [number, number, number] | null {
   try {
     const p = JSON.parse(localStorage.getItem('parkPos') || 'null')
     return Array.isArray(p) && p.length >= 2 ? [p[0], p[1], p[2] ?? 0] : null
   } catch {
     return null
+  }
+}
+
+/** Drive mechanism per axis index, as chosen in the steps calculator. */
+function loadAxisMech(): Record<number, string> {
+  return loadJson('axisMech', {})
+}
+
+/** Read a JSON-shaped localStorage key, falling back when absent or corrupt. */
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? (JSON.parse(raw) as T) : fallback
+  } catch {
+    return fallback
   }
 }
 
@@ -292,6 +309,34 @@ interface AppState {
   /** Preference: auto-open the recovery popup on a new alarm/error. Experienced
    *  users can turn this off — the footer notice + "what do I do?" button remain. */
   recoveryPopup: boolean
+  /** Hard limits are TEMPORARILY suspended so the operator can drive off a limit
+   *  switch (parked on one, every move re-trips the alarm — grbl machines have
+   *  always needed this dance). Holds the $21 value to put back. The app restores
+   *  it by itself the moment the switch releases; it is never left to the user to
+   *  remember, and a machine must not run a program while it is set. */
+  limitsSuspended: string | null
+  /** A $21 read is in flight: 'suspend' waits for the board's CURRENT value before
+   *  clearing bit 0, 'restore' waits for the read-back that proves hard limits are
+   *  really back on. Nothing about this feature is done on trust — a cached value
+   *  goes stale the moment anything else writes $21, and a `$` write is rejected
+   *  outright (error:8) unless the machine is Idle. */
+  limitsPending: 'suspend' | 'restore' | null
+  limitsPendingAt: number
+  /** Escape move queued behind the $21 read — it may only go out once hard limits
+   *  are actually off, or it would just re-trip the alarm. */
+  escapeJog: { axis: string; dir: 1 | -1 } | null
+  /** Every `$n=v` the board has reported this session. Fed by the raw line stream
+   *  (a $$ dump, or a single echo), so any feature can read a setting it needs
+   *  without a round trip — used to put $21 back byte-for-byte. */
+  settingValues: Record<number, string>
+  /** A CRITICAL event is active: grblHAL is sitting in its blocking loop and will
+   *  refuse everything but a soft reset (and read-only `$` queries) — `$X`/`$H`
+   *  come back as error:79. Raised by the controller's own `[MSG:Reset to
+   *  continue]` / E-stop / motor-fault messages, cleared by the reset banner.
+   *  Hard limit, soft limit, E-stop, motor fault and expander faults do this
+   *  (grblHAL `alarm_is_critical`), so Reset is not a suggestion — it is the only
+   *  door out, and every other command must be visibly dead until it is taken. */
+  resetRequired: boolean
   /** Whether homing is enabled ($22 bit0). Gates the "Home" recovery so we don't
    *  offer $H on a machine that has homing disabled (it would return error:5).
    *  Defaults true until a $$ read reports $22. */
@@ -382,7 +427,24 @@ interface AppState {
   lang: Lang
   units: 'mm' | 'inch'
   posMode: 'work' | 'machine'
+  /** Drive mechanism per axis INDEX ('leadscrew' | 'belt' | 'rack' | 'rotary'),
+   *  remembered when the steps calculator applies a result to an axis. Tuning uses
+   *  it to cap the max-speed slider — a lead screw and a rack are not the same
+   *  machine. Unset axes simply get no mechanical cap. */
+  axisMech: Record<number, string>
+  /** Travel per MOTOR revolution per axis index — mm/rev for a linear axis (a 1605
+   *  ball screw direct-coupled = 5), °/rev for a rotary one. Turns a feed rate into
+   *  motor rpm, which is what actually predicts a stepper running out of torque. */
+  axisPerRev: Record<number, number>
   wcs: string // active work coordinate system, e.g. "G54"
+  /** Extra coordinate systems this board reports in `$#` beyond G54–G59 (G59.1–G59.3).
+   *  Some grblHAL builds have nine, some six — the DRO only offers the picker when
+   *  the controller actually answered with them. Empty until the first `$#` read. */
+  extraWcs: string[]
+  /** Which G59 variant the last strip button stands for: '' | '.1' | '.2' | '.3'.
+   *  A display choice, not a machine state — picking it re-labels the button, and
+   *  the button still has to be clicked to activate that system. */
+  wcsVariant: string
   settingsOpen: boolean
   /** When Settings is opened via a deep-link, the category to jump to (e.g. 'probe').
    *  SettingsBrowser consumes it on open, then it's cleared. null = no deep-link. */
@@ -416,6 +478,18 @@ interface AppState {
   clearAlert: () => void
   /** Open/close the recovery popup without dismissing the underlying alert. */
   setRecoveryOpen: (open: boolean) => void
+  /** One-tap escape from a limit switch: suspend hard limits, back the axis off by
+   *  ESCAPE_MM in the chosen direction, and let the automatic restore re-arm them.
+   *  The DIRECTION is the operator's call, never a guess: with MIN and MAX sharing
+   *  one input the controller cannot tell which end it sits on, and picking wrong
+   *  drives further into the obstacle with the limits off. */
+  escapeSwitch: (axis: string, dir: 1 | -1) => void
+  /** Temporarily clear $21 bit 0 so the axis can be driven off a limit switch.
+   *  Remembers the current value (and mirrors it to localStorage, so a crash or a
+   *  pulled cable can't strand the machine with hard limits off). */
+  suspendLimits: () => void
+  /** Put $21 back exactly as it was. Called automatically once the switch releases. */
+  restoreLimits: () => void
   /** Enable/disable auto-opening the recovery popup (persisted). */
   setRecoveryPopup: (on: boolean) => void
   /** Update keyboard/gamepad control preferences (persisted). */
@@ -447,7 +521,11 @@ interface AppState {
   setLang: (l: Lang) => void
   setUnits: (u: 'mm' | 'inch') => void
   setPosMode: (m: 'work' | 'machine') => void
+  setAxisMech: (axisIndex: number, mech: string) => void
+  setAxisPerRev: (axisIndex: number, perRev: number) => void
   setWcs: (w: string) => void
+  setExtraWcs: (list: string[]) => void
+  setWcsVariant: (v: string) => void
   setSettingsOpen: (open: boolean) => void
   /** Open Settings jumped straight to a category (deep-link). */
   openSettingsAt: (section: string) => void
@@ -475,7 +553,7 @@ interface AppState {
   setParkPos: (p: [number, number, number] | null) => void
 }
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   connected: false,
   connKind: null,
   status: null,
@@ -493,6 +571,12 @@ export const useStore = create<AppState>((set) => ({
   alert: null,
   recoveryOpen: false,
   recoveryPopup: localStorage.getItem('recoveryPopup') !== '0',
+  limitsSuspended: null,
+  limitsPending: null,
+  limitsPendingAt: 0,
+  escapeJog: null,
+  settingValues: {},
+  resetRequired: false,
   homingEnabled: true,
   homed: false,
   softLimits: false,
@@ -523,7 +607,11 @@ export const useStore = create<AppState>((set) => ({
   lang: (localStorage.getItem('lang') as Lang) || 'en',
   units: (localStorage.getItem('units') as 'mm' | 'inch') || 'mm',
   posMode: (localStorage.getItem('posMode') as 'work' | 'machine') || 'work',
+  axisMech: loadAxisMech(),
+  axisPerRev: loadJson<Record<number, number>>('axisPerRev', {}),
   wcs: 'G54',
+  extraWcs: [],
+  wcsVariant: localStorage.getItem('wcsVariant') || '',
   settingsOpen: false,
   settingsSection: null,
   probeOpen: false,
@@ -544,6 +632,11 @@ export const useStore = create<AppState>((set) => ({
           return {
             connected: true,
             connKind: e.data.kind,
+            // A crash / pulled cable mid-suspend left the board with hard limits
+            // off. Pick the pending restore back up so the warning is visible and
+            // the first clear status report re-arms them.
+            limitsSuspended: localStorage.getItem('limitsSuspended'),
+            limitsPending: null,
             consoleLines: cap(s.consoleLines, t('store.connected', s.lang, { kind: e.data.kind }))
           }
         case 'disconnected':
@@ -558,6 +651,10 @@ export const useStore = create<AppState>((set) => ({
             sentLine: -1,
             alert: null,
             recoveryOpen: false,
+            resetRequired: false,
+            // no board to write to; localStorage keeps the pending restore
+            limitsSuspended: null,
+            limitsPending: null,
             consoleLines: cap(
               s.consoleLines,
               e.data.reason
@@ -596,6 +693,17 @@ export const useStore = create<AppState>((set) => ({
             const homePending = !!det && s.homingEnabled && (det.actions ?? []).includes('home')
             recoveryPatch = homePending ? {} : { message: null, alert: null, recoveryOpen: false }
           }
+          // out of Alarm ⇒ the blocking loop is behind us, whatever we saw last
+          const criticalPatch = s.resetRequired && newBase !== 'Alarm' ? { resetRequired: false } : {}
+          // The switch has released (no limit letters left in Pn:) → put hard limits
+          // back. This is the whole safety of the suspend feature: the machine is
+          // unguarded only for the few seconds it takes to drive clear, and getting
+          // clear is itself the signal to re-arm. Fired from here (not once, on an
+          // event) so it RETRIES: the write needs Idle, and the jog that frees the
+          // switch is not Idle. A stalled read-back is retried after 1.5 s too, so a
+          // dropped line can never leave the warning stuck — or the limits off.
+          if (s.limitsSuspended != null && !hasLimitPin(e.data.pins) && Date.now() - s.limitsPendingAt > 1500)
+            get().restoreLimits()
           return {
             status: e.data,
             ...(e.data.ov ? { overrides: e.data.ov } : {}),
@@ -603,7 +711,8 @@ export const useStore = create<AppState>((set) => ({
             ...(e.data.accessory != null ? { accessory: e.data.accessory } : {}),
             ...sdPatch,
             ...homedPatch,
-            ...recoveryPatch
+            ...recoveryPatch,
+            ...criticalPatch
           }
         }
         case 'info':
@@ -633,11 +742,41 @@ export const useStore = create<AppState>((set) => ({
           // ack-based progress bound (leads the cut); the Tracker turns tool
           // position + this bound into the synced highlight line
           return s.sentLine === e.data ? {} : { sentLine: e.data }
-        case 'sent':
-          return { consoleLines: cap(s.consoleLines, `> ${e.data}`) }
+        case 'sent': {
+          // A setting WE write is never echoed back by grblHAL (just `ok`), so the
+          // cache has to learn from the outgoing line too — otherwise it keeps
+          // serving whatever the last $$ dump said, forever.
+          const mw = /^\$(\d+)=(.+)$/.exec(e.data.trim())
+          return {
+            consoleLines: cap(s.consoleLines, `> ${e.data}`),
+            ...(mw ? { settingValues: { ...s.settingValues, [Number(mw[1])]: mw[2].trim() } } : {})
+          }
+        }
         case 'line': {
           const msg = describe(e.data, s.lang)
           const gc = parseParserState(e.data)
+          // any `$n=v` the board reports → the session-wide settings cache
+          const mSet = /^\$(\d+)=(.*)$/.exec(e.data.trim())
+          // …and a $21 report closes whichever half of the suspend dance is open.
+          // The board's own word is the only thing that moves this state: on
+          // 'suspend' it is the value we must give back later, on 'restore' it is
+          // the proof hard limits are on again. A restore that reads back with
+          // bit 0 clear leaves the warning up rather than pretending it worked.
+          const m21 = mSet && Number(mSet[1]) === 21 ? mSet[2].trim() : null
+          let limitsPatch: Partial<AppState> = {}
+          if (m21 != null && s.limitsPending === 'suspend') {
+            localStorage.setItem('limitsSuspended', m21)
+            window.recta.send('$21=0')
+            // the queued escape move goes out behind the write, in wire order, so
+            // it can no longer race the hard limit it is escaping from
+            if (s.escapeJog) window.recta.send(escapeJogLine(s.escapeJog.axis, s.escapeJog.dir))
+            limitsPatch = { limitsSuspended: m21, limitsPending: null, escapeJog: null }
+          } else if (m21 != null && s.limitsPending === 'restore') {
+            if (Number(m21) & 1) {
+              localStorage.removeItem('limitsSuspended')
+              limitsPatch = { limitsSuspended: null, limitsPending: null }
+            } else limitsPatch = { limitsPending: null } // still off → keep warning, retry
+          }
           // units are owned by $13 (report inches) — sync whenever it's reported
           const m13 = /^\$13=(\d+)/.exec(e.data.trim())
           // max travel $130/$131/$132 → sizes the visualizer grid
@@ -656,24 +795,48 @@ export const useStore = create<AppState>((set) => ({
           // touched here — it survives the banner and is cleared only when the
           // machine actually recovers (leaves Alarm) or the user dismisses it.
           const banner = /grbl/i.test(e.data) || e.data.includes('for help')
+          // grblHAL announces a CRITICAL event with one of these, then blocks
+          // everything but a soft reset (see `resetRequired`). The banner above is
+          // the proof the reset landed, so it lifts the flag.
+          // covers "Reset to continue" (hard/soft limit, expander) plus the E-stop
+          // and motor-fault wordings, which both end in "…then reset to continue"
+          const critical = /reset to continue/i.test(e.data)
+          const resetPatch = critical
+            ? { resetRequired: true }
+            : banner && s.resetRequired
+              ? { resetRequired: false }
+              : {}
           // an alarm/error that needs operator action → raise (or refresh) the
           // alert. `seq` bumps only on a genuinely new code. A new code auto-opens
           // the recovery popup, but ONLY for alarms or errors hit during a job —
           // an idle MDI typo just shows in the footer, no popup in your face.
           const parsed = parseCode(e.data, s.lang)
+          // error:79 ("not allowed while critical event is active") is a SYMPTOM of
+          // the alarm already on screen — the operator pressed Unlock too early.
+          // Letting it take over the popup would replace the real problem with its
+          // echo, so it never becomes the alert while the alarm still stands.
+          const echo =
+            parsed?.kind === 'error' &&
+            parsed.detail.code === 79 &&
+            (s.resetRequired || critical || s.alert?.kind === 'alarm')
           const recover =
-            parsed && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
+            parsed && !echo && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
           const sameAlert =
             recover != null &&
             s.alert != null &&
             s.alert.kind === recover.kind &&
             s.alert.code === recover.detail.code
+          // A repeated ALARM is a NEW event, not a duplicate: the controller emits
+          // it once per trip, so hitting the same limit again — or dismissing the
+          // popup and triggering the same alarm a second time — must raise it again.
+          // Errors keep the suppression: a bad program can flood the same code.
+          const reRaise = sameAlert && recover!.kind === 'alarm'
           const autoOpen =
             recover != null &&
             s.recoveryPopup &&
             (recover.kind === 'alarm' || s.job.running)
           const alertPatch =
-            recover && !sameAlert
+            recover && (!sameAlert || reRaise)
               ? {
                   alert: { kind: recover.kind, code: recover.detail.code, seq: (s.alert?.seq ?? 0) + 1 },
                   recoveryOpen: autoOpen || s.recoveryOpen
@@ -681,8 +844,13 @@ export const useStore = create<AppState>((set) => ({
               : {}
           const extra = {
             ...alertPatch,
+            ...resetPatch,
+            ...limitsPatch,
             ...(banner ? { message: null } : msg ? { message: msg } : {}),
             ...(gc.wcs ? { wcs: gc.wcs } : {}),
+            ...(mSet
+              ? { settingValues: { ...s.settingValues, [Number(mSet[1])]: mSet[2].trim() } }
+              : {}),
             ...(m13 ? { units: (m13[1] === '1' ? 'inch' : 'mm') as 'mm' | 'inch' } : {}),
             ...(m22 ? { homingEnabled: (Number(m22[1]) & 1) === 1 } : {}),
             ...(m20 ? { softLimits: Number(m20[1]) !== 0 } : {}),
@@ -710,6 +878,43 @@ export const useStore = create<AppState>((set) => ({
   clearMessage: () => set({ message: null }),
   clearAlert: () => set({ alert: null, message: null, recoveryOpen: false }),
   setRecoveryOpen: (open) => set({ recoveryOpen: open }),
+  escapeSwitch: (axis, dir) => {
+    const s = get()
+    // strictly Idle: a jog is refused in Alarm, and mid-move it would queue up
+    if ((s.status?.state ?? '').split(':')[0] !== 'Idle') return
+    // already unguarded (a repeat press, switch still not free) → just move again
+    if (s.limitsSuspended != null) window.recta.send(escapeJogLine(axis, dir))
+    else {
+      set({ escapeJog: { axis, dir } }) // released by the $21 reply, once limits are off
+      get().suspendLimits()
+    }
+  },
+  suspendLimits: () => {
+    const s = get()
+    // a reply that never came (busy board, dropped line) must not wedge the button
+    if (s.limitsSuspended != null || (s.limitsPending && Date.now() - s.limitsPendingAt < 1500))
+      return
+    if (!settingsWritable(s.status?.state)) return
+    // Read $21 off the board first. Whatever we think we know can be stale — the
+    // Settings page writes $21 without the board echoing it back — and saving a
+    // wrong value here is what would strand the machine with hard limits off.
+    // The reply drives the actual `$21=0` (see the '21' branch in 'line').
+    window.recta.send('$21')
+    set({ limitsPending: 'suspend', limitsPendingAt: Date.now() })
+  },
+  restoreLimits: () => {
+    const s = get()
+    const saved = s.limitsSuspended ?? localStorage.getItem('limitsSuspended')
+    if (saved == null) return
+    // A `$` write outside Idle answers error:8 and changes nothing; the status
+    // handler calls this again on the next report, so waiting costs nothing.
+    if (!settingsWritable(s.status?.state)) return
+    // Bit 0 is forced back ON: a restore that leaves hard limits off is not a
+    // restore. (NaN|1 === 1, so even a garbage saved value lands on "enabled".)
+    window.recta.send(`$21=${Number(saved) | 1}`)
+    window.recta.send('$21') // …and read it back — the reply is what clears the warning
+    set({ limitsPending: 'restore', limitsPendingAt: Date.now(), limitsSuspended: saved })
+  },
   setRecoveryPopup: (on) => {
     localStorage.setItem('recoveryPopup', on ? '1' : '0')
     set({ recoveryPopup: on })
@@ -811,7 +1016,24 @@ export const useStore = create<AppState>((set) => ({
     localStorage.setItem('posMode', posMode)
     set({ posMode })
   },
+  setAxisMech: (axisIndex, mech) =>
+    set((s) => {
+      const axisMech = { ...s.axisMech, [axisIndex]: mech }
+      localStorage.setItem('axisMech', JSON.stringify(axisMech))
+      return { axisMech }
+    }),
+  setAxisPerRev: (axisIndex, perRev) =>
+    set((s) => {
+      const axisPerRev = { ...s.axisPerRev, [axisIndex]: perRev }
+      localStorage.setItem('axisPerRev', JSON.stringify(axisPerRev))
+      return { axisPerRev }
+    }),
   setWcs: (wcs) => set({ wcs }),
+  setExtraWcs: (extraWcs) => set({ extraWcs }),
+  setWcsVariant: (wcsVariant) => {
+    localStorage.setItem('wcsVariant', wcsVariant)
+    set({ wcsVariant })
+  },
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   openSettingsAt: (section) => set({ settingsOpen: true, settingsSection: section, probeOpen: false }),
   clearSettingsSection: () => set({ settingsSection: null }),
@@ -864,6 +1086,31 @@ function loadAux(): { vac: boolean; mist: boolean; flood: boolean } {
   } catch {
     return def
   }
+}
+
+/** How far, and how fast, the guided escape backs an axis off a limit switch.
+ *  Short and slow on purpose: hard limits are off for this move, so a wrong guess
+ *  by the operator costs 10 mm at a speed they can still react to. */
+export const ESCAPE_MM = 10
+const ESCAPE_FEED = 500
+
+function escapeJogLine(axis: string, dir: 1 | -1): string {
+  return `$J=G91 G21 ${axis}${dir * ESCAPE_MM} F${ESCAPE_FEED}`
+}
+
+/** grblHAL accepts `$` reads and writes only when Idle (or held in Alarm/E-stop);
+ *  anything else comes back as error:8 and is silently not applied. */
+function settingsWritable(state: string | undefined): boolean {
+  const base = (state ?? '').split(':')[0]
+  return base === 'Idle' || base === 'Alarm'
+}
+
+/** Is any limit switch reported as engaged? grblHAL lists active inputs as letters
+ *  in `Pn:` — axis letters mean that axis' limit input (the rest are P/D/H/R/S/E…).
+ *  Both a MIN and a MAX switch show up as the same letter, which is exactly why a
+ *  machine with them on one input can't tell which end it is parked against. */
+export function hasLimitPin(pins: string | null): boolean {
+  return !!pins && /[XYZABC]/.test(pins)
 }
 
 /** Append a console line, collapsing an identical consecutive repeat into a

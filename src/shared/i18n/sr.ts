@@ -104,6 +104,30 @@ export const sr: Record<string, string> = {
   'ui.errors.act.unlock': 'Otključaj ($X)',
   'ui.errors.act.home': 'Bazanje ($H)',
   'ui.errors.act.reset': 'Reset',
+  // vođeni oporavak
+  'ui.errors.procedure': 'Korak po korak',
+  'ui.errors.stepOf': 'Korak {n} od {total}',
+  'ui.errors.resetFirst': 'Prvo Reset — dok je kritičan događaj aktivan kontroler ovo odbija (error:79).',
+  'ui.errors.act.freeSwitch': 'Oslobodi prekidač',
+  'ui.errors.escapeHint':
+    'Izaberi smer — gledaj mašinu, samo ti vidiš na kom je kraju. Pogrešan smer? Pritisni drugi. Hard limiti se gase samo za taj potez.',
+  'ui.errors.escapeWait': 'Sačekaj da se mašina zaustavi.',
+  'ui.errors.limitsOff': 'Hard limiti su isključeni',
+  'ui.errors.limitsRestore': 'vrati odmah',
+  'ui.status.limitsOff': 'HARD LIMITI ISKLJUČENI',
+  'ui.status.limitsOffTitle':
+    'Hard limiti su privremeno isključeni da bi mogao da siđeš sa prekidača. Vraćaju se sami čim prekidač pusti. Dok je ovo aktivno, program ne može da se pokrene.',
+  'ui.status.limitsRestore': 'Vrati',
+  'ui.errors.back': 'Nazad',
+  'ui.errors.stepDone': 'Urađeno',
+  'ui.errors.openSettings': 'Vodi me tamo →',
+  'ui.errors.recovered': 'Rešeno. Možeš da nastaviš rad.',
+  'ui.errors.stillAlarm': 'Koraci su gotovi, ali mašina je i dalje u Alarmu — uzrok je još tu.',
+  'ui.errors.close': 'Zatvori',
+  // rezervni tekst koraka za kodove koji imaju samo golu listu akcija
+  'ui.errors.step.unlock': 'Otključaj mašinu ($X).',
+  'ui.errors.step.home': 'Pokreni homing ($H).',
+  'ui.errors.step.reset': 'Resetuj kontroler.',
   'ui.errors.group.motion': 'Kretanje i limiti',
   'ui.errors.group.state': 'Stanje mašine',
   'ui.errors.group.gcode': 'G-code program',
@@ -125,6 +149,12 @@ export const sr: Record<string, string> = {
   'ui.motor.accel': 'Ubrzanje (mm/s²)',
   'ui.motor.travel': 'Hod (mm)',
   'ui.motor.profile': 'Profil',
+  'ui.motor.stepsDeg': 'Koraci/°',
+  'ui.motor.maxrateDeg': 'Maks (°/min)',
+  'ui.motor.accelDeg': 'Ubrzanje (°/s²)',
+  'ui.motor.travelDeg': 'Hod (°)',
+  'ui.motor.rotaryNote':
+    'Koraci/° = koraka po obrtaju motora × prenosni odnos ÷ 360   ·   Hod 0 = bez ograničenja, osa se okreće beskonačno',
   'ui.motor.legend':
     'Profil kretanja: osa ubrza (uspon) → vozi maks. brzinom (ravno) → uspori. Viši profil = veća maks. brzina; strmija rampa = veće ubrzanje. Veličine su uporedne među osama. Previše ubrzanje → gubitak koraka; previše brzina → buka/vibracije.',
 
@@ -143,6 +173,11 @@ export const sr: Record<string, string> = {
   'sec.network.note': 'Promena mrežnih podešavanja prekida ETH vezu — povežeš se ponovo na novi IP. Važi posle reseta ploče.',
   'sec.pendant.title': 'Pendant',
   'sec.macros.title': 'Makroi',
+  'sec.macros.note':
+    'Dve različite stvari nose isto ime. Makro OVDE bi živeo na ploči i okidao se fizičkim tasterom, pa bi radio i bez priključenog računara — ovaj firmver nije građen sa tim dodatkom, zato ovde nema šta da se podesi. Makroi koje pišeš u RectaControl-u žive u aplikaciji i ona ih šalje, a nalaze se u kartici Makroi.',
+  'sec.macros.open': 'Otvori karticu Makroi',
+  'sec.pendant.note':
+    'Pendant je ručna jedinica za jogovanje i upravljanje, povezana direktno na ploču, pa se mašina vodi sa mesta gde stojiš umesto sa tastature. Ovaj firmver ne nudi nijedno pendant podešavanje, pa ovde još nema šta da se podesi.',
   'sec.behavior.title': 'Ponašanje i ostalo',
 
   // ── Curated fields: labels & descriptions ──────────────────────────────────
@@ -298,7 +333,20 @@ export const sr: Record<string, string> = {
   'ui.tune.speed': 'Brzina',
   'ui.tune.accel': 'Ubrzanje',
   'ui.tune.footer':
-    'Veća brzina = brže kretanje; veće ubrzanje = brži start/stop. Ako motor preskače korake ili „škripi" na startu — smanji ubrzanje. Vrednost se upisuje kad pustiš klizač. „Test" pomeri osu 20 mm tom brzinom.',
+    'Veća brzina = brže kretanje; veće ubrzanje = brži start/stop. Vrednost se upisuje kad pustiš klizač; „Test" pomeri osu 20 mm tom brzinom. Ubrzanje je ono što određuje silu koju motor mora da proizvede — podizanje najveće brzine tu silu NE povećava, samo produžava zalet. Zato ako osa loše radi na velikoj brzini a dobro na maloj sa ISTIM ubrzanjem, previsoka je brzina, a ne ubrzanje.',
+  'ui.tune.derived': 'zalet {t} s · {d} · punu brzinu dostiže tek na potezima preko {m}',
+  'ui.tune.rpm': 'o/min',
+  'ui.tune.limitAccel': 'plafon {v} — prati najveću brzinu ove ose',
+  'ui.tune.vector':
+    'Napomena: najveća brzina važi PO OSI. Na dijagonali se ose sabiraju, pa prikazani feed može da dostigne oko 1.4× te vrednosti na dve ose (1.7× na tri), a da nijedna osa nije prekoračila svoju granicu.',
+  'ui.tune.perRev': 'Hod po obrtaju motora',
+  'ui.tune.perRevTitle':
+    'Koliko se osa pomeri za JEDAN obrtaj motora — vreteno 1605 direktno na osovinu je 5 mm. Ovo NIJE razdaljina test pomeranja. Služi samo za prikaz obrtaja motora; ostavi prazno pa se prikaz sakrije.',
+  'ui.tune.applyAll': 'na sve ose',
+  'ui.tune.applyAllTitle': 'Prepiši ovaj hod po obrtaju i tip pogona na sve linearne ose',
+  'ui.tune.limitSteps': 'plafon {v} — određuju ga koraka/mm i $0, ne mašina',
+  'ui.tune.limitMech': 'plafon {v} za ovaj tip pogona',
+  'ui.tune.limitOver': 'preko {v} — ploča ne može toliko brzo da korača, motori će gubiti korake',
 
   // ── Jog panel ──────────────────────────────────────────────────────────────
   'ui.jog.step': 'Korak',
@@ -306,13 +354,25 @@ export const sr: Record<string, string> = {
   'ui.jog.home': 'Home',
   'ui.jog.homeTitle': 'Home ($H)',
   'ui.jog.homedTitle': 'Mašina bazirana — referenca postavljena ($H)',
+  'ui.dro.wcsVariantTitle':
+    'Leva polovina prelazi na obični G59 · desna bira jedan od dodatnih sistema (G59.1–G59.3) i odmah prelazi na njega',
   'ui.jog.gotoZero': 'Na nulu',
-  'ui.jog.gotoZeroTitle': 'Vrati se na radnu nulu X0 Y0 — prvo diže Z na vrh mašine',
+  'ui.jog.gotoZeroTitle':
+    'Vrati se na radnu nulu X0 Y0 — prvo diže Z na vrh mašine. Ovo je rapid: ide najvećom brzinom svake ose ($110…), ne jog feed-om.',
   'ui.jog.unlock': 'Otključaj',
   'ui.jog.unlockTitle': 'Skini Alarm zaključavanje ($X)',
   'ui.jog.park': 'Park',
   'ui.jog.parkTitle': 'Pauziraj posao i oslobodi glavu za jog (čišćenje spona / prepreke) — pa Nastavi',
   'ui.jog.goToParkTitle': 'Pritisni i drži da glava ode na sačuvanu park poziciju (podigni Z → brzo na park XY)',
+  // prikazuje se na Park dugmetu dok park pozicija ne postoji — tu novajlija i udari
+  // u zid, pa uputstvo stoji tačno na tom mestu
+  'ui.jog.parkSetupTitle': 'Park pozicija još nije zapamćena — klikni da vidiš kako',
+  'ui.jog.parkSetupHead': 'Park pozicija nije postavljena',
+  'ui.jog.parkSetupP1':
+    'Park je tvoje sklonište na stolu — mesto na koje glava ode kad ti smeta: promena alata, merenje komada, stezanje novog parčeta. Jedan pritisak i mašina prvo digne Z, pa ode tamo.',
+  'ui.jog.parkSetupP2':
+    'Kako da je naučiš: odvezi glavu na mesto koje želiš, pa otvori „Radne nule" i pritisni „Postavi" u redu G30. Pamti se, pa se ovo radi jednom po mašini.',
+  'ui.jog.parkSetupHome': 'Mašina prethodno mora i da bazira ($H) — park se čuva u mašinskim koordinatama.',
   'ui.jog.resume': 'Nastavi',
   'ui.jog.resumeTitle': 'Vrati se gde je posao stao i nastavi',
   'ui.jog.softReset': 'Soft reset',
@@ -434,7 +494,37 @@ export const sr: Record<string, string> = {
   'ui.offsets.setParkTitle': 'Zapamti trenutnu poziciju kao Park poziciju (G30.1). Dugme Park će tada podići Z i odvesti glavu ovde.',
   'ui.offsets.readonly': 'samo za čitanje',
   'ui.offsets.hint':
-    'Izmeni G54–G59 ćeliju da postaviš tu osu na tačnu mašinsku koordinatu, ili „Nuluj ovde" da trenutnu poziciju proglasiš nulom. G28/G30/G92/TLO su prikazani informativno.',
+    'Izmeni G54–G59 ćeliju da postaviš tu osu na tačnu mašinsku koordinatu, ili „Nuluj ovde" da trenutnu poziciju proglasiš nulom. Pređi mišem preko ⓘ u bilo kom redu da vidiš čemu služi.',
+
+  // Referentna grupa — redovi ispod G54–G59. Svaki nosi ljudsko ime da se tabela čita
+  // bez uputstva, plus ⓘ koji u dve rečenice kaže šta je to i kad ti zaista treba.
+  'ui.offsets.refGroup': 'Referentne pozicije',
+  'ui.offsets.refGroupSub': 'Fiksne tačke na stolu — koristi ih Park dugme i sam G-kod; ovo nisu radne nule.',
+  'ui.offsets.g28.name': 'Servisna tačka',
+  'ui.offsets.g28.p1':
+    'Fiksno mesto na koje mašina može da bude poslata iz samog programa naredbom G28 — obično pozicija za promenu ili skidanje alata.',
+  'ui.offsets.g28.p2':
+    'Odvezi glavu gde želiš i pritisni „Postavi". Većina hobi poslova nikad ne poziva G28, pa je sasvim u redu ostaviti ovo netaknuto.',
+  'ui.offsets.g30.name': 'Park pozicija',
+  'ui.offsets.g30.p1':
+    'Mesto na koje Park dugme odvozi glavu — tvoj bezbedan ćošak za promenu alata, merenje ili stezanje novog komada. Park prvo digne Z, pa ode tamo.',
+  'ui.offsets.g30.p2': 'Odvezi glavu na to mesto i pritisni „Postavi". Radi se jednom po mašini i pamti se.',
+  'ui.offsets.g30.note':
+    'Ploča ovo pamti i kroz nestanak struje, pa je dovoljno postaviti jednom. Vrednost je u mašinskim koordinatama — mašina mora biti bazirana da bi Park mogao da je koristi. Oznaka „app" u ovom redu znači da ploča nema ništa sačuvano, pa mesto daje RectaControl iz svoje memorije.',
+  'ui.offsets.g30.appStored': 'app',
+  'ui.offsets.g92.name': 'Privremeni pomak',
+  'ui.offsets.g92.p1':
+    'Privremeno pomeranje celog koordinatnog sistema, povrh aktivne radne nule. To je ono što postavlja dugi pritisak na „Zero all".',
+  'ui.offsets.g92.p2':
+    'Zgodno kad isti komad sečeš par centimetara dalje, a ne diraš pravu nulu — ali se lako zaboravi da je uključen.',
+  'ui.offsets.g92.note': 'Ako ti se nule odjednom čine pomerene, ovo je najčešći krivac. „Poništi G92" ga vraća na nulu.',
+  'ui.offsets.tlo.name': 'Dužina alata',
+  'ui.offsets.tlo.p1':
+    'Koliko je trenutni alat duži ili kraći od referentnog. Kontroler to dodaje na Z, da bi vrh alata i posle zamene padao na isto mesto.',
+  'ui.offsets.tlo.p2':
+    'Ovde se ništa ne kuca ručno: postavlja ga isključivo komanda G43.1, a briše G49. Zato u ovom redu i nema dugmeta.',
+  'ui.offsets.tlo.note':
+    'Merenje visine alata u RectaControl-u NE popunjava ovo polje — ono umesto toga postavlja radnu nulu, što je jednostavnije kad sečeš jednim alatom. Očekuj 0.000 ovde, osim ako tvoj G-kod sam pošalje G43.1.',
   'ui.offsets.notConnected': 'Poveži se da učitaš offsete.',
   'ui.offsets.busy': 'Offseti se mogu čitati ili menjati samo dok je mašina u stanju Idle. Izmena je zaključana tokom rada programa.',
   'ui.offsets.reading': 'Čitam offsete…',
@@ -484,7 +574,7 @@ export const sr: Record<string, string> = {
   'ui.fw.flashing': 'Flešujem… ne diraj pločicu.',
   'ui.fw.flashed': '✓ Flešovano. Pločica se restartuje sa novim firmware-om.',
   'ui.fw.error': '✗ Greška: {msg}',
-  'ui.fw.step1': '1 · Izaberi firmware',
+  'ui.fw.step1': 'Izaberi firmware',
   'ui.fw.custom': 'Custom: {name}',
   'ui.fw.pickFile': 'Izaberi .uf2 sa diska…',
   'ui.fw.step2': '2 · Pločica u bootloader-u',
@@ -714,8 +804,6 @@ export const sr: Record<string, string> = {
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Klikni konektor na ploči za objašnjenje povezivanja.',
-  'board.calib': 'kalibracija',
-  'board.copied': '(kopirano)',
   'board.imgMissing': 'Sačuvaj sliku ploče u src/renderer/public/board.png da se prikaže dijagram.',
   'board.pickPrompt': 'Izaberi konektor (tačku) na ploči.',
   'board.inputHint':

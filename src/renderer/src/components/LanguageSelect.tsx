@@ -1,39 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT } from '../i18n'
-import { LANGUAGES, type Lang } from '@shared/i18n'
+import { LANGUAGES } from '@shared/i18n'
 
-/** Simplified US flag (7 red + 6 white stripes, blue canton). Drawn as inline SVG
- *  because emoji flags (🇺🇸) don't render on Windows — they show region letters. */
-function FlagUS(): JSX.Element {
-  const stripeH = 14 / 13
-  return (
-    <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0 rounded-[2px]" aria-hidden>
-      <rect width="20" height="14" fill="#fff" />
-      {[0, 2, 4, 6, 8, 10, 12].map((i) => (
-        <rect key={i} y={i * stripeH} width="20" height={stripeH} fill="#b22234" />
-      ))}
-      <rect width="8.4" height={stripeH * 7} fill="#3c3b6e" />
-    </svg>
-  )
-}
-
-/** Simplified Serbian tricolor (red / blue / white). */
-function FlagRS(): JSX.Element {
-  return (
-    <svg width="20" height="14" viewBox="0 0 20 14" className="shrink-0 rounded-[2px]" aria-hidden>
-      <rect width="20" height="14" fill="#fff" />
-      <rect width="20" height={14 / 3} fill="#c6363c" />
-      <rect y={14 / 3} width="20" height={14 / 3} fill="#0c4076" />
-    </svg>
-  )
-}
-
-const FLAGS: Record<Lang, () => JSX.Element> = { en: FlagUS, sr: FlagRS }
-
-/** "Language" dropdown with real flag graphics. Custom (not a native <select>) so
- *  the flags render on every OS and the open list can show flag + name per row. */
-export function LanguageSelect(): JSX.Element {
+/** "Language" dropdown. Custom rather than a native <select> so the open list matches
+ *  the app's own panels. Names only — a language names itself better than a flag does,
+ *  and flags stand for countries, not languages. */
+export function LanguageSelect({ className = '' }: { className?: string }): JSX.Element {
   const t = useT()
   const lang = useStore((s) => s.lang)
   const setLang = useStore((s) => s.setLang)
@@ -50,24 +23,23 @@ export function LanguageSelect(): JSX.Element {
   }, [open])
 
   const current = LANGUAGES.find((l) => l.code === lang) ?? LANGUAGES[0]
-  const CurrentFlag = FLAGS[current.code]
 
   return (
-    <div className="relative flex items-center gap-1.5" ref={ref}>
-      <span className="text-xs text-slate-500">{t('ui.settings.language')}</span>
+    // `className` lets a caller hand it a share of a flex row — the trigger then
+    // fills that share instead of hugging the language name
+    <div className={`relative flex items-center gap-1.5 ${className}`} ref={ref}>
+      <span className="shrink-0 text-xs text-slate-500">{t('ui.settings.language')}</span>
       <button
-        className="flex items-center gap-1.5 rounded-md border border-border2 bg-panel2 px-2 py-1 text-xs text-slate-200 transition hover:border-brand"
+        className="flex flex-1 items-center justify-between gap-1.5 rounded-md border border-border2 bg-panel2 px-2.5 py-1.5 text-sm text-slate-200 transition hover:border-brand"
         onClick={() => setOpen((o) => !o)}
         title={t('ui.settings.language')}
       >
-        <CurrentFlag />
         <span>{current.label}</span>
         <span className="text-[10px] text-slate-500">▾</span>
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-md border border-border bg-panel shadow-glow">
           {LANGUAGES.map((l) => {
-            const Flag = FLAGS[l.code]
             const active = l.code === lang
             return (
               <button
@@ -80,7 +52,6 @@ export function LanguageSelect(): JSX.Element {
                   setOpen(false)
                 }}
               >
-                <Flag />
                 <span className="flex-1">{l.label}</span>
                 {active && <span className="text-brand">✓</span>}
               </button>

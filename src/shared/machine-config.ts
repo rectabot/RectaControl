@@ -451,16 +451,22 @@ export const SECTIONS: Section[] = [
       { kind: 'number', setting: 305, label: 'field.305.label' }
     ]
   },
+  // Both of these are containers for firmware settings that only exist when the
+  // matching plugin is compiled in. On a build without it they stay empty, so each
+  // carries a note explaining what WOULD live there — an unexplained blank page is
+  // the one thing worse than a missing feature.
   {
     id: 'pendant',
     title: 'sec.pendant.title',
     icon: '🕹️',
+    note: 'sec.pendant.note',
     fields: []
   },
   {
     id: 'macros',
     title: 'sec.macros.title',
     icon: '📜',
+    note: 'sec.macros.note',
     fields: []
   },
   {

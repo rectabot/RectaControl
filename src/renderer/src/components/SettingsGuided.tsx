@@ -42,6 +42,7 @@ export function SettingsGuided({
 }): JSX.Element {
   const t = useT()
   const lang = useLang()
+  const setBottomTab = useStore((s) => s.setBottomTab)
   const ax = axes.length ? axes : DEFAULT_AXES
   const [calcOpen, setCalcOpen] = useState(false)
   const [tuneOpen, setTuneOpen] = useState(false)
@@ -129,9 +130,27 @@ export function SettingsGuided({
                 <SectionIcon id={sec.id} className="h-4 w-4" />
                 {t(sec.title)}
               </h3>
-              <div className="rounded-lg border border-border p-6 text-center font-mono text-xs text-slate-500">
-                {t('ui.settings.sectionEmpty')}
-              </div>
+              {/* A section can be empty because the firmware simply has no settings
+                  in its range. Saying only "nothing here" is a dead end, so when the
+                  section carries a note it explains WHY instead — informational, so
+                  it is brand-tinted rather than the amber used for real warnings. */}
+              {sec.note ? (
+                <div className="rounded-lg border border-brand/20 bg-brand/5 px-4 py-3 text-[11px] leading-relaxed text-slate-400">
+                  {t(sec.note)}
+                  {sec.id === 'macros' && (
+                    <button
+                      className="btn mt-3 block py-1.5 text-xs"
+                      onClick={() => setBottomTab('macros')}
+                    >
+                      {t('sec.macros.open')}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border p-6 text-center font-mono text-xs text-slate-500">
+                  {t('ui.settings.sectionEmpty')}
+                </div>
+              )}
             </section>
           )
         }
@@ -269,9 +288,17 @@ function GenericValue({
   }
   // reuse the guided section's curated control for this setting, so the raw list
   // shows the same named bits / labelled options (not "bit 0..3" or a bare index)
+  // — and renders them with the SAME control, not a dropdown standing in for radios
   const cf = CURATED_FIELD[n]
   if (cf?.kind === 'enum') {
-    return <GenericEnum value={parseInt(value, 10) || 0} options={cf.options} onChange={(nv) => write(n, nv)} />
+    return (
+      <EnumRadios
+        value={parseInt(value, 10) || 0}
+        options={cf.options}
+        columns={cf.columns}
+        onChange={(nv) => write(n, nv)}
+      />
+    )
   }
   if (cf?.kind === 'bitFlags') {
     const v = parseInt(value, 10) || 0
@@ -409,41 +436,13 @@ function Control({
       // spindles (the static PWM/Huanyang options are only a fallback).
       if (field.setting === 395)
         return <SpindlePicker value={num(field.setting)} write={write} fallback={field.options} />
-      const v = num(field.setting)
-      const grid = field.columns
-      const opts = field.options.map((o) => (
-        <label
-          key={o.value}
-          className={`flex cursor-pointer gap-2 text-xs text-slate-300 ${grid ? 'items-center' : 'items-start'}`}
-        >
-          <input
-            type="radio"
-            className={`h-4 w-4 shrink-0 accent-brand ${grid ? '' : 'mt-0.5'}`}
-            checked={v === o.value}
-            onChange={() => write(field.setting, o.value)}
-          />
-          <span>
-            <span className={v === o.value ? 'text-slate-100' : ''}>{t(o.label)}</span>
-            {o.desc && <span className="block text-[10px] leading-snug text-slate-500">{t(o.desc)}</span>}
-          </span>
-        </label>
-      ))
       return (
-        <div className="flex flex-col gap-1.5">
-          {grid ? (
-            <div
-              className="grid gap-x-5 gap-y-1.5"
-              style={{ gridTemplateColumns: `repeat(${grid}, minmax(0, max-content))` }}
-            >
-              {opts}
-            </div>
-          ) : (
-            opts
-          )}
-          {!field.options.some((o) => o.value === v) && (
-            <span className="text-[10px] text-slate-500">{t('ui.settings.unknown', { v })}</span>
-          )}
-        </div>
+        <EnumRadios
+          value={num(field.setting)}
+          options={field.options}
+          columns={field.columns}
+          onChange={(v) => write(field.setting, v)}
+        />
       )
     }
     case 'number':
@@ -659,32 +658,61 @@ function CheckboxList({
   )
 }
 
-/** Compact dropdown for an index-based setting (e.g. $374 Modbus baud) in the raw
- *  "All settings" list — shows the labelled option, not the bare index number. */
-function GenericEnum({
+/**
+ * One labelled radio per option — the single control for every "pick exactly one of
+ * these" setting, used by BOTH the guided sections and the raw "All settings" list.
+ *
+ * It lives in one place on purpose: the two views used to disagree, with a setting
+ * rendered as named radios under Spindle and as a bare dropdown in All settings. The
+ * same setting should not look like two different things depending on where you
+ * opened it, so both call this.
+ */
+function EnumRadios({
   value,
   options,
+  columns,
   onChange
 }: {
   value: number
   options: EnumOpt[]
+  /** lay the options out in this many columns; omit for a plain vertical list */
+  columns?: number
   onChange: (v: number) => void
 }): JSX.Element {
   const t = useT()
-  const known = options.some((o) => o.value === value)
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(Number(e.target.value))}
-      className="input w-full !py-1 font-mono text-xs"
+  const opts = options.map((o) => (
+    <label
+      key={o.value}
+      className={`flex cursor-pointer gap-2 text-xs text-slate-300 ${columns ? 'items-center' : 'items-start'}`}
     >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {t(o.label)}
-        </option>
-      ))}
-      {!known && <option value={value}>{t('ui.settings.unknown', { v: value })}</option>}
-    </select>
+      <input
+        type="radio"
+        className={`h-4 w-4 shrink-0 accent-brand ${columns ? '' : 'mt-0.5'}`}
+        checked={value === o.value}
+        onChange={() => onChange(o.value)}
+      />
+      <span>
+        <span className={value === o.value ? 'text-slate-100' : ''}>{t(o.label)}</span>
+        {o.desc && <span className="block text-[10px] leading-snug text-slate-500">{t(o.desc)}</span>}
+      </span>
+    </label>
+  ))
+  return (
+    <div className="flex flex-col gap-1.5">
+      {columns ? (
+        <div
+          className="grid gap-x-5 gap-y-1.5"
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, max-content))` }}
+        >
+          {opts}
+        </div>
+      ) : (
+        opts
+      )}
+      {!options.some((o) => o.value === value) && (
+        <span className="text-[10px] text-slate-500">{t('ui.settings.unknown', { v: value })}</span>
+      )}
+    </div>
   )
 }
 
@@ -718,19 +746,31 @@ function SpindlePicker({
   if (options.length === 0) return <NumberBox value={String(value)} onCommit={(v) => write(395, v)} />
 
   const known = options.some((o) => o.value === value)
+  // A fully-loaded build registers eight drivers, and picking one is a decision you
+  // make once per machine — worth seeing all of them at once rather than hunting
+  // through a dropdown. Two columns (so eight fill four rows) because driver names
+  // like "NOWFOREVER" need the width; four columns clipped them. Radio, not
+  // checkbox: $395 holds exactly one spindle. Styled like CheckboxList above —
+  // a native control and a plain label, nothing else.
   return (
-    <select
-      value={value}
-      onChange={(e) => write(395, Number(e.target.value))}
-      className="input w-full !py-1 text-xs"
-    >
+    <div className="grid grid-cols-2 gap-x-5 gap-y-1.5">
       {options.map((o) => (
-        <option key={o.value} value={o.value}>
+        <label key={o.value} className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-xs text-slate-300">
+          <input
+            type="radio"
+            className="h-4 w-4 shrink-0 accent-brand"
+            checked={o.value === value}
+            onChange={() => write(395, o.value)}
+          />
           {o.label}
-        </option>
+        </label>
       ))}
-      {!known && <option value={value}>{t('ui.settings.unknown', { v: value })}</option>}
-    </select>
+      {!known && (
+        <span className="col-span-2 font-mono text-[10px] text-warn">
+          {t('ui.settings.unknown', { v: value })}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -812,7 +852,11 @@ function TextBox({
 
 /** Mach3-style motor tuning: a row per axis with steps/mm, max rate, acceleration
  *  and max travel, plus a small velocity-profile sparkline (taller = faster,
- *  steeper ramp = more acceleration). */
+ *  steeper ramp = more acceleration).
+ *
+ *  Columns are FIXED, not `1fr`: these cells hold four-to-nine digit numbers, and
+ *  letting them share the pane's width blows them up to hand-span boxes on a wide
+ *  monitor. Leftover width is left empty rather than poured into the inputs. */
 function MotorTuning({
   axes,
   vals,
@@ -837,20 +881,123 @@ function MotorTuning({
   })
   const maxRate = Math.max(...rates, 1)
   const maxRamp = Math.max(...ramps, 0.0001)
+  // A/B/C are rotary — split them out so each group gets its own units
+  const linear = axes.map((_, i) => i).filter((i) => !/^[ABC]$/.test(axes[i]))
+  const rotary = axes.map((_, i) => i).filter((i) => /^[ABC]$/.test(axes[i]))
 
   return (
     <div className={`px-3 py-3 ${first ? '' : 'border-t border-border/60'}`}>
-      <div className="grid grid-cols-[2rem_1fr_1fr_1fr_1fr_3.5rem] items-center gap-2 pb-1 font-mono text-[10px] text-slate-500">
-        <span>{t('ui.motor.axis')}</span>
-        <span>{t('ui.motor.stepsmm')}</span>
-        <span>{t('ui.motor.maxrate')}</span>
-        <span>{t('ui.motor.accel')}</span>
-        <span>{t('ui.motor.travel')}</span>
-        <span className="text-center">{t('ui.motor.profile')}</span>
+      {/* The legend sits in the space the fixed columns leave free, to the RIGHT of
+          the profile column it explains, running the height of the rows instead of
+          as a wide band underneath. `flex-wrap` is the safety net: on a pane too
+          narrow to hold both, it drops back below the table rather than crushing. */}
+      <div className="flex flex-wrap items-stretch gap-3">
+        <div className="shrink-0">
+          {/* Linear axes first, then rotary ones in their own block below. They share
+              the same `$100+`/`$110+` family but NOT the same units — a rotary axis
+              counts steps per DEGREE and moves in °/min, and its "max travel" is
+              meaningless because it turns without end. One table with mm headings
+              would quietly mislabel every number in the A row. */}
+          <AxisRows
+            axes={axes}
+            idx={linear}
+            vals={vals}
+            write={write}
+            rates={rates}
+            ramps={ramps}
+            maxRate={maxRate}
+            maxRamp={maxRamp}
+          />
+
+          {rotary.length > 0 && (
+            <div className="mt-3 border-t border-border/60 pt-2">
+              <AxisRows
+                axes={axes}
+                idx={rotary}
+                vals={vals}
+                write={write}
+                rates={rates}
+                ramps={ramps}
+                maxRate={maxRate}
+                maxRamp={maxRamp}
+                rotaryUnits
+              />
+            </div>
+          )}
+        </div>
+
+        {/* legend / explanation of the profile sparkline. An invisible twin of the
+            header row pushes it down so its top lands level with the FIRST axis row,
+            and stretching does the rest: its bottom finishes with the last one. The
+            spacer copies the header's typography rather than guessing a pixel value,
+            so the two stay level if the text size ever changes. */}
+        <div className="flex min-w-[10rem] flex-1 flex-col">
+          <div className="pb-1 font-mono text-[10px] opacity-0" aria-hidden>
+            &nbsp;
+          </div>
+          <div className="flex flex-1 flex-col items-center justify-center gap-1.5 rounded-md bg-panel2 px-2.5 py-3 text-center text-[10px] leading-snug text-slate-500">
+            <svg width="40" height="20" className="shrink-0" aria-hidden>
+              <polyline points="2,17 12,4 28,4 38,17" fill="none" stroke="#22d3ee" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+            <span>{t('ui.motor.legend')}</span>
+          </div>
+        </div>
       </div>
-      {axes.map((a, i) => (
-        <div key={a} className="grid grid-cols-[2rem_1fr_1fr_1fr_1fr_3.5rem] items-center gap-2 py-1">
-          <span className="font-mono text-sm font-bold text-brand">{a}</span>
+
+      {/* one-line footnote, closed by a rule that runs the full width of the block —
+          the section already opens with one, so this gives it a matching bottom edge.
+          The negative margin cancels the block's px-3 so the rule reaches both edges. */}
+      {rotary.length > 0 && (
+        <div className="-mx-3 mt-2 truncate border-b border-border/60 px-3 pb-2 font-mono text-[10px] text-slate-600">
+          {t('ui.motor.rotaryNote')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One header + its rows, for a group of axes that share the same units. */
+function AxisRows({
+  axes,
+  idx,
+  vals,
+  write,
+  rates,
+  ramps,
+  maxRate,
+  maxRamp,
+  rotaryUnits
+}: {
+  axes: string[]
+  /** which axis indexes this block shows */
+  idx: number[]
+  vals: Record<number, string>
+  write: (setting: number, value: string | number) => void
+  rates: number[]
+  ramps: number[]
+  maxRate: number
+  maxRamp: number
+  rotaryUnits?: boolean
+}): JSX.Element | null {
+  const t = useT()
+  if (!idx.length) return null
+  const cols = 'grid grid-cols-[2rem_9rem_9rem_9rem_9rem_3.5rem] items-center gap-2'
+  const u = rotaryUnits ? 'Deg' : ''
+  return (
+    <>
+      {/* every column is centred on its own cell — header over box, axis letter under
+          its own heading — so the table reads as columns rather than drifting text */}
+      <div className={`${cols} pb-1 text-center font-mono text-[10px] text-slate-500`}>
+        <span>{t('ui.motor.axis')}</span>
+        <span>{t(`ui.motor.steps${u || 'mm'}`)}</span>
+        <span>{t(`ui.motor.maxrate${u}`)}</span>
+        <span>{t(`ui.motor.accel${u}`)}</span>
+        <span>{t(`ui.motor.travel${u}`)}</span>
+        <span>{t('ui.motor.profile')}</span>
+      </div>
+      {idx.map((i) => (
+        <div key={axes[i]} className={`${cols} py-1`}>
+          <span className="text-center font-mono text-sm font-bold text-brand">{axes[i]}</span>
           <CellInput value={vals[100 + i] ?? ''} onCommit={(v) => write(100 + i, v)} />
           <CellInput value={vals[110 + i] ?? ''} onCommit={(v) => write(110 + i, v)} />
           <CellInput value={vals[120 + i] ?? ''} onCommit={(v) => write(120 + i, v)} />
@@ -858,15 +1005,7 @@ function MotorTuning({
           <VelocityProfile heightFrac={rates[i] / maxRate} rampFrac={ramps[i] / maxRamp} />
         </div>
       ))}
-
-      {/* legend / explanation of the profile sparkline */}
-      <div className="mt-2 flex items-start gap-2 rounded-md bg-panel2 px-2.5 py-2 text-[10px] leading-snug text-slate-500">
-        <svg width="40" height="20" className="mt-0.5 shrink-0" aria-hidden>
-          <polyline points="2,17 12,4 28,4 38,17" fill="none" stroke="#22d3ee" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
-        <span>{t('ui.motor.legend')}</span>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -875,7 +1014,7 @@ function CellInput({ value, onCommit }: { value: string; onCommit: (v: string) =
   useEffect(() => setLocal(value), [value])
   return (
     <input
-      className="input !py-1 w-full text-right font-mono text-xs"
+      className="input !py-1 w-full text-center font-mono text-xs tabular-nums"
       value={local}
       inputMode="decimal"
       onChange={(e) => setLocal(e.target.value)}

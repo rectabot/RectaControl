@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
+import { useStore } from '../store'
 import { useT } from '../i18n'
 import { CalcIcon } from './icons'
 
-type Mech = 'leadscrew' | 'belt' | 'rack' | 'rotary'
+export type Mech = 'leadscrew' | 'belt' | 'rack' | 'rotary'
 
 /** Steps-per-mm (or per-degree for a rotary axis) calculator. Computes $100.. from
  *  motor step angle, driver microstepping and the drive mechanism, then applies
@@ -17,12 +18,14 @@ export function StepsCalculator({
   onClose: () => void
 }): JSX.Element {
   const t = useT()
+  const setAxisMech = useStore((s) => s.setAxisMech)
+  const setAxisPerRev = useStore((s) => s.setAxisPerRev)
   const [angle, setAngle] = useState('1.8') // motor step angle (°)
   const [micro, setMicro] = useState('16') // driver microsteps
   const [mech, setMech] = useState<Mech>('leadscrew')
 
   // mechanism params
-  const [lead, setLead] = useState('8') // leadscrew lead, mm/rev (e.g. 8 for SFU1605)
+  const [lead, setLead] = useState('5') // leadscrew lead, mm/rev (SFU1605 = 5)
   const [pitch, setPitch] = useState('2') // belt pitch, mm (GT2 = 2)
   const [teeth, setTeeth] = useState('20') // pulley / pinion teeth
   const [module, setModule] = useState('1') // rack module, mm
@@ -35,25 +38,28 @@ export function StepsCalculator({
 
   const result = useMemo(() => {
     const totalPerRev = fullSteps * (parseFloat(micro) || 0) // microsteps per motor rev
-    if (totalPerRev <= 0) return { value: 0, unit: 'st/mm', rotary: false }
+    if (totalPerRev <= 0) return { value: 0, unit: 'st/mm', rotary: false, perRev: 0 }
     const n = (x: string): number => parseFloat(x) || 0
+    // `perRev` = how far the axis travels per MOTOR revolution (mm, or ° for rotary).
+    // Kept alongside steps/mm because it is what turns a feed rate into motor rpm.
     switch (mech) {
       case 'leadscrew': {
-        const l = n(lead)
-        return { value: l > 0 ? totalPerRev / l : 0, unit: 'st/mm', rotary: false }
+        const travel = n(lead)
+        return { value: travel > 0 ? totalPerRev / travel : 0, unit: 'st/mm', rotary: false, perRev: travel }
       }
       case 'belt': {
         const travel = n(pitch) * n(teeth) // mm per rev
-        return { value: travel > 0 ? totalPerRev / travel : 0, unit: 'st/mm', rotary: false }
+        return { value: travel > 0 ? totalPerRev / travel : 0, unit: 'st/mm', rotary: false, perRev: travel }
       }
       case 'rack': {
         const travel = Math.PI * n(module) * n(teeth) // pinion circumference, mm per rev
-        return { value: travel > 0 ? totalPerRev / travel : 0, unit: 'st/mm', rotary: false }
+        return { value: travel > 0 ? totalPerRev / travel : 0, unit: 'st/mm', rotary: false, perRev: travel }
       }
       case 'rotary': {
         // steps per degree of the axis (after gearing)
-        const perAxisRev = totalPerRev * n(gear)
-        return { value: perAxisRev / 360, unit: 'st/°', rotary: true }
+        const g = n(gear)
+        const perAxisRev = totalPerRev * g
+        return { value: perAxisRev / 360, unit: 'st/°', rotary: true, perRev: g > 0 ? 360 / g : 0 }
       }
     }
   }, [fullSteps, micro, mech, lead, pitch, teeth, module, gear])
@@ -152,7 +158,14 @@ export function StepsCalculator({
               <button
                 key={a}
                 disabled={result.value <= 0}
-                onClick={() => write(100 + i, valueStr)}
+                onClick={() => {
+                  write(100 + i, valueStr)
+                  // remember WHAT this axis is driven by, and how far it travels per
+                  // motor turn — tuning caps the speed slider differently for a lead
+                  // screw than for a rack, and needs perRev to show motor rpm
+                  setAxisMech(i, mech)
+                  if (result.perRev > 0) setAxisPerRev(i, result.perRev)
+                }}
                 className="h-9 w-12 rounded-md border border-brand/50 bg-panel2 font-mono text-sm font-bold text-brand transition hover:bg-brand hover:text-[#020617] disabled:opacity-40"
                 title={`$${100 + i} = ${valueStr}`}
               >

@@ -106,6 +106,30 @@ export const en: Record<string, string> = {
   'ui.errors.act.unlock': 'Unlock ($X)',
   'ui.errors.act.home': 'Home ($H)',
   'ui.errors.act.reset': 'Reset',
+  // guided recovery
+  'ui.errors.procedure': 'Step by step',
+  'ui.errors.stepOf': 'Step {n} of {total}',
+  'ui.errors.resetFirst': 'Reset first — while a critical event is active the controller refuses this (error:79).',
+  'ui.errors.act.freeSwitch': 'Free the switch',
+  'ui.errors.escapeHint':
+    'Pick the direction — look at the machine, only you can tell which end it is against. Wrong way? Press the other one. Hard limits go off for that move only.',
+  'ui.errors.escapeWait': 'Wait for the machine to stop moving.',
+  'ui.errors.limitsOff': 'Hard limits are off',
+  'ui.errors.limitsRestore': 'turn back on now',
+  'ui.status.limitsOff': 'HARD LIMITS OFF',
+  'ui.status.limitsOffTitle':
+    'Hard limits are temporarily off so you can drive off a limit switch. They come back on by themselves once the switch releases. A program cannot be started while this is on.',
+  'ui.status.limitsRestore': 'Restore',
+  'ui.errors.back': 'Back',
+  'ui.errors.stepDone': 'Done',
+  'ui.errors.openSettings': 'Take me there →',
+  'ui.errors.recovered': 'Recovered. You can go back to work.',
+  'ui.errors.stillAlarm': 'Steps done, but the machine is still in Alarm — the cause is still there.',
+  'ui.errors.close': 'Close',
+  // fallback step wording for codes that only carry a bare action list
+  'ui.errors.step.unlock': 'Unlock the machine ($X).',
+  'ui.errors.step.home': 'Run homing ($H).',
+  'ui.errors.step.reset': 'Reset the controller.',
   'ui.errors.group.motion': 'Motion & limits',
   'ui.errors.group.state': 'Machine state',
   'ui.errors.group.gcode': 'G-code program',
@@ -129,6 +153,14 @@ export const en: Record<string, string> = {
   'ui.motor.accel': 'Accel (mm/s²)',
   'ui.motor.travel': 'Travel (mm)',
   'ui.motor.profile': 'Profile',
+  // a rotary axis shares the same $ family but counts degrees, not millimetres
+  'ui.motor.stepsDeg': 'Steps/°',
+  'ui.motor.maxrateDeg': 'Max (°/min)',
+  'ui.motor.accelDeg': 'Accel (°/s²)',
+  'ui.motor.travelDeg': 'Travel (°)',
+  // kept to a single line — it is a footnote, not a paragraph
+  'ui.motor.rotaryNote':
+    'Steps/° = steps per motor turn × gear ratio ÷ 360   ·   Travel 0 = no limit, the axis turns without end',
   'ui.motor.legend':
     'Motion profile: the axis accelerates (ramp) → cruises at max speed (flat) → decelerates. Higher profile = higher top speed; steeper ramp = more acceleration. Sizes are relative across axes. Too much acceleration → lost steps; too much speed → noise/vibration.',
 
@@ -147,6 +179,11 @@ export const en: Record<string, string> = {
   'sec.network.note': 'Changing network settings drops the ETH link — reconnect on the new IP. Takes effect after a board reset.',
   'sec.pendant.title': 'Pendant',
   'sec.macros.title': 'Macros',
+  'sec.macros.note':
+    'Two different things share this name. A macro HERE would live on the board and be fired by a physical button, so it runs with no computer attached — this firmware is not built with that plugin, which is why there is nothing to set. The macros you write in RectaControl live in the app and are sent by it, and they are on the Macros tab.',
+  'sec.macros.open': 'Open the Macros tab',
+  'sec.pendant.note':
+    'A pendant is a handheld jog and control unit wired straight to the board, so the machine can be driven from where you stand rather than from the keyboard. This firmware exposes no pendant settings, so there is nothing to configure here yet.',
   'sec.behavior.title': 'Behavior & misc',
 
   // ── Curated fields: labels & descriptions ──────────────────────────────────
@@ -305,7 +342,23 @@ export const en: Record<string, string> = {
   'ui.tune.speed': 'Speed',
   'ui.tune.accel': 'Acceleration',
   'ui.tune.footer':
-    'Higher speed = faster motion; higher acceleration = faster start/stop. If the motor skips steps or “screeches” at start, lower the acceleration. The value is written when you release the slider. “Test” moves the axis 20 mm at that speed.',
+    'Higher speed = faster motion; higher acceleration = faster start/stop. The value is written when you release the slider; “Test” moves the axis 20 mm at that speed. Acceleration is what sets the force the motor has to produce — raising the top speed does not increase it, it only makes the run-up longer. So if an axis misbehaves fast but is fine slow at the SAME acceleration, it is the speed that is too high, not the acceleration.',
+  'ui.tune.derived': 'run-up {t} s · {d} · full speed only on moves over {m}',
+  'ui.tune.rpm': 'rpm',
+  'ui.tune.limitAccel': 'ceiling {v} — follows this axis’ top speed',
+  // why the feed readout can read higher than any single axis' max rate
+  'ui.tune.vector':
+    'Note: max speed is PER AXIS. On a diagonal the axes combine, so the feed shown can reach about 1.4× that on two axes (1.7× on three) while every axis is still inside its own limit.',
+  'ui.tune.perRev': 'Travel per motor turn',
+  'ui.tune.perRevTitle':
+    'How far this axis moves for ONE turn of the motor — a 1605 ball screw coupled straight to the shaft is 5 mm. This is not the test-jog distance. Only used to show motor rpm; leave it empty to hide that.',
+  'ui.tune.applyAll': 'all axes',
+  'ui.tune.applyAllTitle': 'Copy this travel-per-turn and drive type to every linear axis',
+  // where the speed slider's ceiling comes from — the point is that the operator
+  // learns WHY it stops there, instead of wondering why it won't go further
+  'ui.tune.limitSteps': 'ceiling {v} — set by steps/mm and $0, not by the machine',
+  'ui.tune.limitMech': 'ceiling {v} for this drive type',
+  'ui.tune.limitOver': 'above {v} — the board cannot step this fast, motors will lose steps',
 
   // ── Jog panel ──────────────────────────────────────────────────────────────
   'ui.jog.step': 'Step',
@@ -313,13 +366,25 @@ export const en: Record<string, string> = {
   'ui.jog.home': 'Home',
   'ui.jog.homeTitle': 'Home ($H)',
   'ui.jog.homedTitle': 'Machine homed — reference set ($H)',
+  'ui.dro.wcsVariantTitle':
+    'Left half switches to plain G59 · right half picks one of the extra systems (G59.1–G59.3) and switches to it',
   'ui.jog.gotoZero': 'Go to zero',
-  'ui.jog.gotoZeroTitle': 'Return to work zero X0 Y0 — retracts Z to the machine top first',
+  'ui.jog.gotoZeroTitle':
+    'Return to work zero X0 Y0 — retracts Z to the machine top first. This is a rapid: it runs at each axis’ max speed ($110…), not at the jog feed.',
   'ui.jog.unlock': 'Unlock',
   'ui.jog.unlockTitle': 'Clear the alarm lock ($X)',
   'ui.jog.park': 'Park',
   'ui.jog.parkTitle': 'Pause the job and free the head to jog (clear chips / obstruction) — then Resume',
   'ui.jog.goToParkTitle': 'Press and hold to send the head to the saved park position (retract Z → rapid to park XY)',
+  // shown on the Park button when there is no park position to go to yet — the point
+  // where a first-time user actually hits the wall, so the how-to lives right here
+  'ui.jog.parkSetupTitle': 'No park position saved yet — click to learn how',
+  'ui.jog.parkSetupHead': 'Park position not set',
+  'ui.jog.parkSetupP1':
+    'Park is your safe spot on the table — the place the head goes when you need it out of the way: changing a tool, measuring the part, clamping a new piece. One press and it retracts Z, then drives there.',
+  'ui.jog.parkSetupP2':
+    'To teach it: jog the head to the spot you want, then open Work offsets and press “Set” on the G30 row. It is remembered, so you only do this once per machine.',
+  'ui.jog.parkSetupHome': 'You also need to home the machine first ($H) — park is stored in machine coordinates.',
   'ui.jog.resume': 'Resume',
   'ui.jog.resumeTitle': 'Return to where the job stopped and continue',
   'ui.jog.softReset': 'Soft reset',
@@ -441,7 +506,38 @@ export const en: Record<string, string> = {
   'ui.offsets.setParkTitle': 'Store the current position as the Park position (G30.1). The Park button then retracts Z and moves the head here.',
   'ui.offsets.readonly': 'read-only',
   'ui.offsets.hint':
-    'Edit a G54–G59 cell to set that axis to an exact machine coordinate, or use “Zero here” to set the current position as zero. G28/G30/G92/TLO are shown for reference.',
+    'Edit a G54–G59 cell to set that axis to an exact machine coordinate, or use “Zero here” to set the current position as zero. Hover the ⓘ on any row to see what it is for.',
+
+  // Reference group — the rows below G54–G59. Each carries a plain-language name so
+  // the table reads without a manual, plus an ⓘ that explains it in two sentences:
+  // what it is, then when you actually reach for it.
+  'ui.offsets.refGroup': 'Reference positions',
+  'ui.offsets.refGroupSub': 'Fixed spots on the table — used by the Park button and by G-code, not work zeros.',
+  'ui.offsets.g28.name': 'Service point',
+  'ui.offsets.g28.p1':
+    'A fixed spot the machine can be sent to from inside a program with the command G28 — typically a tool-change or unload position.',
+  'ui.offsets.g28.p2':
+    'Jog the head where you want it and press “Set”. Most hobby jobs never call G28, so it is fine to leave this alone.',
+  'ui.offsets.g30.name': 'Park position',
+  'ui.offsets.g30.p1':
+    'The spot the Park button drives to — your safe corner for tool changes, measuring, or clamping a new piece. Park retracts Z first, then moves there.',
+  'ui.offsets.g30.p2': 'Jog the head to that spot and press “Set”. Done once per machine; it is remembered.',
+  'ui.offsets.g30.note':
+    'The board keeps this through a power cut, so setting it once is enough. It is in machine coordinates — the machine has to be homed for Park to use it. An “app” badge on this row means the board has nothing stored and RectaControl is supplying the spot from its own memory.',
+  'ui.offsets.g30.appStored': 'app',
+  'ui.offsets.g92.name': 'Temporary shift',
+  'ui.offsets.g92.p1':
+    'A temporary nudge of the whole coordinate system, on top of the active work zero. It is what a long-press on “Zero all” sets.',
+  'ui.offsets.g92.p2':
+    'Handy for cutting the same part a few centimetres over without touching your real zero — but it is easy to forget it is on.',
+  'ui.offsets.g92.note': 'If your zeros suddenly seem shifted, this is usually the culprit. “Clear G92” puts it back to zero.',
+  'ui.offsets.tlo.name': 'Tool length',
+  'ui.offsets.tlo.p1':
+    'How much longer or shorter the current tool is than the reference one. The controller adds it to Z so the tip lands in the same place after a tool change.',
+  'ui.offsets.tlo.p2':
+    'Nothing here is typed in: only a G43.1 command sets it and G49 clears it. That is why this row has no button.',
+  'ui.offsets.tlo.note':
+    'Measuring tool height in RectaControl does NOT fill this in — it sets the work zero instead, which is simpler when you cut with one tool. Expect 0.000 here unless your G-code sends G43.1.',
   'ui.offsets.notConnected': 'Connect to read offsets.',
   'ui.offsets.busy': 'Offsets can only be read or changed while the machine is Idle. Editing is locked during a running job.',
   'ui.offsets.reading': 'Reading offsets…',
@@ -491,7 +587,9 @@ export const en: Record<string, string> = {
   'ui.fw.flashing': 'Flashing… do not touch the board.',
   'ui.fw.flashed': '✓ Flashed. The board restarts with the new firmware.',
   'ui.fw.error': '✗ Error: {msg}',
-  'ui.fw.step1': '1 · Choose firmware',
+  // no longer numbered: the doing steps (bootloader / detect / flash) moved up into
+  // the Settings header, so this pane is simply "what to flash"
+  'ui.fw.step1': 'Choose firmware',
   'ui.fw.custom': 'Custom: {name}',
   'ui.fw.pickFile': 'Choose a .uf2 from disk…',
   'ui.fw.step2': '2 · Board in the bootloader',
@@ -729,8 +827,6 @@ export const en: Record<string, string> = {
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Click a connector on the board for wiring details.',
-  'board.calib': 'calibration',
-  'board.copied': '(copied)',
   'board.imgMissing': 'Save the board image to src/renderer/public/board.png to show the diagram.',
   'board.pickPrompt': 'Select a connector (dot) on the board.',
   'board.inputHint':

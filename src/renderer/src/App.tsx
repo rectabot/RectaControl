@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store'
+import { readOffsets, applyOffsetsRead } from './offsets'
 import { t as translate } from '@shared/i18n'
 import { TopBar } from './components/TopBar'
 import { DRO } from './components/DRO'
@@ -34,6 +35,8 @@ export default function App(): JSX.Element {
   const jobRunning = useStore((s) => s.job.running)
   const sdRunning = useStore((s) => s.sdRunning)
   const parked = useStore((s) => s.parked)
+  const connected = useStore((s) => s.connected)
+  const parkSynced = useRef(false)
   // global keyboard + gamepad jog / shortcuts (Settings → Controls)
   useKeyboardControls()
   useGamepadControls()
@@ -72,7 +75,7 @@ export default function App(): JSX.Element {
   // one-time build marker in the terminal, so it's obvious at a glance whether
   // the running app is the freshly-built code (vs a stale `npm start` process)
   useEffect(() => {
-    pushConsole('* RectaControl build 2026-07-20o · Home button turns green when the machine is homed; Park (go-to-park from Idle) now needs a press-and-hold to fire, guarding a stray tap')
+    pushConsole('* RectaControl build 2026-07-26d · the board owns the park position (G30 is non-volatile) and the app adopts it on connect; the DRO "WCS" button opens the offsets table, and the G59 cell now splits in two — left half is plain G59, right half picks .1/.2/.3 and switches straight to it')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -101,6 +104,21 @@ export default function App(): JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Adopt the board's park spot (G30) the first time the machine reaches Idle on a
+  // connection. G30 is non-volatile (verified on hardware), so the board is the durable
+  // truth: this keeps a spot cached from an earlier session — or from another machine —
+  // from steering the head somewhere the offsets table does not show. A board with
+  // nothing stored leaves the app's saved spot untouched. `$#` is Idle-only (error:8).
+  useEffect(() => {
+    if (!connected) {
+      parkSynced.current = false
+      return
+    }
+    if (parkSynced.current || state !== 'Idle' || jobRunning || sdRunning) return
+    parkSynced.current = true
+    void readOffsets().then(applyOffsetsRead)
+  }, [connected, state, jobRunning, sdRunning])
 
   useEffect(() => {
     // 'dark' is the base (no class); other themes add their class to <html>

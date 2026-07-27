@@ -39,6 +39,11 @@ export function SettingsBrowser(): JSX.Element | null {
   const [rows, setRows] = useState<Row[]>([])
   const [reading, setReading] = useState(false)
   const [query, setQuery] = useState('')
+  // Where the Firmware pane portals its action row. Element STATE, not a ref, so the
+  // portal re-renders the moment the node exists — and declared up here with the
+  // other hooks, above the `if (!open) return null` further down: a hook after an
+  // early return changes the hook count between renders and React throws.
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // honour a deep-link (e.g. the Probe window's "params in Settings" link) by
@@ -180,7 +185,7 @@ export function SettingsBrowser(): JSX.Element | null {
   const pane =
     cat === 'firmware' ? (
       <>
-        <FirmwareFlash />
+        <FirmwareFlash headerSlot={headerSlot} />
         <AppUpdate />
       </>
     ) : cat === 'board' ? (
@@ -221,43 +226,84 @@ export function SettingsBrowser(): JSX.Element | null {
         <div className="flex w-[17.55rem] shrink-0 items-center gap-1.5 border-r border-border px-3 py-2 font-display text-sm font-bold tracking-wider text-brand">
           <GearIcon /> {t('ui.settings.tab.settings')}
         </div>
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2">
-          <SearchIcon className="h-4 w-4 shrink-0 text-slate-500" />
-          <input
-            className="input !py-1.5 min-w-0 flex-1 text-sm"
-            placeholder={searchable ? t('ui.settings.search') : ''}
-            value={query}
-            disabled={!searchable}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          {query && (
-            <button className="btn shrink-0 text-xs" onClick={() => setQuery('')}>
+        {/* mirrors a setting ROW exactly: same px-3 and gap-6, search occupying the
+            label column and the actions the w-[32rem] control column — so the search
+            box ends precisely where every setting's value begins */}
+        <div className="flex min-w-0 flex-1 items-center gap-6 px-3 py-2">
+          {/* On a tab with nothing to search the field would just sit there dead, so
+              the space becomes a slot the pane can fill instead — Firmware puts its
+              bootloader / detect / flash row here (rendered via a portal, so all of
+              that state stays inside FirmwareFlash). */}
+          {!searchable ? (
+            <div ref={setHeaderSlot} className="flex min-w-0 flex-1 items-center" />
+          ) : (
+          <div className="relative min-w-0 flex-1">
+            <input
+              className="input !py-1.5 w-full pr-8 text-sm"
+              placeholder={searchable ? t('ui.settings.search') : ''}
+              value={query}
+              disabled={!searchable}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {/* one slot on the right of the field: a magnifier while it is empty,
+                a clear button once there is something to clear */}
+            {/* both sit in the SAME box, so the clear button lands exactly where the
+                magnifier was instead of jumping to the field's edge */}
+            {query ? (
+              <button
+                className="absolute right-2.5 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center text-xs text-slate-500 transition hover:text-brand"
+                onClick={() => setQuery('')}
+                title={t('ui.settings.search')}
+              >
+                ✕
+              </button>
+            ) : (
+              <SearchIcon className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            )}
+          </div>
+          )}
+          {/* every control here carries the search field's `py-1.5`, so the whole row
+              sits on one height. The three actions take only the width their labels
+              need; the slack goes to the language picker, which holds a real word. */}
+          <div className="flex w-[32rem] shrink-0 items-center gap-2">
+            {isSettings && (
+              <>
+                {/* all three a fixed 95px: equal blocks, and the Read button no
+                    longer twitches when its label swaps to "Reading…" */}
+                <button
+                  className="btn w-[95px] shrink-0 px-0 py-1.5 text-sm"
+                  disabled={!connected || reading || busy}
+                  title={busy ? t('ui.settings.empty.busy') : undefined}
+                  onClick={read}
+                >
+                  {reading ? t('ui.settings.reading') : t('ui.settings.read')}
+                </button>
+                <button
+                  className="btn w-[95px] shrink-0 px-0 py-1.5 text-sm"
+                  disabled={rows.length === 0}
+                  onClick={exportSettings}
+                >
+                  {t('ui.settings.export')}
+                </button>
+                <button
+                  className="btn w-[95px] shrink-0 px-0 py-1.5 text-sm"
+                  disabled={!connected}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {t('ui.settings.import')}
+                </button>
+                <input ref={fileRef} type="file" accept=".txt,.nc" className="hidden" onChange={importSettings} />
+              </>
+            )}
+            <LanguageSelect className="min-w-0 flex-1" />
+            <button
+              className="btn h-[34px] w-9 shrink-0 px-0 py-0 text-sm leading-none"
+              onClick={() => setOpen(false)}
+              title={t('ui.tabs.collapse')}
+            >
               ✕
             </button>
-          )}
-          {isSettings && (
-            <>
-              <button
-                className="btn shrink-0 text-xs"
-                disabled={!connected || reading || busy}
-                title={busy ? t('ui.settings.empty.busy') : undefined}
-                onClick={read}
-              >
-                {reading ? t('ui.settings.reading') : t('ui.settings.read')}
-              </button>
-              <button className="btn shrink-0 text-xs" disabled={rows.length === 0} onClick={exportSettings}>
-                {t('ui.settings.export')}
-              </button>
-              <button className="btn shrink-0 text-xs" disabled={!connected} onClick={() => fileRef.current?.click()}>
-                {t('ui.settings.import')}
-              </button>
-              <input ref={fileRef} type="file" accept=".txt,.nc" className="hidden" onChange={importSettings} />
-            </>
-          )}
-          <LanguageSelect />
-          <button className="btn shrink-0 text-xs" onClick={() => setOpen(false)} title={t('ui.tabs.collapse')}>
-            ✕
-          </button>
+          </div>
         </div>
       </div>
 
@@ -286,7 +332,9 @@ export function SettingsBrowser(): JSX.Element | null {
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">{pane}</div>
+          {/* the board pinout is a reference screen: it fits itself to the pane,
+              so it must NOT get a scrollbar (every other pane still scrolls) */}
+          <div className={`min-h-0 flex-1 ${cat === 'board' ? 'overflow-hidden' : 'overflow-y-auto'}`}>{pane}</div>
           {isSettings && (
             <div className="flex items-center gap-2 border-t border-border px-4 py-2 font-mono text-[10px] text-slate-500">
               <span>{t('ui.settings.footer')}</span>

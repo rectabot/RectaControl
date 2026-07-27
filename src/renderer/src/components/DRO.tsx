@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../store'
 import { Panel } from './Panel'
 import { Overrides } from './Overrides'
@@ -20,6 +20,16 @@ export function DRO(): JSX.Element {
   const wcs = useStore((s) => s.wcs)
   const setWcs = useStore((s) => s.setWcs)
   const setOffsetsOpen = useStore((s) => s.setOffsetsOpen)
+  const wcsVariant = useStore((s) => s.wcsVariant)
+  const setWcsVariant = useStore((s) => s.setWcsVariant)
+
+  // If an extra system is active but the strip isn't showing it — typed in the
+  // terminal, or left active by a program — adopt the suffix so the button reads
+  // (and highlights as) the system the machine is really in. Without this the strip
+  // would show no selection at all while G59.2 was active.
+  useEffect(() => {
+    if (wcs.startsWith('G59.') && wcs.slice(3) !== wcsVariant) setWcsVariant(wcs.slice(3))
+  }, [wcs, wcsVariant, setWcsVariant])
 
   // Zeroing (G10 L20), Go-To-Zero rapids (G0) and WCS changes are only accepted
   // by grblHAL when the machine is Idle — and only make sense then. Clicking them
@@ -69,33 +79,39 @@ export function DRO(): JSX.Element {
 
   return (
     <Panel>
-      {/* WCS quick-select (G54–G59) — mirrors the axis-row columns for symmetry:
-          "WCS" (help) aligns with Zero-all, the G54–G59 strip spans X0…X, and the
-          Offsets ⊞ aligns with Go-to-zero. */}
+      {/* WCS quick-select. "WCS" opens the offsets table (where the explanation and the
+          full editor live) and lines up with Zero-all; the strip then runs to the panel
+          edge — no orphan slot on the right, which also gives the cells room to breathe.
+          The G59 cell splits in two on boards that have G59.1–G59.3, so the variant is
+          picked right where it applies instead of from across the row. */}
       <div className="mb-3 flex h-[27px] items-stretch gap-2">
-        <WcsHelp />
-        <div className="flex flex-1 overflow-hidden rounded-md border border-border2">
-          {WCS_LIST.map((g) => (
-            <button
-              key={g}
-              onClick={() => selectWcs(g)}
-              disabled={!ready}
-              className={`flex-1 px-2 py-1 font-mono text-xs transition disabled:opacity-40 ${
-                wcs === g ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
         <button
-          className="flex w-11 shrink-0 items-center justify-center rounded-md border border-border2 text-xs text-slate-400 transition hover:border-brand hover:text-brand disabled:opacity-40"
+          className="flex w-11 shrink-0 items-center justify-center rounded-md border border-border2 font-mono text-xs font-bold text-slate-400 transition hover:border-brand hover:text-brand disabled:opacity-40"
           onClick={() => setOffsetsOpen(true)}
           disabled={!connected}
           title={t('ui.offsets.open')}
         >
-          ⊞
+          WCS
         </button>
+        {/* grid, not flex: six EXACTLY equal columns. With flex the split G59 cell has
+            a wider min-content than "G54" and the row stops dividing evenly.
+            No overflow-hidden either — the variant menu has to escape the strip, so
+            the end cells round their own outer corners instead. */}
+        <div className="grid flex-1 grid-cols-6 rounded-md border border-border2">
+          {WCS_LIST.slice(0, 5).map((g, i) => (
+            <button
+              key={g}
+              onClick={() => selectWcs(g)}
+              disabled={!ready}
+              className={`min-w-0 px-1 py-1 font-mono text-xs transition disabled:opacity-40 ${
+                i === 0 ? 'rounded-l-md' : ''
+              } ${wcs === g ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'}`}
+            >
+              {g}
+            </button>
+          ))}
+          <G59Cell ready={ready} onSelect={selectWcs} />
+        </div>
       </div>
 
       <div className="flex items-stretch gap-2">
@@ -263,28 +279,97 @@ function VBtn({
   )
 }
 
-/** The "WCS" label doubles as the help trigger — clicking it opens a popover
- *  explaining work coordinate systems (G54–G59). Same w-11 footprint as Zero-all. */
-function WcsHelp(): JSX.Element {
+/**
+ * The last cell of the WCS strip. On a board that only has six systems it is an
+ * ordinary G59 button. On a board that reports G59.1–G59.3 it SPLITS in two, reading
+ * as one button — `G59` on the left, the variant on the right:
+ *
+ *     ┌──────┬────┐
+ *     │ G59  │ .2 │   left half → plain G59 · right half → pick .1/.2/.3
+ *     └──────┴────┘
+ *
+ * Both halves activate immediately. Switching systems is the strip's entire job, so a
+ * pick IS the switch — and the left half doubles as the way back to plain G59, which
+ * is why the menu carries no "none" entry. Idle-gated like every other command.
+ */
+function G59Cell({ ready, onSelect }: { ready: boolean; onSelect: (g: string) => void }): JSX.Element {
   const t = useT()
+  const wcs = useStore((s) => s.wcs)
+  const extraWcs = useStore((s) => s.extraWcs)
+  const wcsVariant = useStore((s) => s.wcsVariant)
+  const setWcsVariant = useStore((s) => s.setWcsVariant)
   const [open, setOpen] = useState(false)
-  return (
-    <div className="relative shrink-0">
+
+  const label = `G59${wcsVariant}`
+  const active = wcs === label
+  const skin = active ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
+
+  // six-system board: nothing to split
+  if (!extraWcs.length)
+    return (
       <button
-        className="flex h-full w-11 items-center justify-center rounded-md border border-border2 font-mono text-xs font-bold text-slate-400 transition hover:border-brand hover:text-brand"
-        onClick={() => setOpen((o) => !o)}
-        title={t('ui.wcs.q')}
+        onClick={() => onSelect('G59')}
+        disabled={!ready}
+        className={`min-w-0 rounded-r-md px-1 py-1 font-mono text-xs transition disabled:opacity-40 ${
+          wcs === 'G59' ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
+        }`}
       >
-        WCS
+        G59
+      </button>
+    )
+
+  /** Back to the plain sixth system: drop the suffix and switch to it. */
+  const plain = (): void => {
+    setWcsVariant('')
+    onSelect('G59')
+  }
+  /** Snap a suffix on and switch straight to that system. */
+  const pick = (v: string): void => {
+    setWcsVariant(v)
+    setOpen(false)
+    onSelect(`G59${v}`)
+  }
+
+  return (
+    // the cell keeps its one-sixth column and splits INSIDE it, so the strip stays even
+    <div className="relative flex min-w-0">
+      <button
+        onClick={plain}
+        disabled={!ready}
+        className={`min-w-0 flex-1 py-1 pl-0.5 font-mono text-xs transition disabled:opacity-40 ${skin}`}
+        title={t('ui.dro.wcsVariantTitle')}
+      >
+        G59
+      </button>
+      {/* hairline seam, not a gap — the two halves have to read as one button */}
+      <button
+        onClick={() => setOpen((o) => !o)}
+        disabled={!ready}
+        className={`shrink-0 rounded-r-md border-l border-black/20 py-1 pl-1 pr-1.5 font-mono text-[11px] transition disabled:opacity-40 ${skin} ${
+          wcsVariant ? '' : 'opacity-70'
+        }`}
+        title={t('ui.dro.wcsVariantTitle')}
+      >
+        {wcsVariant || '.x'}
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-border bg-panel p-3 text-xs leading-relaxed text-slate-300 shadow-glow">
-            <div className="mb-1 font-display text-sm font-bold text-brand">{t('ui.wcs.title')}</div>
-            <p className="mb-2">{t('ui.wcs.p1')}</p>
-            <p className="mb-2">{t('ui.wcs.p2')}</p>
-            <p className="text-slate-500">{t('ui.wcs.p3')}</p>
+          <div className="absolute right-0 top-full z-50 mt-1 flex w-20 flex-col overflow-hidden rounded-md border border-border bg-panel shadow-glow">
+            {extraWcs.map((g) => {
+              const v = g.slice(3) // 'G59.2' → '.2'
+              return (
+                <button
+                  key={g}
+                  onClick={() => pick(v)}
+                  className={`px-2 py-1.5 text-left font-mono text-xs transition hover:bg-panel2 ${
+                    wcs === g ? 'text-brand' : 'text-slate-300'
+                  }`}
+                >
+                  {g}
+                </button>
+              )
+            })}
           </div>
         </>
       )}

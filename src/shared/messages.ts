@@ -256,7 +256,8 @@ export const ALARMS: Record<number, CodeDetail> = {
       { do: 'unlock', text: 'Unlock so the machine will take a move.' },
       {
         do: 'freeSwitch',
-        text: 'Back the axis off the switch. While it is pressed nothing moves — not even homing.'
+        text: 'Back the axis off the switch. Still engaged with nothing touching it? Then it is the wiring — with NC switches a broken wire reads exactly like a pressed one.',
+        goto: 'limits'
       },
       { do: 'home', text: 'Home to restore an accurate machine position.' }
     ]
@@ -515,7 +516,7 @@ const ALARMS_SR: Record<number, CodeDetailSR> = {
       'Otključaj ($X) i odjoguj osu sa prekidača, pa ponovo homuj ($H). Ako ništa nije na prekidaču — proveri ožičenje/smetnje.',
     steps: [
       'Otključaj da mašina prihvati potez.',
-      'Odmakni osu sa prekidača. Dok je pritisnut ništa se ne miče — ni homing.',
+      'Odmakni osu sa prekidača. Ostaje aktivan a ništa ga ne dodiruje? Onda je ožičenje — kod NC prekidača prekinuta žica izgleda isto kao pritisnut prekidač.',
       'Homuj da vratiš tačnu mašinsku poziciju.'
     ]
   },

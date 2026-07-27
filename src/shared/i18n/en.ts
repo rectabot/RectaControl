@@ -122,6 +122,7 @@ export const en: Record<string, string> = {
   'ui.status.limitsRestore': 'Restore',
   'ui.errors.back': 'Back',
   'ui.errors.stepDone': 'Done',
+  'ui.errors.waiting': 'Waiting for the machine…',
   'ui.errors.openSettings': 'Take me there →',
   'ui.errors.recovered': 'Recovered. You can go back to work.',
   'ui.errors.stillAlarm': 'Steps done, but the machine is still in Alarm — the cause is still there.',

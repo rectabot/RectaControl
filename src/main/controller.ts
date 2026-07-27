@@ -312,6 +312,13 @@ export class Controller {
       return
     }
 
+    // A welcome banner means the controller restarted. grblHAL drops the homed
+    // reference on a reset that lost position ($676 bit 0) but does NOT announce
+    // it — the |H: field is only appended when something asks. So ask: $G queues
+    // the homed report, and the next status carries the truth. Without this the
+    // app keeps believing a machine is referenced after an E-stop took that away.
+    if (/grbl/i.test(line) && /for help/i.test(line)) setTimeout(() => this.sendLine('$G'), 200)
+
     // job flow control: ok / error are responses to streamed lines
     let abortAfter = false
     if (this.running && (line === 'ok' || /^error:/i.test(line))) {

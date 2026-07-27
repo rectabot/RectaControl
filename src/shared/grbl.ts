@@ -45,6 +45,7 @@ export class StatusParser {
     let accessory: string | null = null
     let ov: [number, number, number] | null = null
     let pins: string | null = null
+    let homed: boolean | null = null
 
     for (const f of fields.slice(1)) {
       const idx = f.indexOf(':')
@@ -84,6 +85,13 @@ export class StatusParser {
         case 'Pn':
           pins = val
           break
+        // |H:1 / |H:0 — the controller's OWN homed status, reported when it
+        // changes. It is the only honest source: grblHAL drops the reference by
+        // itself when a reset loses position ($676 bit 0), which no amount of
+        // watching state transitions from outside can infer.
+        case 'H':
+          homed = val.split(',')[0] === '1'
+          break
       }
     }
 
@@ -97,7 +105,7 @@ export class StatusParser {
       resolvedW = mpos.map((v, i) => v - (this.wco[i] ?? 0))
     }
 
-    return { state, wpos: resolvedW, mpos: resolvedM, feed, spindle, spindleActual, accessory, ov, pins }
+    return { state, wpos: resolvedW, mpos: resolvedM, feed, spindle, spindleActual, accessory, ov, pins, homed }
   }
 }
 

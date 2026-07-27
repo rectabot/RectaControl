@@ -43,6 +43,11 @@ export interface RecoveryStep {
    *  purely because $H isn't available — e.g. crawling off a hard-limit switch by
    *  hand, which homing does on its own. */
   ifNoHoming?: boolean
+  /** A `Pn:` letter this step waits to see disappear (E = E-stop, F = motor
+   *  fault). The controller reports these, so the step needs no "Done" button: it
+   *  completes itself the moment the input really clears. A button here would only
+   *  let the operator claim something the machine can see is not true yet. */
+  pin?: string
 }
 
 export interface CodeDetail {
@@ -219,14 +224,14 @@ export const ALARMS: Record<number, CodeDetail> = {
   10: {
     title: 'Emergency stop active',
     cause: 'The E-stop input is asserted.',
-    recovery: 'Release the E-stop button, then reset the controller to clear the alarm.',
+    recovery:
+      'Release the E-stop button, reset the controller, then unlock and re-home — the machine stopped dead, so its position is no longer trusted.',
     group: 'state',
     steps: [
-      {
-        do: 'manual',
-        text: 'Release the E-stop button — the input must be clear first.'
-      },
-      { do: 'reset', text: 'Reset to clear the alarm.' }
+      { do: 'manual', pin: 'E', text: 'Release the E-stop button.' },
+      { do: 'reset', text: 'Reset the controller.' },
+      { do: 'unlock', text: 'Unlock. The machine is still locked after the reset.' },
+      { do: 'home', text: 'Home — an emergency stop loses the position.' }
     ]
   },
   11: {
@@ -327,10 +332,13 @@ export const ALARMS: Record<number, CodeDetail> = {
     steps: [
       {
         do: 'manual',
+        pin: 'F',
         text: 'Check the driver that faulted: power, step/dir wiring, temperature, fault output.',
         goto: 'motors'
       },
-      { do: 'reset', text: 'Reset once the driver is healthy again.' }
+      { do: 'reset', text: 'Reset once the driver is healthy again.' },
+      { do: 'unlock', text: 'Unlock. The machine is still locked after the reset.' },
+      { do: 'home', text: 'Home — the abrupt stop lost the position.' }
     ]
   },
   18: {
@@ -485,8 +493,14 @@ const ALARMS_SR: Record<number, CodeDetailSR> = {
   10: {
     title: 'Sigurnosni stop (E-stop) aktivan',
     cause: 'E-stop ulaz je aktiviran.',
-    recovery: 'Otpusti E-stop taster, pa resetuj kontroler da obrišeš alarm.',
-    steps: ['Otpusti E-stop taster — ulaz prvo mora da bude čist.', 'Resetuj da obrišeš alarm.']
+    recovery:
+      'Otpusti E-stop taster, resetuj kontroler, pa otključaj i homuj — mašina je stala naglo, pozicija više nije pouzdana.',
+    steps: [
+      'Otpusti E-stop taster.',
+      'Resetuj kontroler.',
+      'Otključaj. Mašina je i posle reseta zaključana.',
+      'Homuj — nagli stop je izgubio poziciju.'
+    ]
   },
   11: {
     title: 'Potreban homing',
@@ -546,7 +560,9 @@ const ALARMS_SR: Record<number, CodeDetailSR> = {
     recovery: 'Proveri napajanje drajvera, ožičenje i temperaturu. Resetuj kad je drajver ispravan.',
     steps: [
       'Proveri drajver koji je pao: napajanje, step/dir ožičenje, temperatura, fault izlaz.',
-      'Resetuj kad je drajver ponovo ispravan.'
+      'Resetuj kad je drajver ponovo ispravan.',
+      'Otključaj. Mašina je i posle reseta zaključana.',
+      'Homuj — nagli stop je izgubio poziciju.'
     ]
   },
   18: {

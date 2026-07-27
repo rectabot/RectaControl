@@ -127,7 +127,11 @@ export function WhatToDo(): JSX.Element | null {
   const satisfied = (s: RecoveryStep | undefined): boolean =>
     !s
       ? false // out of range — never let an index slip take the UI down again
-      : s.do === 'unlock'
+      : // a step tied to an input is done when the INPUT says so (E-stop released,
+        // driver fault gone) — never when someone clicks "Done" over a live signal
+        s.pin
+        ? !(pins ?? '').includes(s.pin)
+        : s.do === 'unlock'
       ? !resetRequired && base !== '' && base !== 'Alarm'
       : s.do === 'home'
         ? homed
@@ -149,6 +153,12 @@ export function WhatToDo(): JSX.Element | null {
   let cur = Math.min(advanced, usable.length)
   while (cur < usable.length && satisfied(usable[cur])) cur++
   const finished = cur >= usable.length
+  // Procedure walked out AND the machine is no longer in Alarm — there is nothing
+  // left to say. The store drops the alert on the next status report anyway, so
+  // rendering a "recovered" screen here only makes it flash for one poll interval
+  // (~200 ms) between the last click and that report. The machine state in the top
+  // bar is the confirmation; a window that appears just to be dismissed is not.
+  if (finished && base !== 'Alarm') return null
   const step = finished ? null : usable[cur]
   const isLast = cur === usable.length - 1
   // stepping back is offered only where it can actually take effect (a machine-
@@ -272,7 +282,13 @@ export function WhatToDo(): JSX.Element | null {
                   finishes the dialog. No extra "recovered" screen appears behind a
                   click the operator already made. */}
               <div className="mt-3 flex shrink-0 gap-2">
-                {isLast && <ActionBtn tone={NEUTRAL} onClick={close} label={t('ui.errors.close')} />}
+                {/* Close rides along on the last step — except when that step is a
+                    Reset the controller is demanding: there is nothing to choose
+                    between, and offering an exit would only park the operator in
+                    front of a machine that accepts nothing else. */}
+                {isLast && !(step.do === 'reset' && resetRequired) && (
+                  <ActionBtn tone={NEUTRAL} onClick={close} label={t('ui.errors.close')} />
+                )}
                 {step.do === 'freeSwitch' ? (
                   engagedAxes.length ? (
                     engagedAxes.flatMap((ax) =>
@@ -298,6 +314,10 @@ export function WhatToDo(): JSX.Element | null {
                     onClick={() => onCommand(step.do as RecoveryAction, true)}
                     label={cmdLabel(step.do as RecoveryAction)}
                   />
+                ) : step.pin ? (
+                  // the machine is the judge here — this only ever renders while the
+                  // input is still asserted, and clearing it advances the step
+                  <ActionBtn tone={NEUTRAL} disabled onClick={() => {}} label={t('ui.errors.waiting')} />
                 ) : (
                   <ActionBtn
                     tone={NEUTRAL}

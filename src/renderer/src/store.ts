@@ -676,10 +676,22 @@ export const useStore = create<AppState>((set, get) => ({
             s.sdRunning && (newBase === 'Alarm' || (EXEC.includes(prevBase) && !EXEC.includes(newBase)))
               ? { sdRunning: false }
               : {}
-          // a completed homing cycle transitions Home → Idle → machine is homed,
-          // so soft limits are now enforced (drives the continuous-jog clamp).
+          // The controller's own |H: field wins whenever it is present — it is the
+          // only thing that knows the reference was DROPPED (grblHAL clears it on a
+          // reset that lost position, $676 bit 0). Falling back to the Home → Idle
+          // transition alone would leave the app believing a machine is referenced
+          // long after an E-stop took that away.
           const homedPatch =
-            prevBase === 'Home' && newBase === 'Idle' && !s.homed ? { homed: true } : {}
+            e.data.homed != null
+              ? e.data.homed !== s.homed
+                ? { homed: e.data.homed }
+                : {}
+              : prevBase === 'Home' && newBase === 'Idle' && !s.homed
+                ? { homed: true }
+                : {}
+          // the homed truth AFTER this report — what the popup rule below must use
+          const homedNow =
+            e.data.homed ?? (prevBase === 'Home' && newBase === 'Idle' ? true : s.homed)
           // leaving Alarm means the operator recovered → drop the alert + popup,
           // UNLESS a Home step is still pending (homing on + this code recommends
           // $H): keep the popup so Home lights up as the guided second step.
@@ -690,7 +702,11 @@ export const useStore = create<AppState>((set, get) => ({
                 ? getAlarm(s.alert.code)
                 : getError(s.alert.code)
               : null
-            const homePending = !!det && s.homingEnabled && (det.actions ?? []).includes('home')
+            // …but only if homing is genuinely still owed: a machine that kept its
+            // reference through the alarm has nothing left to do, and holding the
+            // popup open just to say "recovered" is one more window to dismiss.
+            const homePending =
+              !!det && s.homingEnabled && !homedNow && (det.actions ?? []).includes('home')
             recoveryPatch = homePending ? {} : { message: null, alert: null, recoveryOpen: false }
           }
           // out of Alarm ⇒ the blocking loop is behind us, whatever we saw last

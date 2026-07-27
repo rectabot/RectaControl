@@ -39,6 +39,10 @@ export interface StatusReport {
   ov: [number, number, number] | null
   /** Pin state letters from Pn: field (e.g. "PXYZ"), or null. */
   pins: string | null
+  /** The controller's own homed status (|H: field), reported on change; null when
+   *  this report did not carry it. Authoritative — grblHAL drops the reference by
+   *  itself when a reset loses position, which cannot be inferred from outside. */
+  homed: boolean | null
 }
 
 export interface MachineInfo {

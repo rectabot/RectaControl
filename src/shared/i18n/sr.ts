@@ -120,6 +120,7 @@ export const sr: Record<string, string> = {
   'ui.status.limitsRestore': 'Vrati',
   'ui.errors.back': 'Nazad',
   'ui.errors.stepDone': 'Urađeno',
+  'ui.errors.waiting': 'Čekam mašinu…',
   'ui.errors.openSettings': 'Vodi me tamo →',
   'ui.errors.recovered': 'Rešeno. Možeš da nastaviš rad.',
   'ui.errors.stillAlarm': 'Koraci su gotovi, ali mašina je i dalje u Alarmu — uzrok je još tu.',

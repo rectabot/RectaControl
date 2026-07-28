@@ -132,6 +132,11 @@ export const SETTING_NAMES: Record<number, string> = {
   // — plugin / extended ($450+) singletons —
   460: 'VFD Modbus address',
   461: 'VFD RPM ↔ Hz factor',
+  // Multi-spindle builds (ours: N_SPINDLE=8) hide $460 and expose these instead.
+  476: 'VFD Modbus address — spindle 1',
+  477: 'VFD Modbus address — spindle 2',
+  478: 'VFD Modbus address — spindle 3',
+  479: 'VFD Modbus address — spindle 4',
   480: 'Fan 0 off delay (s)',
   481: 'Auto-report interval (ms)',
   482: 'Timezone offset (h)',
@@ -242,6 +247,10 @@ const SETTING_NAMES_SR: Record<number, string> = {
   398: 'Blokovi u planeru',
   460: 'VFD Modbus adresa',
   461: 'VFD RPM ↔ Hz faktor',
+  476: 'VFD Modbus adresa — vreteno 1',
+  477: 'VFD Modbus adresa — vreteno 2',
+  478: 'VFD Modbus adresa — vreteno 3',
+  479: 'VFD Modbus adresa — vreteno 4',
   480: 'Ventilator 0 — kašnjenje gašenja (s)',
   481: 'Interval auto-izveštaja (ms)',
   486: 'Zaključaj koordinatne sisteme',
@@ -434,9 +443,15 @@ export const MASK_BITS_SR: Record<number, string[]> = {
   650: ['Auto-mount SD na startu', 'Sakrij LittleFS', 'Hijerarhijski listing']
 }
 
+/** Settings whose name says "address" but whose value is a plain number — the
+ *  Modbus slave ids ($460 and the per-spindle $476-479). Without this they match
+ *  the name test below and get a wide text box instead of a number box. */
+const NUMERIC_ADDRESS_SETTINGS = new Set([460, 476, 477, 478, 479])
+
 /** Free-text settings (IP / hostname / SSID / URI / timezone …). Detected on the
  *  English name, which is language-independent. */
 function isTextSetting(n: number): boolean {
+  if (NUMERIC_ADDRESS_SETTINGS.has(n)) return false
   return /address|gateway|netmask|hostname|ssid|password|uri|name|timezone/i.test(settingName(n, 'en'))
 }
 

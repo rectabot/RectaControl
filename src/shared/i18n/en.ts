@@ -751,7 +751,7 @@ export const en: Record<string, string> = {
   'ui.stock.top': 'Top',
   'ui.stock.bottom': 'Bottom',
   'ui.stock.zOriginHint': 'Which face the work Z0 is on — usually the top surface.',
-  'ui.stock.fit': 'Fit X/Y to program',
+  'ui.stock.fit': 'Fit to program (size + zero)',
   'ui.stock.shape': 'Workpiece type',
   'ui.stock.shapeBox': 'Flat block',
   'ui.stock.shapeRotary': 'Rotary (4th axis)',

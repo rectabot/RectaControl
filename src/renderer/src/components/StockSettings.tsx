@@ -11,14 +11,27 @@ export function StockSettings(): JSX.Element {
   const setStock = useStore((s) => s.setStock)
   const gcode = useStore((s) => s.gcode)
 
-  /** Size X/Y to the loaded program's footprint (+ a small margin). */
+  /** Size X/Y to the loaded program's footprint (+ a small margin), and read the
+   *  XY zero off the same footprint: a program that runs entirely in +X zeroed on
+   *  a left corner, one that straddles the origin zeroed on the centre, and so on.
+   *  That is the honest answer for the loaded job — a corner picked by hand can put
+   *  the block somewhere the program never goes. */
   const fitToProgram = (): void => {
     if (!gcode) return
     const p = parseToolpath(gcode)
     if (!p.hasGeometry) return
     const x = Math.ceil(p.max[0] - p.min[0] + 10)
     const y = Math.ceil(p.max[1] - p.min[1] + 10)
-    if (x > 0 && y > 0) setStock({ x, y })
+    if (x <= 0 || y <= 0) return
+    // "straddles" = the path lies on both sides of the origin by a real margin, not
+    // by a rounding crumb; tolerance scales with the part so it works at any size.
+    const tx = Math.max(1, x * 0.05)
+    const ty = Math.max(1, y * 0.05)
+    const xSide = p.min[0] >= -tx ? 'L' : p.max[0] <= tx ? 'R' : 'C'
+    const ySide = p.min[1] >= -ty ? 'F' : p.max[1] <= ty ? 'B' : 'C'
+    const originCorner =
+      xSide === 'C' || ySide === 'C' ? 'C' : ((ySide + xSide) as 'FL' | 'FR' | 'BL' | 'BR')
+    setStock({ x, y, originCorner })
   }
 
   const num = (

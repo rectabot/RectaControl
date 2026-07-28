@@ -735,7 +735,7 @@ export const sr: Record<string, string> = {
   'ui.stock.top': 'Gornja',
   'ui.stock.bottom': 'Donja',
   'ui.stock.zOriginHint': 'Na kojoj strani je radni Z0 — obično gornja površina.',
-  'ui.stock.fit': 'Prilagodi X/Y programu',
+  'ui.stock.fit': 'Prilagodi programu (mere + nula)',
   'ui.stock.shape': 'Tip komada',
   'ui.stock.shapeBox': 'Ravan blok',
   'ui.stock.shapeRotary': 'Rotacioni (4. osa)',

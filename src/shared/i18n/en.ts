@@ -775,6 +775,15 @@ export const en: Record<string, string> = {
   'ui.stock.rotaryAxis': 'Rotary axis',
   'ui.stock.rotaryAlong': 'Along {axis}',
   'ui.stock.rotaryAxisHint': 'Which linear axis the A rotary is mounted parallel to — choose per job.',
+  'ui.stock.zeroLegend': 'work zero (X0 Y0 Z0)',
+  'ui.stock.xyOrigin': 'XY zero on the stock',
+  'ui.stock.xyOriginHint':
+    'Where your CAM put X0 Y0 on the part — a corner or the centre. Display only: it places the block around the origin so the toolpath sits inside it. Nothing is sent to the machine.',
+  'ui.stock.originFL': 'Front-left corner',
+  'ui.stock.originFR': 'Front-right corner',
+  'ui.stock.originBL': 'Back-left corner',
+  'ui.stock.originBR': 'Back-right corner',
+  'ui.stock.originC': 'Centre of the stock',
 
   // ── Start from line ────────────────────────────────────────────────────────
   'ui.fromline.title': 'Start from line',

@@ -768,23 +768,40 @@ export function Visualizer(): JSX.Element {
     t.scene.remove(t.grid)
     disposeGrid(t.grid)
     const grid = buildGrid(travel, light)
-    // sit the work-area plane at the active work zero's height (machine Z of the
-    // WCS Z origin), so it represents the STOCK TOP (Z0) — the toolpath then rests
-    // on the surface instead of floating below the machine top (world Y = machine Z).
-    grid.position.y = wcsOffsets[wcs]?.[2] ?? 0
+    // the work-area plane is the surface the workpiece RESTS ON — see gridDrop below
+    grid.position.y = (wcsOffsets[wcs]?.[2] ?? 0) - gridDropRef.current
     t.scene.add(grid)
     t.grid = grid
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, travel])
+
+  // How far the work-surface plane sits BELOW the work zero. The grid stands for the
+  // table the material rests on, and material always sits ON it — never half sunk
+  // through it.
+  //   box    — with Z0 on the top face the block spans Z0−thickness…Z0, so the grid
+  //            drops by the thickness; with Z0 on the bottom face the two coincide.
+  //   rotary — the bar is centred on its axis of rotation, which runs through the work
+  //            zero, so it hangs half a diameter below; drop by the radius and the bar
+  //            rests tangent to the plane.
+  // With no stock the grid marks the work zero itself, as before. Held in a ref too, so
+  // the grid-REBUILD effect (theme/travel) reads the current value without rebuilding
+  // the geometry on every keystroke in a dimension box.
+  const gridDrop = !stock.enabled
+    ? 0
+    : stock.mode === 'rotary'
+      ? (stock.rotaryShape === 'round' ? stock.diameter : stock.side) / 2
+      : stock.zOrigin === 'top' ? stock.z : 0
+  const gridDropRef = useRef(gridDrop)
+  gridDropRef.current = gridDrop
 
   // --- keep the work-surface plane + origin triad at the active work zero ---
   useEffect(() => {
     const t = three.current
     if (!t) return
     const o = wcsOffsets[wcs] ?? [0, 0, 0]
-    t.grid.position.y = o[2] ?? 0 // world Y = machine Z
+    t.grid.position.y = (o[2] ?? 0) - gridDrop // world Y = machine Z
     t.axes.position.set(o[0] ?? 0, o[1] ?? 0, o[2] ?? 0) // work origin (machine coords)
-  }, [wcs, wcsOffsets])
+  }, [wcs, wcsOffsets, gridDrop])
 
   // --- stock (material) block: a translucent box at the work origin so you see
   //     the tool cut into the workpiece ---
@@ -818,12 +835,17 @@ export function Visualizer(): JSX.Element {
     }
 
     if (stock.x <= 0 || stock.y <= 0 || stock.z <= 0) return
-    // stock sits with its front-left-bottom at the work origin XY; Z0 is on the
-    // top or bottom face → the box spans below (top origin) or above (bottom).
+    // Z0 is on the top or bottom face → the box spans below (top origin) or above.
     const zLo = stock.zOrigin === 'top' ? -stock.z : 0
+    // …and in XY it hangs off whichever corner the CAM job zeroed on, or straddles the
+    // origin for a centre zero. Machine convention: +X right, +Y away — so a "front"
+    // corner puts the block on the +Y side, a "right" corner on the −X side.
+    const c = stock.originCorner
+    const cx = c === 'FR' || c === 'BR' ? -stock.x / 2 : c === 'C' ? 0 : stock.x / 2
+    const cy = c === 'BL' || c === 'BR' ? -stock.y / 2 : c === 'C' ? 0 : stock.y / 2
     const box = new THREE.BoxGeometry(stock.x, stock.y, stock.z)
-    // BoxGeometry is centred → shift so a corner sits at the work origin
-    box.translate((o[0] ?? 0) + stock.x / 2, (o[1] ?? 0) + stock.y / 2, (o[2] ?? 0) + zLo + stock.z / 2)
+    // BoxGeometry is centred → shift so the chosen origin lands at the work zero
+    box.translate((o[0] ?? 0) + cx, (o[1] ?? 0) + cy, (o[2] ?? 0) + zLo + stock.z / 2)
     const grp = new THREE.Group()
     grp.add(
       new THREE.Mesh(

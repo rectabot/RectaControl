@@ -759,6 +759,15 @@ export const sr: Record<string, string> = {
   'ui.stock.rotaryAxis': 'Osa rotacije',
   'ui.stock.rotaryAlong': 'Duž {axis}',
   'ui.stock.rotaryAxisHint': 'Paralelno kojoj linearnoj osi je A rotaciona montirana — biraš po poslu.',
+  'ui.stock.zeroLegend': 'radna nula (X0 Y0 Z0)',
+  'ui.stock.xyOrigin': 'XY nula na komadu',
+  'ui.stock.xyOriginHint':
+    'Gde ti je CAM postavio X0 Y0 na komadu — u ugao ili u centar. Samo prikaz: postavlja blok oko nule da putanja padne unutar njega. Mašini se ne šalje ništa.',
+  'ui.stock.originFL': 'Prednji levi ugao',
+  'ui.stock.originFR': 'Prednji desni ugao',
+  'ui.stock.originBL': 'Zadnji levi ugao',
+  'ui.stock.originBR': 'Zadnji desni ugao',
+  'ui.stock.originC': 'Centar komada',
 
   // ── Start od linije ────────────────────────────────────────────────────────
   'ui.fromline.title': 'Start od linije',

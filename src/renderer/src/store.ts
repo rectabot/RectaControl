@@ -155,6 +155,12 @@ export interface StockConfig {
   z: number
   /** Which face of the stock the work Z0 is on. */
   zOrigin: 'top' | 'bottom'
+  /** Where the work XY zero sits on the stock, as the CAM job defines it: a corner
+   *  (front-left … back-right, machine convention +X right / +Y away) or the centre,
+   *  which is what most CAM defaults to for a symmetric part. Display only — it
+   *  moves the drawn block around the origin and changes nothing that is sent to
+   *  the machine. Unrelated to the homing corner, which stays fixed. */
+  originCorner: 'FL' | 'FR' | 'BL' | 'BR' | 'C'
   /** Rotary raw-stock cross-section: round bar (Ø) or square billet (across flats). */
   rotaryShape: 'round' | 'square'
   /** Rotary params — all mm. `diameter` for round, `side` for square. */
@@ -173,6 +179,7 @@ const DEFAULT_STOCK: StockConfig = {
   y: 100,
   z: 12,
   zOrigin: 'top',
+  originCorner: 'FL',
   rotaryShape: 'round',
   diameter: 60,
   side: 60,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
-import { useStore } from '../store'
+import { useStore, rotaryRadius } from '../store'
 import { buildLineSegments, usesRotary, type LineSeg } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 
@@ -53,7 +53,7 @@ export function Tracker(): null {
       ? {
           axis: stock.rotaryAxis,
           origin: [0, 0, 0] as [number, number, number],
-          radius: (stock.rotaryShape === 'round' ? stock.diameter : stock.side) / 2
+          radius: rotaryRadius(stock)
         }
       : undefined
 

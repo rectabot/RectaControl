@@ -163,9 +163,12 @@ export interface StockConfig {
   originCorner: 'FL' | 'FR' | 'BL' | 'BR' | 'C'
   /** Rotary raw-stock cross-section: round bar (Ø) or square billet (across flats). */
   rotaryShape: 'round' | 'square'
-  /** Rotary params — all mm. `diameter` for round, `side` for square. */
+  /** Rotary params — all mm. `diameter` for round; for square stock `side` is the
+   *  width and `sideH` the height of the cross-section, which need not match —
+   *  rectangular bar (50 × 60) is as common as true square. */
   diameter: number
   side: number
+  sideH: number
   length: number
   /** Which linear axis the rotary A axis is parallel to. Per-job: the same table
    *  runs long parts along Y and a rotary chuck along X (or vice-versa). */
@@ -183,8 +186,22 @@ const DEFAULT_STOCK: StockConfig = {
   rotaryShape: 'round',
   diameter: 60,
   side: 60,
+  sideH: 60,
   length: 200,
   rotaryAxis: 'X'
+}
+
+/** Radius the toolpath is wrapped around: the surface the tool actually works on.
+ *  For a rectangular bar that is half the LARGER cross-section — the face furthest
+ *  from the axis, which is what a CAM wrap is set up against. */
+export function rotaryRadius(s: StockConfig): number {
+  return (s.rotaryShape === 'round' ? s.diameter : Math.max(s.side, s.sideH)) / 2
+}
+
+/** Radius the stock SWEEPS as it turns — half the diagonal for a rectangular bar,
+ *  since its corners reach furthest. Used to stand the bar on the table plane. */
+export function rotarySweptRadius(s: StockConfig): number {
+  return (s.rotaryShape === 'round' ? s.diameter : Math.hypot(s.side, s.sideH)) / 2
 }
 
 function loadStock(): StockConfig {
@@ -195,6 +212,9 @@ function loadStock(): StockConfig {
       raw.mode = 'rotary'
       raw.rotaryShape = raw.rotaryShape ?? 'round'
     }
+    // square stock used to be a single "across flats" value → a saved square bar
+    // keeps its shape when the second dimension appears
+    if (raw.side != null && raw.sideH == null) raw.sideH = raw.side
     return { ...DEFAULT_STOCK, ...raw }
   } catch {
     return DEFAULT_STOCK

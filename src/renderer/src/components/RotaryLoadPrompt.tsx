@@ -38,7 +38,9 @@ export function RotaryLoadPrompt(): JSX.Element | null {
       enabled: true,
       mode: 'rotary',
       rotaryShape: shape,
-      ...(shape === 'round' ? { diameter: size } : { side: size })
+      // the quick prompt asks one number, so a square bar starts out truly square;
+      // a rectangular section is set in Settings → Stock
+      ...(shape === 'round' ? { diameter: size } : { side: size, sideH: size })
     })
     setOpen(false)
   }

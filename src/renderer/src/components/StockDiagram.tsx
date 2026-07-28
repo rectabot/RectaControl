@@ -81,6 +81,7 @@ export function StockDiagram({
   z,
   diameter,
   side,
+  sideH,
   length,
   dimmed
 }: {
@@ -94,6 +95,7 @@ export function StockDiagram({
   z: number
   diameter: number
   side: number
+  sideH: number
   length: number
   dimmed: boolean
 }): JSX.Element {
@@ -180,7 +182,8 @@ export function StockDiagram({
   }
 
   // --- rotary bar, seen from the side, spinning about the chosen axis ---------
-  const thick = rotaryShape === 'round' ? diameter : side
+  // seen from the side we look at its HEIGHT; the width shows in the section label
+  const thick = rotaryShape === 'round' ? diameter : sideH
   const [bl, bt] = fit([length, thick], 150, 16)
   const cx = W / 2
   const cy = H / 2 - 4
@@ -256,7 +259,7 @@ export function StockDiagram({
         y1={cy - ry}
         x2={x0 - 16}
         y2={cy + ry}
-        label={rotaryShape === 'round' ? `⌀ ${fmt(diameter)}` : `▫ ${fmt(side)}`}
+        label={rotaryShape === 'round' ? `⌀ ${fmt(diameter)}` : `${fmt(side)}×${fmt(sideH)}`}
       />
 
       <text x={cx} y={H - 6} textAnchor="middle" className="fill-slate-500 font-mono" fontSize="10">

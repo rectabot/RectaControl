@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { useStore } from '../store'
+import { useStore, rotaryRadius, rotarySweptRadius } from '../store'
 import { parseToolpath, usesRotary } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 import { ViewerControls } from './ViewerControls'
@@ -129,25 +129,27 @@ function buildGrid(travel: [number, number, number] | null, light: boolean): THR
 /** Rotary stock, built in CNC-native coords so the parent group's −90° tilt puts
  *  CNC Z up. The workpiece axis runs along the chosen linear axis (X or Y) through
  *  the work origin `o`, extending +axis by `length`. `size` is the diameter (round)
- *  or the across-flats side (square). A bright longitudinal stripe + a front-face
+ *  or the cross-section width (square); `sizeH` is its height, which for a
+ *  rectangular bar (50 × 60) differs. A bright longitudinal stripe + a front-face
  *  spoke make the live A rotation visible (a bare round bar is radially symmetric;
  *  a square billet also shows its edges). Spun about its axis by the A effect. */
 function buildRotaryStock(
   shape: 'round' | 'square',
   size: number,
+  sizeH: number,
   length: number,
   axis: 'X' | 'Y'
 ): THREE.Group {
   const r = size / 2
   const grp = new THREE.Group()
 
-  // build with the length along local Y, radius/side in local X/Z, then rotate the
+  // build with the length along local Y, radius/section in local X/Z, then rotate the
   // whole geometry onto the X axis for X-mode and push it so the near face sits at
   // the origin (chuck) and it extends +axis by `length`.
   const geo =
     shape === 'round'
       ? new THREE.CylinderGeometry(r, r, length, 48, 1)
-      : new THREE.BoxGeometry(size, length, size)
+      : new THREE.BoxGeometry(size, length, sizeH)
   if (axis === 'X') {
     geo.rotateZ(Math.PI / 2)
     geo.translate(length / 2, 0, 0)
@@ -172,7 +174,9 @@ function buildRotaryStock(
 
   // a single faint orientation cue: a stripe along the top (angle 0 = local +Z) so
   // the rotation is readable without the busy wireframe. (Spoke removed — too noisy.)
-  const stripe: number[] = axis === 'X' ? [0, 0, r, length, 0, r] : [0, 0, r, 0, length, r]
+  // Sits on the top surface, which for a rectangular bar is half its HEIGHT up.
+  const top = shape === 'round' ? r : sizeH / 2
+  const stripe: number[] = axis === 'X' ? [0, 0, top, length, 0, top] : [0, 0, top, 0, length, top]
   const cueGeom = new THREE.BufferGeometry().setAttribute(
     'position',
     new THREE.Float32BufferAttribute(stripe, 3)
@@ -521,7 +525,7 @@ export function Visualizer(): JSX.Element {
       ? {
           axis: stock.rotaryAxis,
           origin: (wcsOffsets[wcs] ?? [0, 0, 0]) as [number, number, number],
-          radius: (stock.rotaryShape === 'round' ? stock.diameter : stock.side) / 2
+          radius: rotaryRadius(stock)
         }
       : undefined
     const path = parseToolpath(gcode, { offsets: wcsOffsets, wcs, rotary })
@@ -647,7 +651,7 @@ export function Visualizer(): JSX.Element {
     if (!t || !mpos) return
     if (rotaryView) {
       const o = wcsOffsets[wcs] ?? [0, 0, 0]
-      const radius = (stock.rotaryShape === 'round' ? stock.diameter : stock.side) / 2
+      const radius = rotaryRadius(stock)
       const rho = radius + (mpos[2] - (o[2] ?? 0)) // surface + depth from live Z
       const along = stock.rotaryAxis === 'X' ? mpos[0] : mpos[1]
       const wx = stock.rotaryAxis === 'X' ? along : o[0] ?? 0
@@ -781,15 +785,17 @@ export function Visualizer(): JSX.Element {
   //   box    — with Z0 on the top face the block spans Z0−thickness…Z0, so the grid
   //            drops by the thickness; with Z0 on the bottom face the two coincide.
   //   rotary — the bar is centred on its axis of rotation, which runs through the work
-  //            zero, so it hangs half a diameter below; drop by the radius and the bar
-  //            rests tangent to the plane.
+  //            zero, so it hangs below; drop by its swept radius and it rests tangent
+  //            to the plane. For a square/rectangular bar that radius is HALF THE
+  //            DIAGONAL, not half a side: the corners are what sweep the widest, and
+  //            a bar that could not clear them could not turn at all.
   // With no stock the grid marks the work zero itself, as before. Held in a ref too, so
   // the grid-REBUILD effect (theme/travel) reads the current value without rebuilding
   // the geometry on every keystroke in a dimension box.
   const gridDrop = !stock.enabled
     ? 0
     : stock.mode === 'rotary'
-      ? (stock.rotaryShape === 'round' ? stock.diameter : stock.side) / 2
+      ? rotarySweptRadius(stock)
       : stock.zOrigin === 'top' ? stock.z : 0
   const gridDropRef = useRef(gridDrop)
   gridDropRef.current = gridDrop
@@ -826,9 +832,10 @@ export function Visualizer(): JSX.Element {
       // with no program, as a stock preview, or with a genuine rotary program)
       if (flatProgram) return
       const size = stock.rotaryShape === 'round' ? stock.diameter : stock.side
-      if (size <= 0 || stock.length <= 0) return
+      const sizeH = stock.rotaryShape === 'round' ? stock.diameter : stock.sideH
+      if (size <= 0 || sizeH <= 0 || stock.length <= 0) return
       // built in axis-local coords → parented in the spinning rotaryGroup
-      const grp = buildRotaryStock(stock.rotaryShape, size, stock.length, stock.rotaryAxis)
+      const grp = buildRotaryStock(stock.rotaryShape, size, sizeH, stock.length, stock.rotaryAxis)
       t.rotaryGroup.add(grp)
       t.stock = grp
       return

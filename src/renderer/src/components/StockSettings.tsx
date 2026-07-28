@@ -35,7 +35,7 @@ export function StockSettings(): JSX.Element {
   }
 
   const num = (
-    key: 'x' | 'y' | 'z' | 'diameter' | 'side' | 'length',
+    key: 'x' | 'y' | 'z' | 'diameter' | 'side' | 'sideH' | 'length',
     label: string,
     hint: string
   ): JSX.Element => (
@@ -199,11 +199,17 @@ export function StockSettings(): JSX.Element {
             <span className="text-[11px] leading-snug text-slate-500">{t('ui.stock.sectionHint')}</span>
           </div>
 
-          {/* rotary dimensions — Ø for round, side for square */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {stock.rotaryShape === 'round'
-              ? num('diameter', t('ui.stock.diameter'), t('ui.stock.diameterHint'))
-              : num('side', t('ui.stock.side'), t('ui.stock.sideHint'))}
+          {/* rotary dimensions — Ø for round; width AND height for square, because a
+              rectangular bar (50 × 60) is as common as a true square one */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {stock.rotaryShape === 'round' ? (
+              num('diameter', t('ui.stock.diameter'), t('ui.stock.diameterHint'))
+            ) : (
+              <>
+                {num('side', t('ui.stock.sideW'), t('ui.stock.sideWHint'))}
+                {num('sideH', t('ui.stock.sideH'), t('ui.stock.sideHHint'))}
+              </>
+            )}
             {num('length', t('ui.stock.length'), t('ui.stock.lengthHint'))}
           </div>
 
@@ -242,6 +248,7 @@ export function StockSettings(): JSX.Element {
             z={stock.z}
             diameter={stock.diameter}
             side={stock.side}
+            sideH={stock.sideH}
             length={stock.length}
             dimmed={!stock.enabled}
           />

@@ -9,6 +9,14 @@ import { useT } from '../i18n'
  *  wobbles a pixel or two — an integer height keeps every row identical. */
 const CELL = 'font-mono text-xs leading-5'
 
+/** Row height in px — the integer `leading-5` above. The read-only view renders
+ *  only the rows in view and positions them by index, which needs this to be an
+ *  exact, uniform number. */
+const ROW = 20
+/** Rows kept mounted above and below the viewport, so ordinary scrolling and the
+ *  line-by-line highlight never reach an unmounted row. */
+const OVERSCAN = 20
+
 /** G-code view. Read-only by default (syntax colors, current-line highlight and
  *  auto-scroll to the executing line, kept aligned with the toolpath arrow via
  *  `activeLine`). An Edit mode swaps in a syntax-highlighted editor (with line
@@ -32,8 +40,14 @@ export function GcodePreview(): JSX.Element {
   const parked = useStore((s) => s.parked)
   const parkLine = useStore((s) => s.parkLine)
   const activeIndex = parked && parkLine >= 0 ? parkLine : rawActive
-  const activeRef = useRef<HTMLDivElement>(null)
   const scrollBoxRef = useRef<HTMLDivElement>(null)
+  // Scroll position + viewport height drive which rows are mounted. A streaming job
+  // moves the highlight ~20×/s, and mounting every line of a 4000-line program on
+  // each of those updates (each one re-running colorize()) stalls the whole UI —
+  // the visualizer shares this thread, and the backlog kept the display moving long
+  // after the machine had stopped.
+  const [scrollTop, setScrollTop] = useState(0)
+  const [boxH, setBoxH] = useState(0)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -42,6 +56,16 @@ export function GcodePreview(): JSX.Element {
 
   const lines = useMemo(() => (gcode ? gcode.split(/\r?\n/) : []), [gcode])
 
+  // Track the viewport height (and follow panel resizes / terminal expand).
+  useEffect(() => {
+    const box = scrollBoxRef.current
+    if (!box) return
+    setBoxH(box.clientHeight)
+    const ro = new ResizeObserver(() => setBoxH(box.clientHeight))
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [editing])
+
   useEffect(() => {
     // Keep the executing line pinned to the MIDDLE of the viewport, the way most
     // senders do: the highlight moves down with the program until it reaches the
@@ -49,15 +73,13 @@ export function GcodePreview(): JSX.Element {
     // Clamp ≥ 0 so the early lines (which can't scroll above the top) just sit where
     // they are until the centre is reached. Set scrollTop directly (instant, not a
     // smooth animation) so rapid consecutive line changes don't stack/jitter.
+    // Computed from the row index rather than measured off the element: with only
+    // the visible window mounted, the active row's node may not exist yet, and the
+    // arithmetic is exact anyway because every row is exactly ROW px tall.
     if (editing || activeIndex < 0) return
-    const el = activeRef.current
     const box = scrollBoxRef.current
-    if (!el || !box) return
-    const boxR = box.getBoundingClientRect()
-    const elR = el.getBoundingClientRect()
-    const target = box.scrollTop + (elR.top - boxR.top) - boxR.height / 2 + elR.height / 2
-    // round to a whole pixel so the rows never sit on a sub-pixel boundary (another
-    // source of the 1-px row wobble)
+    if (!box) return
+    const target = activeIndex * ROW - box.clientHeight / 2 + ROW / 2
     box.scrollTop = Math.max(0, Math.round(target))
   }, [activeIndex, editing])
 
@@ -196,6 +218,10 @@ export function GcodePreview(): JSX.Element {
     )
   }
 
+  // the mounted window: what the viewport covers, plus overscan on both sides
+  const first = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN)
+  const last = Math.min(lines.length, Math.ceil((scrollTop + (boxH || 600)) / ROW) + OVERSCAN)
+
   return (
     <div className="relative h-full">
       <button
@@ -206,20 +232,31 @@ export function GcodePreview(): JSX.Element {
       >
         {t('ui.gc.edit')}
       </button>
-      <div ref={scrollBoxRef} className={`h-full overflow-auto bg-panel2 px-2 py-1 ${CELL}`}>
-        {lines.map((l, i) => {
-          const active = i === activeIndex
-          return (
-            <div
-              key={i}
-              ref={active ? activeRef : undefined}
-              className={`flex gap-3 rounded px-1 ${active ? 'bg-brand/20' : ''}`}
-            >
-              <span className="w-10 shrink-0 select-none text-right text-slate-600">{i + 1}</span>
-              <span className="whitespace-pre-wrap">{colorize(l)}</span>
-            </div>
-          )
-        })}
+      <div
+        ref={scrollBoxRef}
+        onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+        className={`h-full overflow-auto bg-panel2 px-2 py-1 ${CELL}`}
+      >
+        {/* full-height spacer preserves the real scrollbar; the mounted window is
+            offset into place, so scrolling behaves exactly as with every row present */}
+        <div style={{ height: lines.length * ROW }}>
+          <div style={{ transform: `translateY(${first * ROW}px)` }}>
+            {lines.slice(first, last).map((l, k) => {
+              const i = first + k
+              const active = i === activeIndex
+              return (
+                <div
+                  key={i}
+                  style={{ height: ROW }}
+                  className={`flex gap-3 rounded px-1 ${active ? 'bg-brand/20' : ''}`}
+                >
+                  <span className="w-10 shrink-0 select-none text-right text-slate-600">{i + 1}</span>
+                  <span className="whitespace-pre">{colorize(l)}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )

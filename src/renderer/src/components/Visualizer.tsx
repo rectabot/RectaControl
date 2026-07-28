@@ -697,26 +697,53 @@ export function Visualizer(): JSX.Element {
   // neutral grey ("already cut"); the rest keep their bright rapid/cut colours, so
   // the boundary shows how far the tool has got. Runs off jobProgress (updated by
   // the Tracker at ~20 Hz) and resets to full colour when progress returns to 0.
+  // How many leading segments are currently painted as "cut". Progress moves this
+  // boundary a little at a time, so only the segments it crossed since the last
+  // update need touching — repainting all of them 20×/s (and re-uploading the whole
+  // colour buffer to the GPU with it) is what made a 4000-line engraving job crawl.
+  const dimmedTo = useRef(0)
+  useEffect(() => {
+    dimmedTo.current = 0 // a new program repaints from scratch
+  }, [gcode])
+
   useEffect(() => {
     const t = three.current
     if (!t || !t.line || !t.cumLen || !t.baseColors) return
     const attr = t.line.geometry.getAttribute('color') as THREE.BufferAttribute
     const cols = attr.array as Float32Array
     const base = t.baseColors
+    const cum = t.cumLen
     // floor at the parked fraction so the grey holds through Park (jobProgress→0)
     // and the resume return, until the live cut climbs back past the parked point
     const done = Math.max(jobProgress, parkProgress) * t.totalLen
+
+    // cumLen is monotonic, so the boundary is a binary search rather than a scan
+    let lo = 0,
+      hi = cum.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (cum[mid] <= done) lo = mid + 1
+      else hi = mid
+    }
+    const boundary = lo
+    const prev = dimmedTo.current
+    if (boundary === prev) return // nothing crossed → leave the GPU alone
+
     // muted slate — reads as "spent" against both dark and light backgrounds
     const DR = 0.32,
       DG = 0.37,
       DB = 0.44
-    for (let i = 0; i < t.cumLen.length; i++) {
-      const o = i * 6
-      if (t.cumLen[i] <= done) {
+    if (boundary > prev) {
+      for (let i = prev; i < boundary; i++) {
+        const o = i * 6
         cols[o] = cols[o + 3] = DR
         cols[o + 1] = cols[o + 4] = DG
         cols[o + 2] = cols[o + 5] = DB
-      } else {
+      }
+    } else {
+      // progress went backwards (new job, reset, park unwinding) → restore colour
+      for (let i = boundary; i < prev; i++) {
+        const o = i * 6
         cols[o] = base[o]
         cols[o + 1] = base[o + 1]
         cols[o + 2] = base[o + 2]
@@ -725,6 +752,7 @@ export function Visualizer(): JSX.Element {
         cols[o + 5] = base[o + 5]
       }
     }
+    dimmedTo.current = boundary
     attr.needsUpdate = true
   }, [jobProgress, parkProgress, gcode])
 

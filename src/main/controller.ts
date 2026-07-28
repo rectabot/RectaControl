@@ -250,13 +250,13 @@ export class Controller {
     this.emitJob()
   }
 
-  /** Abort a running job because a streamed line was rejected: tear down the
-   *  stream so none of the remaining program is sent. We deliberately do NOT
-   *  soft-reset — a reset spews the welcome banner (noise) and would wipe the
-   *  error from the status bar, hiding the recovery popup. The few lines already
-   *  in grblHAL's RX buffer drain on their own (collapsed to one console line),
-   *  and the triggering error is emitted by the caller so the UI shows what went
-   *  wrong + how to recover. */
+  /** Abort a running job: tear down the stream so none of the remaining program is
+   *  sent. Called when a streamed line is rejected, when the machine alarms, and
+   *  when the controller restarts. We deliberately do NOT soft-reset — a reset
+   *  spews the welcome banner (noise) and would wipe the error from the status bar,
+   *  hiding the recovery popup. The few lines already in grblHAL's RX buffer drain
+   *  on their own (collapsed to one console line), and the triggering line is
+   *  emitted by the caller so the UI shows what went wrong + how to recover. */
   private abortOnError(): void {
     this.resetJob()
     this.repoll() // back to gentle idle polling
@@ -318,15 +318,32 @@ export class Controller {
 
     this.backup.feed(line)
 
+    // Every teardown below is deferred until after the line is emitted, so the
+    // renderer still sees the job as running and opens the recovery popup.
+    let abortAfter = false
+
+    // An alarm ends the job outright. The machine halted mid-motion, so its position
+    // is no longer trustworthy and the rest of the program must not be streamed.
+    // It also stops the operator's recovery from being counted as progress: while a
+    // job is running, every `ok` is read as one streamed line acked (below), so the
+    // ok's from $G / $X / $H would pump the remaining lines out. That is how an
+    // E-stopped job used to resume the moment the machine was unlocked, run to the
+    // end of the file and back — with the program's coordinates, not the operator's.
+    if (this.running && /^ALARM:/i.test(line)) abortAfter = true
+
     // A welcome banner means the controller restarted. grblHAL drops the homed
     // reference on a reset that lost position ($676 bit 0) but does NOT announce
     // it — the |H: field is only appended when something asks. So ask: $G queues
     // the homed report, and the next status carries the truth. Without this the
     // app keeps believing a machine is referenced after an E-stop took that away.
-    if (/grbl/i.test(line) && /for help/i.test(line)) setTimeout(() => this.sendLine('$G'), 200)
+    if (/grbl/i.test(line) && /for help/i.test(line)) {
+      // the restart took the planner and the position with it, so anything we were
+      // streaming is void — drop it rather than carry it across the reset
+      if (this.running) abortAfter = true
+      setTimeout(() => this.sendLine('$G'), 200)
+    }
 
     // job flow control: ok / error are responses to streamed lines
-    let abortAfter = false
     if (this.running && (line === 'ok' || /^error:/i.test(line))) {
       if (/^error:/i.test(line)) {
         // a streamed line was rejected — abort the whole job (below) instead of

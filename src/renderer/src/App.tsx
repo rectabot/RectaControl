@@ -36,6 +36,10 @@ export default function App(): JSX.Element {
   const sdRunning = useStore((s) => s.sdRunning)
   const parked = useStore((s) => s.parked)
   const connected = useStore((s) => s.connected)
+  // an unresolved alarm/error, and its event counter. `seq` bumps only on a
+  // genuinely new event, which is what the console auto-focus below keys on.
+  const alertActive = useStore((s) => s.alert != null)
+  const alertSeq = useStore((s) => s.alert?.seq ?? 0)
   const parkSynced = useRef(false)
   // global keyboard + gamepad jog / shortcuts (Settings → Controls)
   useKeyboardControls()
@@ -63,14 +67,26 @@ export default function App(): JSX.Element {
       !parked &&
       state !== 'Hold' &&
       state !== 'Door' &&
-      state !== 'Alarm'
+      state !== 'Alarm' &&
+      // an alarm can land a tick before the job/state updates catch up — without
+      // this the preview would grab the tab back from the console for that tick
+      !alertActive
     if (cutting) {
       setBottomTab('gcode')
       setTermExpanded(true)
     } else {
       setTermExpanded(false)
     }
-  }, [state, jobRunning, sdRunning, parked, setBottomTab])
+  }, [state, jobRunning, sdRunning, parked, alertActive, setBottomTab])
+
+  // An alarm or a rejected line is the moment the console matters: the controller's
+  // own message ([MSG:Emergency stop - clear, then reset to continue]) says what
+  // happened, while the g-code preview it replaces describes a job that no longer
+  // exists. Keyed on `seq`, so this fires once per event and never fights the
+  // operator's own tab choice while the same alarm stays up.
+  useEffect(() => {
+    if (alertSeq > 0) setBottomTab('terminal')
+  }, [alertSeq, setBottomTab])
 
   // one-time build marker in the terminal, so it's obvious at a glance whether
   // the running app is the freshly-built code (vs a stale `npm start` process)

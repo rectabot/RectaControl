@@ -90,6 +90,11 @@ export function WhatToDo(): JSX.Element | null {
   const escapeSwitch = useStore((s) => s.escapeSwitch)
   const pins = useStore((s) => s.status?.pins ?? null)
   const axes = useStore((s) => s.info.axes)
+  // $10 bit 10 makes the board append the alarm code to its state (`Alarm:10`),
+  // which is the difference between naming this alarm and guessing at it — see the
+  // code-0 entry in messages.ts. Read it once when we are here BECAUSE it was off.
+  const reportMask = useStore((s) => Number(s.settingValues[10]))
+  const substateOff = Number.isFinite(reportMask) && (reportMask & 1024) === 0
   const limitEngaged = hasLimitPin(pins)
   const idle = base === 'Idle' // a jog only goes out from Idle
   // which axes are sitting on a switch, in the machine's own axis order
@@ -97,6 +102,14 @@ export function WhatToDo(): JSX.Element | null {
   // how far the operator has walked; reset whenever a new code arrives
   const [advanced, setAdvanced] = useState(0)
   useEffect(() => setAdvanced(0), [alert?.seq])
+
+  // An un-announced alarm (code 0) is the one case where the board's report mask
+  // matters to the operator, so ask for it here rather than making them open
+  // Settings. Nothing is written — the offer below needs the operator's click.
+  const unannounced = alert?.code === 0 && alert.kind === 'alarm'
+  useEffect(() => {
+    if (unannounced && connected && !Number.isFinite(reportMask)) window.recta.send('$10')
+  }, [unannounced, connected, reportMask])
 
   if (!alert || !open) return null
 
@@ -334,6 +347,23 @@ export function WhatToDo(): JSX.Element | null {
                 >
                   {t('ui.errors.openSettings')}
                 </button>
+              )}
+
+              {/* Why this alarm has no name, and the one click that fixes it for
+                  every future one. Offered, never done quietly: it is the operator's
+                  machine setting, and it is written only from here, with the value
+                  read back off the board first so nothing else in $10 is lost. */}
+              {unannounced && substateOff && (
+                <p className="mt-1.5 shrink-0 text-[11px] leading-snug text-slate-500">
+                  {t('ui.errors.substateWhy')}{' '}
+                  <button
+                    className="text-brand/80 underline transition hover:text-brand disabled:opacity-40"
+                    disabled={!connected}
+                    onClick={() => window.recta.send(`$10=${reportMask | 1024}`)}
+                  >
+                    {t('ui.errors.substateFix')}
+                  </button>
+                </p>
               )}
             </>
           ) : (

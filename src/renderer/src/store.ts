@@ -333,6 +333,11 @@ interface AppState {
   alert: RecoveryAlert | null
   /** Whether the recovery popup is currently shown. */
   recoveryOpen: boolean
+  /** This alarm episode has already been announced (an `ALARM:` line arrived, the
+   *  state raised one, or the operator dismissed it). Cleared when the machine
+   *  leaves Alarm, so the next one speaks up again — and so the state-derived alert
+   *  below cannot re-raise itself on every status report. */
+  alarmHandled: boolean
   /** Preference: auto-open the recovery popup on a new alarm/error. Experienced
    *  users can turn this off — the footer notice + "what do I do?" button remain. */
   recoveryPopup: boolean
@@ -607,6 +612,7 @@ export const useStore = create<AppState>((set, get) => ({
   message: null,
   alert: null,
   recoveryOpen: false,
+  alarmHandled: false,
   recoveryPopup: localStorage.getItem('recoveryPopup') !== '0',
   limitsSuspended: null,
   limitsPending: null,
@@ -689,6 +695,9 @@ export const useStore = create<AppState>((set, get) => ({
             sentLine: -1,
             alert: null,
             recoveryOpen: false,
+            // a machine we meet again is a fresh episode — announce whatever it is
+            // sitting in, even if we had already been told about it last time
+            alarmHandled: false,
             resetRequired: false,
             // no board to write to; localStorage keeps the pending restore
             limitsSuspended: null,
@@ -749,6 +758,33 @@ export const useStore = create<AppState>((set, get) => ({
           }
           // out of Alarm ⇒ the blocking loop is behind us, whatever we saw last
           const criticalPatch = s.resetRequired && newBase !== 'Alarm' ? { resetRequired: false } : {}
+
+          // An alarm the app never HEARD. Connect to a machine that is already in
+          // alarm — the app started with the E-stop down, or was closed while the
+          // machine sat latched — and the `ALARM:n` line was emitted long before
+          // anything was listening. All that is left is the state, so the whole
+          // guided recovery used to stay silent exactly when a newcomer needs it,
+          // leaving a red word in the top bar and no way to learn what to press.
+          //
+          // The code comes from whatever is available, in order of certainty:
+          // `Alarm:10` if the board appends the substate ($10 bit 10), otherwise
+          // what the asserted inputs prove (E-stop, a limit switch), otherwise 0 —
+          // our stand-in whose procedure is the universal one (see messages.ts).
+          let stateAlarmPatch: Partial<AppState> = {}
+          if (newBase === 'Alarm' && !s.alarmHandled && !s.alert) {
+            const sub = Number(e.data.state.split(':')[1])
+            const pins = e.data.pins ?? ''
+            const code = Number.isFinite(sub) && sub > 0 ? sub : pins.includes('E') ? 10 : hasLimitPin(pins) ? 1 : 0
+            stateAlarmPatch = {
+              // seq 1: this branch only runs when there is no alert to count from,
+              // and every consumer keys on the value CHANGING, not on its size
+              alert: { kind: 'alarm', code, seq: 1 },
+              alarmHandled: true,
+              recoveryOpen: s.recoveryPopup && !s.pinTest
+            }
+          } else if (newBase !== 'Alarm' && s.alarmHandled) {
+            stateAlarmPatch = { alarmHandled: false } // episode over; the next one speaks up
+          }
           // The switch has released (no limit letters left in Pn:) → put hard limits
           // back. This is the whole safety of the suspend feature: the machine is
           // unguarded only for the few seconds it takes to drive clear, and getting
@@ -770,7 +806,8 @@ export const useStore = create<AppState>((set, get) => ({
             ...sdPatch,
             ...homedPatch,
             ...recoveryPatch,
-            ...criticalPatch
+            ...criticalPatch,
+            ...stateAlarmPatch
           }
         }
         case 'info':
@@ -907,7 +944,9 @@ export const useStore = create<AppState>((set, get) => ({
             recover && (!sameAlert || reRaise)
               ? {
                   alert: { kind: recover.kind, code: recover.detail.code, seq: (s.alert?.seq ?? 0) + 1 },
-                  recoveryOpen: autoOpen || s.recoveryOpen
+                  recoveryOpen: autoOpen || s.recoveryOpen,
+                  // heard live, so the state-derived alert must not raise it again
+                  ...(recover.kind === 'alarm' ? { alarmHandled: true } : {})
                 }
               : {}
           const extra = {
@@ -944,7 +983,9 @@ export const useStore = create<AppState>((set, get) => ({
   pushConsole: (line) => set((s) => ({ consoleLines: cap(s.consoleLines, line) })),
   clearConsole: () => set({ consoleLines: [] }),
   clearMessage: () => set({ message: null }),
-  clearAlert: () => set({ alert: null, message: null, recoveryOpen: false }),
+  // Dismissing counts as handled: the machine may well still be in Alarm, and the
+  // state-derived alert would otherwise put the popup straight back on screen.
+  clearAlert: () => set({ alert: null, message: null, recoveryOpen: false, alarmHandled: true }),
   setRecoveryOpen: (open) => set({ recoveryOpen: open }),
   escapeSwitch: (axis, dir) => {
     const s = get()

@@ -123,6 +123,9 @@ export const sr: Record<string, string> = {
   'ui.errors.stepDone': 'Urađeno',
   'ui.errors.waiting': 'Čekam mašinu…',
   'ui.errors.openSettings': 'Vodi me tamo →',
+  'ui.errors.substateWhy':
+    'Mašina je već bila u alarmu kad se aplikacija povezala, pa nije ni rekla koji je.',
+  'ui.errors.substateFix': 'Neka ga ploča ubuduće prijavljuje ($10)',
   'ui.errors.recovered': 'Rešeno. Možeš da nastaviš rad.',
   'ui.errors.stillAlarm': 'Koraci su gotovi, ali mašina je i dalje u Alarmu — uzrok je još tu.',
   'ui.errors.close': 'Zatvori',

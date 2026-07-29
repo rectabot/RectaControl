@@ -125,6 +125,9 @@ export const en: Record<string, string> = {
   'ui.errors.stepDone': 'Done',
   'ui.errors.waiting': 'Waiting for the machine…',
   'ui.errors.openSettings': 'Take me there →',
+  'ui.errors.substateWhy':
+    'The machine was already in alarm when the app connected, so it never said which one.',
+  'ui.errors.substateFix': 'Have the board report it from now on ($10)',
   'ui.errors.recovered': 'Recovered. You can go back to work.',
   'ui.errors.stillAlarm': 'Steps done, but the machine is still in Alarm — the cause is still there.',
   'ui.errors.close': 'Close',

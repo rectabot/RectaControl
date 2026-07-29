@@ -221,6 +221,28 @@ export const ALARMS: Record<number, CodeDetail> = {
       { do: 'home', text: 'Home again.' }
     ]
   },
+  // Not a grblHAL alarm code — grblHAL never reports 0, which is what makes it a
+  // safe stand-in for "the machine was ALREADY in alarm when we connected, and it
+  // never told us which one". That happens whenever the app starts after the fault:
+  // the `ALARM:n` line was emitted before there was anyone listening, and the status
+  // report only carries the code when $10 bit 10 is on. The steps below are the
+  // universal recovery, and each one drops out by itself when it does not apply —
+  // the E-stop line disappears if nothing is pressed, Home if the machine does not
+  // home. Excluded from the reference list (see listAlarms): it is a state we infer,
+  // not a code anyone can look up.
+  0: {
+    title: 'The machine is in an alarm',
+    cause:
+      'It was already in alarm when the app connected, so the reason was never announced. Turn on alarm details in the status report ($10) and the app can name it next time.',
+    recovery: 'Clear it the way any alarm is cleared: release what is pressed, reset, unlock, and re-home.',
+    group: 'state',
+    steps: [
+      { do: 'manual', pin: 'E', text: 'Release the E-stop button.' },
+      { do: 'reset', text: 'Reset the controller.' },
+      { do: 'unlock', text: 'Unlock. The machine stays locked until you do.' },
+      { do: 'home', text: 'Home — after an alarm the position is no longer trusted.' }
+    ]
+  },
   10: {
     title: 'Emergency stop active',
     cause: 'The E-stop input is asserted.',
@@ -489,6 +511,18 @@ const ALARMS_SR: Record<number, CodeDetailSR> = {
       'Pritisni prekidač rukom i gledaj Pn: u statusnoj traci. Ništa? Problem je ožičenje.',
       'Reaguje? Onda osa ne stiže do njega — proveri max hod i seek brzinu.',
       'Homuj ponovo.'
+    ]
+  },
+  0: {
+    title: 'Mašina je u alarmu',
+    cause:
+      'Bila je u alarmu još pre nego što se aplikacija povezala, pa razlog nije ni objavljen. Uključi detalj alarma u status izveštaju ($10) i aplikacija će sledeći put znati koji je.',
+    recovery: 'Skida se kao svaki alarm: otpusti ono što je pritisnuto, resetuj, otključaj i homuj.',
+    steps: [
+      'Otpusti E-stop taster.',
+      'Resetuj kontroler.',
+      'Otključaj. Mašina ostaje zaključana dok to ne uradiš.',
+      'Homuj — posle alarma pozicija više nije pouzdana.'
     ]
   },
   10: {
@@ -1649,6 +1683,7 @@ export function getError(code: number, lang: Lang = 'en'): ResolvedCode {
 export function listAlarms(lang: Lang = 'en'): ResolvedCode[] {
   return Object.keys(ALARMS)
     .map(Number)
+    .filter((code) => code > 0) // 0 is our stand-in for an un-announced alarm, not a code
     .sort((a, b) => a - b)
     .map((code) => getAlarm(code, lang))
 }

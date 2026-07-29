@@ -137,12 +137,16 @@ export function DRO(): JSX.Element {
             their stacked letters used to smear from top to bottom. A 5-axis machine
             is past the floor and grows normally. */}
         <div className="flex flex-1 flex-col gap-1.5" style={{ minHeight: MIN_BLOCK_PX }}>
+          {/* One row per axis the controller CLAIMS in $I; the numbers come from
+              status reports, and the two can disagree for a moment (a report that
+              arrives short, a board rebooting mid-line). Such an axis shows a dash
+              — reaching past the end of that array used to take the whole UI down. */}
           {axes.map((axis, i) => (
             <AxisCell
               key={axis}
               axis={axis}
-              primary={pos ? fmtPos(pos[i], units) : '—'}
-              secondary={other ? fmtPos(other[i], units) : ''}
+              primary={pos?.[i] != null ? fmtPos(pos[i], units) : '—'}
+              secondary={other?.[i] != null ? fmtPos(other[i], units) : ''}
               enabled={ready}
               onZero={() => zero([axis])}
               onGoZero={() => goAxisZero(axis)}

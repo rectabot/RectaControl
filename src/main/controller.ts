@@ -80,6 +80,15 @@ export class Controller {
     this.transport.onData((chunk) => this.onData(chunk))
     this.transport.onClose((reason) => this.onClose(reason))
 
+    // Start reading from a clean slate. A board that reboots — which is exactly
+    // what flashing, a soft reset or a pulled cable does — cuts the stream in the
+    // middle of a line, and that fragment used to survive here: the next session's
+    // first bytes were glued onto it and the result was parsed as one line. A
+    // status report built that way can carry fewer axes than $I promises, which
+    // took the DRO down with `undefined.toFixed()`.
+    this.rxBuf = ''
+    this.decoder = new StringDecoder('utf8')
+
     // fresh capability info per connection (axes/spindle re-discovered from $I)
     this.info = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
 
@@ -147,6 +156,7 @@ export class Controller {
     this.stopPoll()
     this.resetJob()
     this.backup.reset() // a dump cut off by the disconnect is not a backup
+    this.rxBuf = '' // half a line is not worth carrying into the next connection
     this.motionActive = false
     this.transport = null
     this.emit({ type: 'disconnected', data: { reason } })

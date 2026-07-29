@@ -9,8 +9,17 @@ export function fromDisplay(value: number, units: Units): number {
 }
 
 /** Format a position already reported in the active unit ($13) — no conversion,
- *  just unit-appropriate precision. */
-export function fmtPos(value: number, units: Units): string {
+ *  just unit-appropriate precision.
+ *
+ *  A missing value formats as a dash instead of throwing. The DRO draws one row
+ *  per axis the controller CLAIMS in `$I`, while the numbers come from status
+ *  reports, and the two can disagree for a moment — a report that arrives short,
+ *  or a board that reboots mid-line. Reaching past the end of that array used to
+ *  take the entire interface down: `undefined.toFixed()` inside a render unmounts
+ *  the React tree, leaving a black window in front of a machine that is still
+ *  moving. No position is ever worth that. */
+export function fmtPos(value: number | undefined | null, units: Units): string {
+  if (value == null || !Number.isFinite(value)) return '—'
   return units === 'inch' ? value.toFixed(4) : value.toFixed(3)
 }
 

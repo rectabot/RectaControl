@@ -107,7 +107,7 @@ export function JogPanel(): JSX.Element {
   // A tall jog button for a single linear/rotary axis (Z, A, …).
   const AxBtn = (axis: string, label: string, sign: number): JSX.Element => (
     <button
-      className="flex flex-1 w-12 items-center justify-center rounded-md border border-border2 bg-panel2 font-mono text-sm font-bold text-slate-100 transition enabled:hover:border-brand enabled:hover:text-brand enabled:active:bg-border disabled:opacity-40"
+      className="flex w-full flex-1 items-center justify-center rounded-md border border-border2 bg-panel2 font-mono text-sm font-bold text-slate-100 transition enabled:hover:border-brand enabled:hover:text-brand enabled:active:bg-border disabled:opacity-40"
       disabled={!canJog}
       {...press([{ a: axis, s: sign }])}
     >
@@ -189,15 +189,20 @@ export function JogPanel(): JSX.Element {
         {/* Z + rotary columns — a fixed-width block the Step/Hold toggle mirrors, so
             the action column (and the Feed box above it) stay aligned on 3-, 4- and
             5-axis machines. Z is always present; each rotary axis (A, B, …) adds a
-            w-12 column. On a 3-axis machine the block keeps its 6.25rem floor, leaving
-            the (empty) rotary space reserved so nothing shifts. */}
+            column.
+
+            The columns SHARE the block rather than each taking a fixed 48 px. At
+            four and five axes that is the same layout to the pixel (the block is
+            sized from exactly that arithmetic), but on a 3-axis machine the space
+            the 6.25rem floor reserves for a rotary axis is no longer a hole beside
+            Z — Z takes it, and gets a target twice as easy to hit. */}
         <div className="flex shrink-0 gap-1" style={{ width: `${colBlockRem}rem` }}>
-          <div className="flex w-12 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             {AxBtn('Z', 'Z+', 1)}
             {AxBtn('Z', 'Z-', -1)}
           </div>
           {rotary.map((ax) => (
-            <div key={ax} className="flex w-12 flex-col gap-1">
+            <div key={ax} className="flex min-w-0 flex-1 flex-col gap-1">
               {AxBtn(ax, `${ax}+`, 1)}
               {AxBtn(ax, `${ax}-`, -1)}
             </div>

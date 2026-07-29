@@ -27,6 +27,7 @@ export function SettingsBrowser(): JSX.Element | null {
   const settingsSection = useStore((s) => s.settingsSection)
   const clearSettingsSection = useStore((s) => s.clearSettingsSection)
   const connected = useStore((s) => s.connected)
+  const askConfirm = useStore((s) => s.askConfirm)
   const axes = useStore((s) => s.info.axes)
   // `$$` is only accepted when the machine is Idle (otherwise grblHAL replies
   // error:8 "only allowed when idle"). Gate the read on the current state so we
@@ -118,18 +119,65 @@ export function SettingsBrowser(): JSX.Element | null {
     URL.revokeObjectURL(a.href)
   }
 
+  /** Send one `$n=v` and wait for the controller's verdict. Returns null when it
+   *  was accepted, the `error:n` line when it was not. */
+  const sendSetting = (line: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      let off: (() => void) | null = null
+      let timer: ReturnType<typeof setTimeout> | null = null
+      const finish = (r: string | null): void => {
+        off?.()
+        off = null
+        if (timer) clearTimeout(timer)
+        resolve(r)
+      }
+      off = window.recta.onEvent((ev) => {
+        if (ev.type !== 'line' || !off) return
+        const s = ev.data.trim()
+        if (/^ok$/i.test(s)) finish(null)
+        else if (/^error:\d+/i.test(s)) finish(s)
+      })
+      timer = setTimeout(() => finish('no answer'), 1500)
+      window.recta.send(line)
+    })
+  }
+
+  /** Restore a saved `$$` dump.
+   *
+   *  Every line is now checked, because a settings restore used to fire and forget:
+   *  refused lines vanished without a word. A dump is written in numeric order, but
+   *  some settings depend on one that sorts *after* them — `$20` (soft limits) is
+   *  refused with error:10 until `$22` (homing) is on — so the first pass legitimately
+   *  fails on those and a single retry fixes them. This is not hypothetical: on
+   *  29 Jul 2026 a restore silently left soft limits off on a machine whose file said
+   *  they were on, and nobody knew until the file and the board were diffed by hand.
+   *  Whatever is still refused after the retry is a real mismatch and is shown. */
   const importSettings = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const f = e.target.files?.[0]
     if (!f || !connected) return
     const text = await f.text()
-    for (const line of text.split(/\r?\n/)) {
-      const m = /^\$(\d+)=(.*)$/.exec(line.trim())
-      if (m) {
-        window.recta.send(line.trim())
-        await new Promise((r) => setTimeout(r, 20)) // gentle pacing
-      }
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => /^\$\d+=/.test(l))
+
+    const refused: string[] = []
+    for (const line of lines) if (await sendSetting(line)) refused.push(line)
+
+    const stillRefused: string[] = []
+    for (const line of refused) {
+      const err = await sendSetting(line)
+      if (err) stillRefused.push(`${line} → ${err}`)
     }
+
     setTimeout(read, 300)
+    if (stillRefused.length)
+      void askConfirm({
+        title: t('ui.settings.importRefusedTitle'),
+        body: t('ui.settings.importRefused', { count: stillRefused.length, list: stillRefused.join(', ') }),
+        confirmLabel: t('ui.settings.importRefusedOk'),
+        tone: 'warn'
+      })
   }
 
   // Auto-square only makes sense on a ganged axis with two limit switches — show

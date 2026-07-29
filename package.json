@@ -49,6 +49,15 @@
       "out/**/*",
       "resources/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "../Firmware/variants",
+        "to": "Firmware/variants",
+        "filter": [
+          "**/*.uf2"
+        ]
+      }
+    ],
     "win": {
       "target": [
         "nsis",

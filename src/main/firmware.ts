@@ -10,9 +10,19 @@ import { join } from 'node:path'
 import type { BoardDrive, FirmwareVariant } from '@shared/types'
 
 /** Folder holding prebuilt variant .uf2 files (one subfolder per variant).
- *  Defaults to <repo>/Firmware/variants in dev; override with RECTA_FIRMWARE_DIR. */
+ *
+ *  The images ship INSIDE the app (electron-builder extraResources → resources/
+ *  Firmware/variants), which is why they are found without a network: the moment
+ *  you most need to flash is the moment the machine is not working, and a shop PC
+ *  is often not online. Six megabytes for seven builds is a cheap way to never
+ *  have to say "download it first".
+ *
+ *  In dev there is no resources folder, so the repo's own Firmware/variants is
+ *  used — freshly built images show up without packaging anything. Either can be
+ *  overridden with RECTA_FIRMWARE_DIR. */
 function variantsDir(): string {
   if (process.env.RECTA_FIRMWARE_DIR) return process.env.RECTA_FIRMWARE_DIR
+  if (app.isPackaged) return join(process.resourcesPath, 'Firmware', 'variants')
   // In dev app.getAppPath() == <repo>/rectacontrol
   return join(app.getAppPath(), '..', 'Firmware', 'variants')
 }

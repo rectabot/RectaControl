@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, screen, Menu } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon.png?asset'
 import { registerIpc } from './ipc'
+import { log, startLog } from './logger'
 import type { Controller } from './controller'
 
 let mainWindow: BrowserWindow | null = null
@@ -106,6 +107,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // before anything else can fail: the log is what a fault report is made of
+  startLog()
+
   // drop the default application menu: it's hidden anyway (autoHideMenuBar) and its
   // View → Zoom roles bind Ctrl +/−/0, which would fight our own UI-scale handling.
   Menu.setApplicationMenu(null)
@@ -114,6 +118,7 @@ app.whenReady().then(() => {
 
   // renderer confirmed quitting mid-job → let the vetoed close proceed
   ipcMain.handle('app:confirm-close', () => {
+    log('app', 'operator confirmed quitting while a job was running')
     forceQuit = true
     mainWindow?.close()
   })

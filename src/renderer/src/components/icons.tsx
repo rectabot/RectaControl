@@ -170,6 +170,15 @@ export function AlertIcon({ className }: { className?: string }): JSX.Element {
   )
 }
 
+/** Heartbeat line — the Diagnostics category (logs, problem report, pin test). */
+export function PulseIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M2 12h4l3 8 4-16 3 8h6" />
+    </Svg>
+  )
+}
+
 /** Contrast circle — the Theme category (appearance). */
 export function ThemeIcon({ className = 'h-4 w-4' }: { className?: string }): JSX.Element {
   return (

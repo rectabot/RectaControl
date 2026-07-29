@@ -40,7 +40,11 @@ export default function App(): JSX.Element {
   // genuinely new event, which is what the console auto-focus below keys on.
   const alertActive = useStore((s) => s.alert != null)
   const alertSeq = useStore((s) => s.alert?.seq ?? 0)
+  // the live input test suspends hard limits, so the machine must not be jogged
+  // while it runs — see the effect below
+  const pinTest = useStore((s) => s.pinTest)
   const parkSynced = useRef(false)
+  const pinTestWas = useRef(false)
   // global keyboard + gamepad jog / shortcuts (Settings → Controls)
   useKeyboardControls()
   useGamepadControls()
@@ -56,6 +60,17 @@ export default function App(): JSX.Element {
     const off = window.recta.onEvent((e) => apply(e))
     return off
   }, [apply])
+
+  // An update is found and downloaded by the main process, which may well have
+  // done it before this window subscribed (or before a reload) — so ask for one
+  // already waiting as well as listening for the next.
+  useEffect(() => {
+    const off = window.recta.onUpdateReady((u) => useStore.getState().setUpdate(u))
+    void window.recta.pendingUpdate().then((u) => {
+      if (u) useStore.getState().setUpdate(u)
+    })
+    return off
+  }, [])
 
   // Take over the Jog panel's space with the g-code preview ONLY while a real program
   // is actively cutting. Collapsed for everything else — idle, pause/Hold/Door, Alarm,
@@ -74,10 +89,28 @@ export default function App(): JSX.Element {
     if (cutting) {
       setBottomTab('gcode')
       setTermExpanded(true)
-    } else {
+    } else if (!pinTest) {
+      // the input test owns the expansion while it runs (below) — collapsing here
+      // on any state change would hand the Jog panel back mid-test
       setTermExpanded(false)
     }
-  }, [state, jobRunning, sdRunning, parked, alertActive, setBottomTab])
+  }, [state, jobRunning, sdRunning, parked, alertActive, pinTest, setBottomTab])
+
+  // The input test runs with hard limits suspended, so jogging is the one thing
+  // that must not happen: nothing would stop the head at the end of travel. Rather
+  // than print a warning nobody reads, take the Jog panel away the same way a
+  // running program does — the terminal expands over it. It is a cover, not a lock:
+  // an operator who genuinely has to drive off a switch collapses the terminal and
+  // the Jog panel is back. Fires only on the test's edges, so that choice sticks.
+  useEffect(() => {
+    if (pinTest && !pinTestWas.current) {
+      setBottomTab('terminal')
+      setTermExpanded(true)
+    } else if (!pinTest && pinTestWas.current) {
+      setTermExpanded(false)
+    }
+    pinTestWas.current = pinTest
+  }, [pinTest, setBottomTab])
 
   // An alarm or a rejected line is the moment the console matters: the controller's
   // own message ([MSG:Emergency stop - clear, then reset to continue]) says what

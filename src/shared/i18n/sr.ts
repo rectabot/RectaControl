@@ -32,6 +32,7 @@ export const sr: Record<string, string> = {
   'ui.settings.group.system': 'Sistem',
   'ui.settings.cat.advanced': 'Sva podešavanja',
   'ui.settings.cat.errors': 'Greške i alarmi',
+  'ui.settings.cat.diagnostics': 'Dijagnostika',
   'ui.settings.cat.theme': 'Tema',
   'ui.settings.cat.controls': 'Kontrole',
   // Kontrole (tastatura / gamepad)
@@ -591,17 +592,45 @@ export const sr: Record<string, string> = {
   'ui.fw.footer':
     'Posle flešovanja proveri Vodič za izabranu varijantu (broj osa, limit invert, hard limiti). Manuelni bootloader: drži BOOT (SW2), tapni RUN (SW3).',
 
+  // ── Dijagnostika (log + izveštaj o problemu) ───────────────────────────────
+  'ui.diag.logTitle': 'Log',
+  'ui.diag.logDesc':
+    'Sve što piše u terminalu upisuje se i na disk, zajedno sa verzijom aplikacije i firmvera i svakom greškom. Čuva se pet fajlova po 2 MB — dovoljno za nekoliko dana rada — a najnoviji je uvek recta.log.',
+  'ui.diag.openLogs': 'Otvori folder sa logovima',
+  'ui.diag.pinTitle': 'Test ulaza',
+  'ui.diag.pinDesc':
+    'Pritisni prekidač i gledaj sliku ploče: konektor na koji je stvarno vezan zasvetli. Najbrži odgovor na „da li je ovaj prekidač na pravoj klemi?" — i način da nađeš onaj koji je mrtav. Dok test traje hard limiti su privremeno isključeni, pa pritisak samo prijavi sebe umesto da alarmira mašinu, a vraćaju se čim se test završi.',
+  'ui.diag.pinOpen': 'Otvori test ulaza',
+  'ui.diag.pinNeedsConn': 'Prvo se poveži sa pločom.',
+  'ui.diag.reportTitle': 'Izveštaj o problemu',
+  'ui.diag.reportDesc':
+    'Pakuje log, podešavanja mašine i verzije u jedan .zip i pokazuje ti gde je završio — da bi se pitanje o kvaru rešavalo onim što je mašina stvarno rekla.',
+  'ui.diag.noteLabel': 'Šta se desilo (nije obavezno)',
+  'ui.diag.notePlaceholder': 'npr. vreteno je stalo usred reza a aplikacija je prikazala ALARM:19',
+  'ui.diag.build': 'Napravi izveštaj o problemu',
+  'ui.diag.building': 'Pakujem…',
+  'ui.diag.failed': 'Izveštaj nije mogao da se upiše — da nije disk pun?',
+  'ui.diag.done': 'Izveštaj je napravljen i otvoren u pretraživaču fajlova:',
+  'ui.diag.contents': 'Šta je unutra',
+  'ui.diag.privacy':
+    'Ništa se ne šalje. Fajl ostaje na ovom računaru dok ga sam ne zakačiš na mejl — u logu jesu imena programa koje si puštao, i zato je spisak iznad tu.',
+
   // ── Verzija aplikacije / update ────────────────────────────────────────────
   'ui.app.app': 'Aplikacija',
   'ui.app.version': 'verzija {v}',
   'ui.app.latest': '✓ najnovija',
-  'ui.app.autoNote': 'Ažuriranja se proveravaju automatski — obaveštenje iskoči kad je nova verzija spremna.',
-  'ui.upd.started': '* Ažuriranje na v{version} započeto…',
+  'ui.app.updateReady': '⬆ v{v} spremna',
+  'ui.app.autoNote': 'Ažuriranja se proveravaju automatski — obaveštenje iskoči kad je nova verzija spremna. Ažuriranje se nikad ne instalira dok program radi.',
+  'ui.upd.started': '* Ažuriranje na v{version} započeto — aplikacija će se restartovati…',
+  'ui.upd.manualConsole': '* Stranica za preuzimanje v{version} otvorena u pregledaču.',
   'ui.upd.available': 'Dostupno ažuriranje',
   'ui.upd.title': 'Ažuriranje · v{version}',
   'ui.upd.whatsNew': 'Šta je novo',
   'ui.upd.later': 'Kasnije',
   'ui.upd.now': 'Ažuriraj sada',
+  'ui.upd.download': 'Otvori preuzimanje',
+  'ui.upd.busy': 'Ne dok program radi — aplikacija mora da se restartuje da bi se ažurirala. Prvo završi posao.',
+  'ui.upd.gone': 'Preuzeto ažuriranje više nije dostupno. Biće ponovo preuzeto pri sledećoj proveri.',
 
   // ── Probing ────────────────────────────────────────────────────────────────
   'ui.probe.title': 'Probe',
@@ -818,6 +847,25 @@ export const sr: Record<string, string> = {
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Klikni konektor na ploči za objašnjenje povezivanja.',
+  // živi test ulaza — slika ploče kao provera ožičenja
+  'board.test.start': 'Živi test',
+  'board.test.stop': 'Zaustavi',
+  'board.test.title': 'Pritisni prekidač i gledaj koji konektor zasvetli',
+  'board.test.heading': 'Živi test ulaza',
+  'board.test.instruction': 'Pritisni prekidač, zatvori sondu, udari pečurku — konektor na koji je vezan zasvetli.',
+  'board.test.disconnected': 'Nema veze — prvo se poveži sa pločom.',
+  'board.test.busy': 'Ne dok program radi — test isključuje hard limite.',
+  'board.test.limitsOff': '⚠ hard limiti isključeni za test',
+  'board.test.limitsOn': '⚠ hard limiti su i dalje uključeni — pritisak limita će alarmirati',
+  'board.test.jogHint':
+    'Jog je sklonjen dok test traje, jer sa isključenim hard limitima ništa ne bi zaustavilo glavu. Ako moraš da siđeš sa prekidača, spusti terminal i Jog se vraća.',
+  'board.test.now': 'sad',
+  // kraj testa: E-stop i motor fault alarmiraju bez obzira na $21
+  'ui.pinTest.clearTitle': 'Da skinem alarm iz testa?',
+  'ui.pinTest.clearBody':
+    'Mašina je u alarmu koji si namerno izazvao u testu ulaza. Skidanje šalje soft reset pa otključavanje — ista dva koraka kao dugmad Reset i Unlock. Hard limiti se vraćaju u oba slučaja.',
+  'ui.pinTest.clearBtn': 'Skini alarm',
+  'ui.pinTest.keepBtn': 'Ostavi',
   'board.imgMissing': 'Sačuvaj sliku ploče u src/renderer/public/board.png da se prikaže dijagram.',
   'board.pickPrompt': 'Izaberi konektor (tačku) na ploči.',
   'board.inputHint':

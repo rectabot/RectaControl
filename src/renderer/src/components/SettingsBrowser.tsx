@@ -10,8 +10,9 @@ import { ThemeSettings } from './ThemeSettings'
 import { ControlsSettings } from './ControlsSettings'
 import { ProbeSettings } from './ProbeSettings'
 import { StockSettings } from './StockSettings'
+import { Diagnostics } from './Diagnostics'
 import { LanguageSelect } from './LanguageSelect'
-import { GearIcon, UploadIcon, ChipIcon, SearchIcon, SectionIcon, ListIcon, AlertIcon, ThemeIcon, ControlsIcon, ProbeIcon, StockIcon } from './icons'
+import { GearIcon, UploadIcon, ChipIcon, SearchIcon, SectionIcon, ListIcon, AlertIcon, ThemeIcon, ControlsIcon, ProbeIcon, StockIcon, PulseIcon } from './icons'
 import { SECTIONS } from '@shared/machine-config'
 
 interface Row {
@@ -144,7 +145,7 @@ export function SettingsBrowser(): JSX.Element | null {
     },
     { label: t('ui.settings.group.connectivity'), ids: ['network', 'pendant'] },
     { label: t('ui.settings.group.other'), ids: ['controls', 'probe', 'stock', 'macros', 'behavior'] },
-    { label: t('ui.settings.group.system'), ids: ['advanced', 'firmware', 'board', 'errors', 'theme'] }
+    { label: t('ui.settings.group.system'), ids: ['advanced', 'firmware', 'board', 'errors', 'diagnostics', 'theme'] }
   ]
 
   const catLabel = (id: string): string => {
@@ -152,6 +153,7 @@ export function SettingsBrowser(): JSX.Element | null {
     if (id === 'firmware') return t('ui.settings.tab.firmware')
     if (id === 'board') return t('ui.settings.tab.board')
     if (id === 'errors') return t('ui.settings.cat.errors')
+    if (id === 'diagnostics') return t('ui.settings.cat.diagnostics')
     if (id === 'theme') return t('ui.settings.cat.theme')
     if (id === 'controls') return t('ui.settings.cat.controls')
     if (id === 'probe') return t('ui.probeSet.title')
@@ -164,6 +166,7 @@ export function SettingsBrowser(): JSX.Element | null {
     if (id === 'firmware') return <UploadIcon className="h-4 w-4" />
     if (id === 'board') return <ChipIcon className="h-4 w-4" />
     if (id === 'errors') return <AlertIcon className="h-4 w-4" />
+    if (id === 'diagnostics') return <PulseIcon className="h-4 w-4" />
     if (id === 'theme') return <ThemeIcon className="h-4 w-4" />
     if (id === 'controls') return <ControlsIcon className="h-4 w-4" />
     if (id === 'probe') return <ProbeIcon className="h-4 w-4" />
@@ -176,6 +179,7 @@ export function SettingsBrowser(): JSX.Element | null {
     cat !== 'firmware' &&
     cat !== 'board' &&
     cat !== 'errors' &&
+    cat !== 'diagnostics' &&
     cat !== 'theme' &&
     cat !== 'controls' &&
     cat !== 'probe' &&
@@ -192,6 +196,8 @@ export function SettingsBrowser(): JSX.Element | null {
       <BoardDiagram />
     ) : cat === 'errors' ? (
       <ErrorsReference filter={query} />
+    ) : cat === 'diagnostics' ? (
+      <Diagnostics />
     ) : cat === 'theme' ? (
       <ThemeSettings />
     ) : cat === 'controls' ? (

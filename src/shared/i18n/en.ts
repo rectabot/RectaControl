@@ -34,6 +34,7 @@ export const en: Record<string, string> = {
   'ui.settings.group.system': 'System',
   'ui.settings.cat.advanced': 'All settings',
   'ui.settings.cat.errors': 'Errors & alarms',
+  'ui.settings.cat.diagnostics': 'Diagnostics',
   'ui.settings.cat.theme': 'Theme',
   'ui.settings.cat.controls': 'Controls',
   // Controls (keyboard / gamepad)
@@ -607,17 +608,45 @@ export const en: Record<string, string> = {
   'ui.fw.footer':
     'After flashing, check the Guide for the chosen variant (axis count, limit invert, hard limits). Manual bootloader: hold BOOT (SW2), tap RUN (SW3).',
 
+  // ── Diagnostics (log + problem report) ─────────────────────────────────────
+  'ui.diag.logTitle': 'Log',
+  'ui.diag.logDesc':
+    'Everything in the terminal is also written to disk, together with the app and firmware versions and any error. Five files of 2 MB are kept — enough for several days of work — and the newest is always recta.log.',
+  'ui.diag.openLogs': 'Open log folder',
+  'ui.diag.pinTitle': 'Input test',
+  'ui.diag.pinDesc':
+    'Press a switch and watch the board picture: the connector it is actually wired to lights up. The fastest way to answer "is this switch on the right terminal?" — and to find the one that is dead. Hard limits are suspended while the test runs, so a press reports itself instead of alarming the machine, and they go back on the moment it ends.',
+  'ui.diag.pinOpen': 'Open input test',
+  'ui.diag.pinNeedsConn': 'Connect to the board first.',
+  'ui.diag.reportTitle': 'Problem report',
+  'ui.diag.reportDesc':
+    'Packs the log, the machine settings and the versions into one .zip and shows you where it landed — so a question about a fault can be answered from what the machine actually said.',
+  'ui.diag.noteLabel': 'What happened (optional)',
+  'ui.diag.notePlaceholder': 'e.g. the spindle stopped mid-cut and the app showed ALARM:19',
+  'ui.diag.build': 'Create problem report',
+  'ui.diag.building': 'Packing…',
+  'ui.diag.failed': 'Could not write the report — is the disk full?',
+  'ui.diag.done': 'Report written and opened in the file explorer:',
+  'ui.diag.contents': 'What is inside',
+  'ui.diag.privacy':
+    'Nothing is uploaded. The file stays on this PC until you attach it to a mail yourself — the log does contain the names of the programs you ran, which is why it is listed above.',
+
   // ── App version / update ───────────────────────────────────────────────────
   'ui.app.app': 'Application',
   'ui.app.version': 'version {v}',
   'ui.app.latest': '✓ latest',
-  'ui.app.autoNote': 'Updates are checked automatically — a notification pops up when a new version is ready.',
-  'ui.upd.started': '* Update to v{version} started…',
+  'ui.app.updateReady': '⬆ v{v} ready',
+  'ui.app.autoNote': 'Updates are checked automatically — a notification pops up when a new version is ready. An update is never installed while a program is running.',
+  'ui.upd.started': '* Update to v{version} started — the app will restart…',
+  'ui.upd.manualConsole': '* Download page for v{version} opened in the browser.',
   'ui.upd.available': 'Update available',
   'ui.upd.title': 'Update · v{version}',
   'ui.upd.whatsNew': 'What’s new',
   'ui.upd.later': 'Later',
   'ui.upd.now': 'Update now',
+  'ui.upd.download': 'Open download',
+  'ui.upd.busy': 'Not while a program is running — the app has to restart to update. Finish the job first.',
+  'ui.upd.gone': 'The downloaded update is no longer available. It will be fetched again on the next check.',
 
   // ── Probing ────────────────────────────────────────────────────────────────
   'ui.probe.title': 'Probe',
@@ -842,6 +871,25 @@ export const en: Record<string, string> = {
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Click a connector on the board for wiring details.',
+  // live input test — the board picture as a wiring check
+  'board.test.start': 'Live test',
+  'board.test.stop': 'Stop',
+  'board.test.title': 'Press a switch and watch which connector lights up',
+  'board.test.heading': 'Live input test',
+  'board.test.instruction': 'Press a switch, close the probe, hit E-stop — the connector it is wired to lights up.',
+  'board.test.disconnected': 'Not connected — connect to the board first.',
+  'board.test.busy': 'Not while a program is running — the test suspends hard limits.',
+  'board.test.limitsOff': '⚠ hard limits off for the test',
+  'board.test.limitsOn': '⚠ hard limits still on — a limit press will alarm',
+  'board.test.jogHint':
+    'Jog is put away while the test runs, because nothing would stop the head with hard limits off. If you have to drive off a switch, collapse the terminal and it comes back.',
+  'board.test.now': 'now',
+  // ending the test: E-stop and motor fault alarm no matter what $21 says
+  'ui.pinTest.clearTitle': 'Clear the alarm from the test?',
+  'ui.pinTest.clearBody':
+    'The machine is in an alarm you raised on purpose during the input test. Clearing it sends a soft reset and then unlocks — the same two steps as the Reset and Unlock buttons. Hard limits go back on either way.',
+  'ui.pinTest.clearBtn': 'Clear alarm',
+  'ui.pinTest.keepBtn': 'Leave it',
   'board.imgMissing': 'Save the board image to src/renderer/public/board.png to show the diagram.',
   'board.pickPrompt': 'Select a connector (dot) on the board.',
   'board.inputHint':

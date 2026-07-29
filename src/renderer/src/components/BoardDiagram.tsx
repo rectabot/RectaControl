@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from '../store'
 import { useT } from '../i18n'
 
 type Group = 'input' | 'stepper' | 'power' | 'comm' | 'output' | 'storage' | 'adjust'
@@ -68,9 +69,41 @@ const CONNECTORS: Connector[] = [
   { id: 'isopwr', label: 'ISO POWER', group: 'power', x: 90, y: 15, pins: 'DC-DC · iso rail' }
 ]
 
+/** Which connectors carry an input the controller reports, and under which letter
+ *  of the status report's `Pn:` field.
+ *
+ *  The letters are not ours to choose — they come straight from grblHAL's
+ *  `control_signals_tostring()` map ("RHSDLTEOFM Q  P ") and, for the limits, from
+ *  the axis letters. Worth knowing while reading this:
+ *
+ *  - A limit input reports as its AXIS letter, and min/max are merged into one
+ *    letter, so a shared MAX switch shows up on the axis it belongs to.
+ *  - E-stop is 'E' on a build that has a dedicated e-stop input and 'R' (reset)
+ *    on one that does not — both are listed, so the press registers either way.
+ *  - Which functions exist at all is the firmware's business; `$pins` prints the
+ *    real mapping if a press ever lights up somewhere unexpected. */
+const PIN_SIGNALS: Record<string, string[]> = {
+  xlim: ['X'],
+  ylim: ['Y'],
+  zlim: ['Z'],
+  alim: ['A'],
+  blim: ['B'],
+  probe: ['P'],
+  door: ['D'],
+  hold: ['H'],
+  start: ['S'],
+  estop: ['E', 'R']
+}
+
 /** Interactive board pinout: click a connector on the RectaBot render to see what
  *  to wire and the pin order. Image lives in src/renderer/public/board.png and is
  *  loaded at runtime (graceful placeholder if missing).
+ *
+ *  With the live input test on, the same picture becomes the wiring check that is
+ *  otherwise a multimeter and a guess: press a switch, and the connector it is
+ *  actually wired to lights up. Which is the whole point — the app knows this
+ *  board, so it can say "that signal arrived on CN31, the X limit", something no
+ *  generic sender can do.
  *
  *  This is a reference screen, so it fills the pane instead of scrolling: the
  *  detail box below keeps a fixed height and the board fits (letterboxed) into
@@ -79,14 +112,58 @@ const CONNECTORS: Connector[] = [
  *  image, never the empty space around it. */
 export function BoardDiagram(): JSX.Element {
   const t = useT()
+  const live = useStore((s) => s.pinTest)
+  const startTest = useStore((s) => s.startPinTest)
+  const stopTest = useStore((s) => s.stopPinTest)
+  const connected = useStore((s) => s.connected)
+  // the `Pn:` field of the status report — the controller's own view of which
+  // inputs are asserted right now, sampled 5×/s idle (20×/s while moving)
+  const pins = useStore((s) => s.status?.pins ?? null)
+  // set once the board has confirmed $21 is off (the suspend is read/written
+  // against the board, never assumed — see suspendLimits in the store)
+  const limitsOff = useStore((s) => s.limitsSuspended != null)
+  // a program in progress rules the test out entirely: the $21 write it depends on
+  // is refused outside Idle, so the test would run with the limits still armed —
+  // and suspending them mid-cut is not something to offer in the first place
+  const busy = useStore((s) => s.job.running || s.sdRunning)
   const [selected, setSelected] = useState<string | null>(null)
   const [imgError, setImgError] = useState(false)
+  /** Inputs seen at least once since the test started. A switch is pressed for a
+   *  moment and released; without this the operator would have to watch the screen
+   *  and the switch at the same time. */
+  const [seen, setSeen] = useState<Record<string, boolean>>({})
   // natural aspect of board.png; the 3:2 default only applies until it loads
   const [ratio, setRatio] = useState(3 / 2)
   const [fit, setFit] = useState<{ w: number; h: number }>({ w: 0, h: 0 })
   const boxRef = useRef<HTMLDivElement>(null)
 
   const sel = CONNECTORS.find((c) => c.id === selected) ?? null
+
+  const activeIds = useMemo(() => {
+    const set: Record<string, boolean> = {}
+    if (pins)
+      for (const [id, letters] of Object.entries(PIN_SIGNALS))
+        if (letters.some((l) => pins.includes(l))) set[id] = true
+    return set
+  }, [pins])
+
+  // remember what has fired, so a switch that is pressed and released still counts
+  useEffect(() => {
+    const hit = Object.keys(activeIds)
+    if (!live || !hit.length) return
+    setSeen((s) => (hit.every((id) => s[id]) ? s : { ...s, ...Object.fromEntries(hit.map((id) => [id, true])) }))
+  }, [activeIds, live])
+
+  // Leaving this screen ends the test, and ending it is what puts hard limits back
+  // — so this is not tidiness, it is the guarantee that the machine cannot be left
+  // unguarded by clicking away. Reads the flag through the store to avoid ending a
+  // test that was never started.
+  useEffect(
+    () => () => {
+      if (useStore.getState().pinTest) void useStore.getState().stopPinTest()
+    },
+    []
+  )
 
   // fit the image into the free space, remeasuring on any window/pane resize
   useEffect(() => {
@@ -129,20 +206,27 @@ export function BoardDiagram(): JSX.Element {
             />
 
             {CONNECTORS.map((c) => {
-              const active = c.id === selected
+              const picked = c.id === selected
+              const testable = !!PIN_SIGNALS[c.id]
+              const firing = live && !!activeIds[c.id]
+              // in test mode the testable connectors carry the story: a live one is
+              // white and ringed, one already proven keeps its colour, and everything
+              // that cannot report is dimmed out of the way
+              const color = firing ? '#ffffff' : GROUP_COLOR[c.group]
+              const dim = live && !testable
               return (
                 <button
                   key={c.id}
-                  onClick={() => setSelected(active ? null : c.id)}
+                  onClick={() => setSelected(picked ? null : c.id)}
                   title={c.label}
                   className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition ${
-                    active ? 'h-5 w-5 ring-2 ring-white' : 'h-4 w-4 hover:scale-125'
-                  }`}
+                    firing ? 'h-6 w-6 animate-pulse ring-4 ring-white/60' : picked ? 'h-5 w-5 ring-2 ring-white' : 'h-4 w-4 hover:scale-125'
+                  } ${dim ? 'opacity-25' : ''} ${live && testable && seen[c.id] && !firing ? 'ring-2 ring-ok' : ''}`}
                   style={{
                     left: `${c.x}%`,
                     top: `${c.y}%`,
-                    borderColor: GROUP_COLOR[c.group],
-                    backgroundColor: active ? GROUP_COLOR[c.group] : `${GROUP_COLOR[c.group]}66`
+                    borderColor: color,
+                    backgroundColor: firing || picked ? color : `${color}66`
                   }}
                 />
               )
@@ -151,20 +235,87 @@ export function BoardDiagram(): JSX.Element {
         )}
       </div>
 
-      {/* legend + hint on one slim line between the board and the detail box */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1">
+      {/* Legend + hint + test button on ONE slim line. Deliberately no wrapping: a
+          second row would push the board up and resize everything on the screen the
+          moment the button's label changed. The hint takes what is left and is
+          truncated instead. */}
+      <div className="flex shrink-0 items-center gap-x-3 overflow-hidden">
         {GROUPS.map((g) => (
-          <span key={g} className="flex items-center gap-1.5 font-mono text-[10px] text-slate-500">
+          <span key={g} className="flex shrink-0 items-center gap-1.5 font-mono text-[10px] text-slate-500">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: GROUP_COLOR[g] }} />
             {t(`board.grp.${g}`)}
           </span>
         ))}
-        <span className="ml-auto font-mono text-[10px] text-slate-500">{t('board.hint')}</span>
+        {/* The hint takes the slack and the button is anchored last with a fixed
+            width, so the label swapping on click cannot make the button move under
+            the cursor — the text beside it simply goes away and comes back. */}
+        <span className="min-w-0 flex-1 truncate text-right font-mono text-[10px] text-slate-500">
+          {live ? '' : t('board.hint')}
+        </span>
+        <button
+          className={`btn w-[5.5rem] shrink-0 px-1.5 py-0.5 text-center text-[10px] ${live ? 'border-ok text-ok' : ''}`}
+          disabled={!connected || (busy && !live)}
+          onClick={() => {
+            setSeen({})
+            if (live) void stopTest()
+            else startTest()
+          }}
+          title={!connected ? t('board.test.disconnected') : busy && !live ? t('board.test.busy') : t('board.test.title')}
+        >
+          {live ? `● ${t('board.test.stop')}` : t('board.test.start')}
+        </button>
       </div>
 
       {/* detail box — full width, FIXED height: the board fits into what is left,
           so selecting a connector never resizes the board and nothing scrolls */}
-      {sel ? (
+      {live ? (
+        <div className="flex h-[9.5rem] shrink-0 flex-col gap-2 rounded-lg border border-ok/50 bg-panel2 p-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-sm font-bold text-ok">{t('board.test.heading')}</span>
+            <span className="text-[11px] text-slate-400">
+              {connected ? t('board.test.instruction') : t('board.test.disconnected')}
+            </span>
+            {/* Whether the suspend actually took is the board's word, not ours: the
+                write needs Idle, so a machine sitting in Alarm keeps its hard limits
+                and the presses WILL alarm. Say which of the two is true. */}
+            <span className={`ml-auto font-mono text-[10px] ${limitsOff ? 'text-warn' : 'text-danger'}`}>
+              {limitsOff ? t('board.test.limitsOff') : t('board.test.limitsOn')}
+            </span>
+          </div>
+          {/* say where the Jog panel went, and how to get it back — the cover is
+              there to make jogging a decision instead of a reflex, not to forbid it */}
+          <p className="text-[10px] leading-snug text-slate-500">{t('board.test.jogHint')}</p>
+          {/* One framed cell per input. The frame is not decoration: the state mark
+              sits at the right edge of its own cell, and without a border it reads as
+              belonging to the neighbouring input instead. */}
+          <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-5 gap-1.5 overflow-y-auto">
+            {CONNECTORS.filter((c) => PIN_SIGNALS[c.id]).map((c) => {
+              const firing = !!activeIds[c.id]
+              const done = !!seen[c.id]
+              return (
+                <div
+                  key={c.id}
+                  className={`flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[11px] transition ${
+                    firing ? 'border-white bg-white/10' : done ? 'border-ok/50 bg-ok/5' : 'border-border'
+                  }`}
+                  title={c.label}
+                >
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${firing ? 'animate-pulse' : ''}`}
+                    style={{ backgroundColor: firing ? '#ffffff' : done ? GROUP_COLOR[c.group] : '#33415580' }}
+                  />
+                  <span className={`truncate ${firing ? 'text-slate-100' : done ? 'text-slate-300' : 'text-slate-500'}`}>
+                    {c.label.split(' · ')[0]}
+                  </span>
+                  <span className={`ml-auto shrink-0 text-[10px] ${firing ? 'text-slate-100' : done ? 'text-ok' : 'text-slate-600'}`}>
+                    {firing ? t('board.test.now') : done ? '✓' : '—'}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : sel ? (
         <div
           className="flex h-[9.5rem] shrink-0 gap-4 rounded-lg border border-border bg-panel2 p-4"
           style={{ borderColor: `${GROUP_COLOR[sel.group]}88` }}

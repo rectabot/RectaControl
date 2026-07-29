@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ControllerEvent, JobProgress, MachineInfo, StatusReport, TransportKind } from '@shared/types'
+import type { ControllerEvent, JobProgress, MachineInfo, StatusReport, TransportKind, UpdateReady } from '@shared/types'
 import { describe, parseCode, getAlarm, getError } from '@shared/messages'
 import { t, type Lang } from '@shared/i18n'
 import { DEFAULT_BINDINGS, type Binding } from './controls'
@@ -490,9 +490,13 @@ interface AppState {
   offsetsOpen: boolean
   /** When true, controller lines aren't echoed to the terminal (e.g. during SD dump). */
   suppressLog: boolean
+  /** Live input test on the Connections screen: connectors light up as their signal
+   *  arrives. Lives here (not in the component) so Diagnostics can switch it on
+   *  while deep-linking to that screen. */
+  pinTest: boolean
   /** Pending app update (set by the updater); drives the auto-popup notification.
    *  null = up to date. */
-  update: { version: string; notes: string[] } | null
+  update: UpdateReady | null
   /** Pending confirmation dialog (null = none). Shared across every guarded
    *  action (disconnect mid-job, quit mid-job, flash mid-job, …). */
   confirm: ConfirmOpts | null
@@ -566,7 +570,13 @@ interface AppState {
   setFilesOpen: (open: boolean) => void
   setOffsetsOpen: (open: boolean) => void
   setSuppressLog: (v: boolean) => void
-  setUpdate: (u: { version: string; notes: string[] } | null) => void
+  /** Begin the live input test: hard limits are suspended for its duration, so a
+   *  switch pressed on purpose reports its state without alarming the machine. */
+  startPinTest: () => void
+  /** End it: re-arm hard limits and offer to clear an alarm the test provoked
+   *  (E-stop always alarms — no setting can stop that one). */
+  stopPinTest: () => Promise<void>
+  setUpdate: (u: UpdateReady | null) => void
   /** Show a confirmation dialog and resolve true (confirmed) / false (cancelled). */
   askConfirm: (opts: ConfirmOpts) => Promise<boolean>
   /** Resolve the open confirm dialog (wired to its buttons). */
@@ -649,6 +659,7 @@ export const useStore = create<AppState>((set, get) => ({
   filesOpen: false,
   offsetsOpen: false,
   suppressLog: false,
+  pinTest: false,
   update: null,
   confirm: null,
 
@@ -745,7 +756,11 @@ export const useStore = create<AppState>((set, get) => ({
           // event) so it RETRIES: the write needs Idle, and the jog that frees the
           // switch is not Idle. A stalled read-back is retried after 1.5 s too, so a
           // dropped line can never leave the warning stuck — or the limits off.
-          if (s.limitsSuspended != null && !hasLimitPin(e.data.pins) && Date.now() - s.limitsPendingAt > 1500)
+          // …except during the input test, where the limits are suspended ON PURPOSE
+          // for as long as it runs. Without this exception the first released switch
+          // would re-arm them and the next press would alarm — the exact noise the
+          // test exists to avoid. stopPinTest() restores them.
+          if (s.limitsSuspended != null && !s.pinTest && !hasLimitPin(e.data.pins) && Date.now() - s.limitsPendingAt > 1500)
             get().restoreLimits()
           return {
             status: e.data,
@@ -879,9 +894,14 @@ export const useStore = create<AppState>((set, get) => ({
           // popup and triggering the same alarm a second time — must raise it again.
           // Errors keep the suppression: a bad program can flood the same code.
           const reRaise = sameAlert && recover!.kind === 'alarm'
+          // …but not over the input test: an alarm raised there was raised on
+          // purpose, and a modal covering the board picture is exactly what the
+          // operator is trying to look at. The footer indicator and the status bar
+          // still say it happened — only the popup stands down.
           const autoOpen =
             recover != null &&
             s.recoveryPopup &&
+            !s.pinTest &&
             (recover.kind === 'alarm' || s.job.running)
           const alertPatch =
             recover && (!sameAlert || reRaise)
@@ -1099,6 +1119,45 @@ export const useStore = create<AppState>((set, get) => ({
   setFilesOpen: (filesOpen) => set({ filesOpen }),
   setOffsetsOpen: (offsetsOpen) => set({ offsetsOpen }),
   setSuppressLog: (suppressLog) => set({ suppressLog }),
+  startPinTest: () => {
+    // Pressing a limit switch on a machine with hard limits armed raises ALARM:1 —
+    // which is right when it happens by accident and pure noise when the operator
+    // is deliberately checking the wiring. Suspending $21 keeps the switch state in
+    // `Pn:` (what the test reads) while the machine stops treating it as a crash.
+    // Everything that makes the suspend safe comes along: the warning banner, the
+    // refusal to start a program, and the localStorage record that survives a crash.
+    set({ pinTest: true })
+    get().suspendLimits()
+    void window.recta.logWrite('ui', 'input test started — hard limits suspended for its duration')
+  },
+  stopPinTest: async () => {
+    set({ pinTest: false })
+    void window.recta.logWrite('ui', 'input test ended')
+    const base = (get().status?.state ?? '').split(':')[0]
+    // An E-stop (or a motor fault) alarms whatever $21 says, so the test can end
+    // with the machine latched. Offer to clear it rather than leaving the operator
+    // in an alarm they were told to cause — but ask, because clearing means a soft
+    // reset and that is never done behind someone's back.
+    if (base === 'Alarm') {
+      const ok = await get().askConfirm({
+        title: t('ui.pinTest.clearTitle', get().lang),
+        body: t('ui.pinTest.clearBody', get().lang),
+        confirmLabel: t('ui.pinTest.clearBtn', get().lang),
+        cancelLabel: t('ui.pinTest.keepBtn', get().lang),
+        tone: 'warn'
+      })
+      // Reset first, unlock after: a hard limit / E-stop / motor fault holds the
+      // controller in its blocking loop, where `$X` alone answers error:79.
+      if (ok) {
+        window.recta.realtime(0x18)
+        setTimeout(() => window.recta.send('$X'), 600)
+      }
+    }
+    // Re-arm. A `$` write needs Idle, so this may be refused right now — the status
+    // handler retries on every report once the test flag is down, and the warning
+    // stays up until the board reads back with bit 0 set.
+    get().restoreLimits()
+  },
   setUpdate: (update) => set({ update }),
   askConfirm: (opts) =>
     new Promise<boolean>((resolve) => {

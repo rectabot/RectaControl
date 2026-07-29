@@ -1,8 +1,11 @@
 /** Wires renderer requests (ipcMain.handle) to the Controller, and forwards
  *  controller events to the renderer over a single 'controller:event' channel. */
 
-import { ipcMain, type BrowserWindow } from 'electron'
+import { app, ipcMain, shell, type BrowserWindow } from 'electron'
 import { Controller } from './controller'
+import { logDir, logEvent, logFromUi } from './logger'
+import { buildReport } from './report'
+import { installUpdate, pendingUpdate, startUpdater } from './updater'
 import { listPorts } from './transport/serial'
 import { detectBoard, flashFile, listVariants, pickUf2 } from './firmware'
 import {
@@ -21,6 +24,8 @@ import type { ConnectOptions, ResumeMap } from '@shared/types'
 
 export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   const controller = new Controller((event) => {
+    // to disk first: the window may be gone, closing, or the very thing that broke
+    logEvent(event)
     // A socket (esp. Ethernet) can still deliver data while the window is closing;
     // sending to a destroyed webContents throws "Object has been destroyed".
     const win = getWindow()
@@ -92,6 +97,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   ipcMain.handle('lib:delete', (_e, name: string) => libDelete(name))
   ipcMain.handle('lib:import', () => libImport())
   ipcMain.handle('lib:reveal', () => libReveal())
+
+  // on-disk log: the renderer contributes its own faults (a UI crash never
+  // reaches main otherwise) and can open the folder for the operator
+  ipcMain.handle('log:write', (_e, level: 'ui' | 'err', text: string) => logFromUi(level, text))
+  ipcMain.handle('log:reveal', () => {
+    shell.openPath(logDir())
+  })
+
+  // one zip with the log, the machine settings and the versions — written locally
+  // and revealed in the file explorer; nothing leaves the PC (see report.ts)
+  ipcMain.handle('report:build', (_e, note: string) => {
+    const res = buildReport(controller.machineInfo, controller.connected, note)
+    shell.showItemInFolder(res.path)
+    return res
+  })
+
+  // automatic updates: main finds and downloads them, the renderer only shows the
+  // toast and asks for the install — which is refused while a program is running
+  ipcMain.handle('app:version', () => app.getVersion())
+  ipcMain.handle('update:pending', () => pendingUpdate())
+  ipcMain.handle('update:install', () => installUpdate(() => controller.isRunning))
+  startUpdater((u) => {
+    const win = getWindow()
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send('update:ready', u)
+  })
 
   return controller
 }

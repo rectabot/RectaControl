@@ -26,7 +26,9 @@ const KEEP_DATED = 30 // dated copies to retain; a change a day for a month
 const FLUSH_MS = 800 // quiet time after the last $n= line that ends a dump
 const MIN_LINES = 20 // a real dump is ~100 lines; ignore a stray single setting
 
-function settingsDir(): string {
+/** The backup folder, created on first use. Exported so the problem report can
+ *  pack the machine settings alongside the log. */
+export function settingsDir(): string {
   const dir = process.env.RECTA_SETTINGS_DIR || join(app.getPath('documents'), 'RectaControl', 'settings')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir

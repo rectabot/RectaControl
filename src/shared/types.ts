@@ -127,6 +127,25 @@ export interface FmEntry {
   size: number
 }
 
+/** A written problem-report zip: where it landed and what is inside it, so the UI
+ *  can show the operator the contents before they decide to send it anywhere. */
+export interface ProblemReport {
+  path: string
+  entries: { name: string; size: number }[]
+}
+
+/** An update the app has found. `manual` means it cannot install itself (portable
+ *  build) and the operator will be sent to the download page instead. */
+export interface UpdateReady {
+  version: string
+  notes: string[]
+  manual: boolean
+}
+
+/** Why an install did not happen: a program is running, the build is portable, or
+ *  there is nothing downloaded to install. */
+export type InstallResult = { ok: true } | { ok: false; reason: 'busy' | 'manual' | 'none' }
+
 /** API surface exposed to the renderer via contextBridge (window.recta). */
 export interface RectaApi {
   listPorts(): Promise<SerialPortInfo[]>
@@ -169,6 +188,22 @@ export interface RectaApi {
   libDelete(name: string): Promise<void>
   libImport(): Promise<string[]>
   libReveal(): Promise<void>
+  /** Add a line to the on-disk log. The renderer's own faults never reach main
+   *  by themselves, and a UI crash is exactly what a fault report needs to carry. */
+  logWrite(level: 'ui' | 'err', text: string): Promise<void>
+  /** Open the log folder in the OS file explorer. */
+  logReveal(): Promise<void>
+  /** Pack the log + machine settings + versions into a .zip, reveal it in the file
+   *  explorer, and return its path and contents. Nothing is uploaded anywhere. */
+  buildReport(note: string): Promise<ProblemReport>
+  /** The running app's own version (package.json / the installer's). */
+  appVersion(): Promise<string>
+  /** An update found before this window subscribed, or null. */
+  pendingUpdate(): Promise<UpdateReady | null>
+  /** Install the downloaded update and restart. Refused while a program runs. */
+  installUpdate(): Promise<InstallResult>
+  /** Subscribe to "an update is ready"; returns an unsubscribe function. */
+  onUpdateReady(cb: (u: UpdateReady) => void): () => void
   /** Subscribe to controller events; returns an unsubscribe function. */
   onEvent(cb: (e: ControllerEvent) => void): () => void
   /** Main asks (X clicked mid-job) whether to quit; returns an unsubscribe fn. */

@@ -31,6 +31,9 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     this.setState({ stack: info.componentStack ?? null })
     // also into the terminal window's log, so it survives the reload
     console.error('[RectaControl] UI crashed:', error, info.componentStack)
+    // and onto disk: the operator will click Reload long before anyone reads this,
+    // and the copy button only helps someone who thinks to press it
+    window.recta.logWrite('err', `UI crashed: ${error.stack ?? `${error.name}: ${error.message}`}\ncomponent stack:${info.componentStack ?? ''}`)
   }
 
   private report(): string {

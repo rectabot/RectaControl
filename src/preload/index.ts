@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConnectOptions, ControllerEvent, RectaApi, ResumeMap } from '@shared/types'
+import type { ConnectOptions, ControllerEvent, RectaApi, ResumeMap, UpdateReady } from '@shared/types'
 
 const api: RectaApi = {
   listPorts: () => ipcRenderer.invoke('ports:list'),
@@ -39,6 +39,17 @@ const api: RectaApi = {
   libDelete: (name: string) => ipcRenderer.invoke('lib:delete', name),
   libImport: () => ipcRenderer.invoke('lib:import'),
   libReveal: () => ipcRenderer.invoke('lib:reveal'),
+  logWrite: (level: 'ui' | 'err', text: string) => ipcRenderer.invoke('log:write', level, text),
+  logReveal: () => ipcRenderer.invoke('log:reveal'),
+  buildReport: (note: string) => ipcRenderer.invoke('report:build', note),
+  appVersion: () => ipcRenderer.invoke('app:version'),
+  pendingUpdate: () => ipcRenderer.invoke('update:pending'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateReady: (cb: (u: UpdateReady) => void) => {
+    const listener = (_e: unknown, u: UpdateReady): void => cb(u)
+    ipcRenderer.on('update:ready', listener)
+    return () => ipcRenderer.removeListener('update:ready', listener)
+  },
   onEvent: (cb: (e: ControllerEvent) => void) => {
     const listener = (_e: unknown, data: ControllerEvent): void => cb(data)
     ipcRenderer.on('controller:event', listener)

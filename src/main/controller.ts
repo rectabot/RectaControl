@@ -18,6 +18,7 @@ import type { Transport } from './transport'
 import { SerialTransport, listPorts } from './transport/serial'
 import { EthernetTransport } from './transport/ethernet'
 import { SettingsBackup } from './settingsBackup'
+import { log } from './logger'
 
 const POLL_MS = 200 // idle status '?' interval (~5 Hz)
 const JOB_POLL_MS = 50 // status '?' interval while running (~20 Hz) — finer tool
@@ -160,6 +161,12 @@ export class Controller {
     return this.running
   }
 
+  /** What `$I` said about this machine — the problem report ships it so a log can
+   *  be read against the firmware and board that produced it. */
+  get machineInfo(): MachineInfo {
+    return { ...this.info }
+  }
+
   // ------------------------------------------------------------------ output
   /** Send a single command line (MDI). Appends newline. */
   sendLine(line: string): void {
@@ -258,6 +265,14 @@ export class Controller {
    *  on their own (collapsed to one console line), and the triggering line is
    *  emitted by the caller so the UI shows what went wrong + how to recover. */
   private abortOnError(): void {
+    // The streamed lines never pass through sendLine (they would flood the log at
+    // 20 acks a second), so without this the log would show the alarm and not one
+    // word about what the machine was cutting when it hit — which is the first
+    // question anyone reading the log has.
+    if (this.running) {
+      const idx = Math.max(0, this.acked - 1)
+      log('job', `aborted at file line ${this.activeFileLine() + 1}: ${this.lines[idx] ?? '?'} (${this.acked}/${this.lines.length} acked)`)
+    }
     this.resetJob()
     this.repoll() // back to gentle idle polling
     this.emit({ type: 'active', data: -1 })

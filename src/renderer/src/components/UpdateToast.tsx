@@ -2,24 +2,41 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 
-/** Auto-popup update notification: when an update becomes available (store.update
- *  set by the updater — no user check needed), a toast appears bottom-right.
- *  Click it → details modal (what's fixed) → "Update now" starts the update.
- *  The actual download/install hooks to electron-updater later (window.recta). */
+/** Auto-popup update notification: the main process finds and downloads the
+ *  update on its own, and when one is ready a toast appears bottom-right.
+ *  Click it → details modal (what's fixed) → "Update now" installs and restarts.
+ *
+ *  Two answers other than "installing" are possible, and both are shown in place
+ *  rather than silently doing nothing: the app refuses to restart while a program
+ *  is streaming (that would cut the job in half), and a portable build cannot
+ *  replace itself, so it opens the download page instead. */
 export function UpdateToast(): JSX.Element | null {
   const t = useT()
   const update = useStore((s) => s.update)
   const setUpdate = useStore((s) => s.setUpdate)
   const pushConsole = useStore((s) => s.pushConsole)
   const [open, setOpen] = useState(false)
+  const [refused, setRefused] = useState<'busy' | 'manual' | 'none' | null>(null)
 
   if (!update) return null
 
-  const start = (): void => {
-    // TODO: window.recta.startUpdate() — quit & install via electron-updater.
-    pushConsole(t('ui.upd.started', { version: update.version }))
-    setOpen(false)
-    setUpdate(null)
+  const start = async (): Promise<void> => {
+    setRefused(null)
+    const res = await window.recta.installUpdate()
+    if (res.ok) {
+      // the app is about to quit and relaunch into the new version
+      pushConsole(t('ui.upd.started', { version: update.version }))
+      setOpen(false)
+      setUpdate(null)
+      return
+    }
+    setRefused(res.reason)
+    if (res.reason === 'manual') {
+      // the download page is already open in the browser — the toast has done its job
+      pushConsole(t('ui.upd.manualConsole', { version: update.version }))
+      setOpen(false)
+      setUpdate(null)
+    }
   }
 
   return (
@@ -67,9 +84,15 @@ export function UpdateToast(): JSX.Element | null {
               </ul>
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+            <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+              {refused === 'busy' && (
+                <span className="flex-1 text-[11px] leading-snug text-warn">{t('ui.upd.busy')}</span>
+              )}
+              {refused === 'none' && (
+                <span className="flex-1 text-[11px] leading-snug text-warn">{t('ui.upd.gone')}</span>
+              )}
               <button
-                className="rounded-md border border-border2 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-400"
+                className="ml-auto rounded-md border border-border2 px-4 py-2 text-sm text-slate-300 transition hover:border-slate-400"
                 onClick={() => setOpen(false)}
               >
                 {t('ui.upd.later')}
@@ -78,7 +101,7 @@ export function UpdateToast(): JSX.Element | null {
                 className="rounded-md bg-[#3390EC] px-4 py-2 text-sm font-semibold text-[#020617] transition hover:opacity-90"
                 onClick={start}
               >
-                {t('ui.upd.now')}
+                {update.manual ? t('ui.upd.download') : t('ui.upd.now')}
               </button>
             </div>
           </div>

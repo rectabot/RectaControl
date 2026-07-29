@@ -64,7 +64,7 @@ export class Controller {
   // marker jumping ~120° per update).
   private motionActive = false
 
-  private info: MachineInfo = { version: null, board: null, options: null, axes: [], spindle: null, spindles: [] }
+  private info: MachineInfo = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
 
   constructor(private emit: (e: ControllerEvent) => void) {}
 
@@ -81,7 +81,7 @@ export class Controller {
     this.transport.onClose((reason) => this.onClose(reason))
 
     // fresh capability info per connection (axes/spindle re-discovered from $I)
-    this.info = { version: null, board: null, options: null, axes: [], spindle: null, spindles: [] }
+    this.info = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
 
     await this.transport.open()
     this.emit({ type: 'connected', data: { kind: opts.kind } })
@@ -406,6 +406,11 @@ export class Controller {
     // The machine-readable enumeration ([SPINDLE:0|-|11|...]) is handled separately
     // below; excluding '|' here keeps an enum line from clobbering the active name.
     const spindle = /\[SPINDLE:([^,|\]]*)\]/.exec(line)
+    // our own build stamp: [PLUGIN:RectaBot firmware v1.0 4axis-rotary-a Jul 29 2026].
+    // grblHAL's [VER:] only moves when the core does and [BOARD:] is a constant, so
+    // this is the one line that says WHICH image is on the board — which the operator
+    // needs after a flash, and support needs in every problem report.
+    const fw = /\[PLUGIN:RectaBot firmware v([^\]]*)\]/.exec(line)
     const spEnum = parseSpindleEntry(line) // machine-readable $SPINDLESH entry, or null
     let changed = false
     if (spEnum) {
@@ -434,6 +439,10 @@ export class Controller {
     }
     if (spindle) {
       this.info.spindle = spindle[1].trim()
+      changed = true
+    }
+    if (fw) {
+      this.info.firmwareBuild = fw[1].trim()
       changed = true
     }
     if (changed) this.emit({ type: 'info', data: { ...this.info } })

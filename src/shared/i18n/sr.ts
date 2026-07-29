@@ -592,6 +592,13 @@ export const sr: Record<string, string> = {
   'ui.fw.detectTitle': 'Ako si ručno ušao: drži BOOT, tapni RUN',
   'ui.fw.flashBtnBusy': 'Flešujem…',
   'ui.fw.flashBtn': 'Flešuj',
+  'ui.fw.onBoard': 'Na ploči',
+  'ui.fw.onBoardUnknown': 'ne javlja se — stariji build ili nije RectaBot firmver',
+  'ui.fw.refused': 'Ploča je odbila $UF2 ({err}). Mora biti u stanju Idle da bi ga prihvatila.',
+  'ui.fwAlarm.title': 'Mašina je u alarmu',
+  'ui.fwAlarm.body':
+    'Mašina u alarmu odbija $UF2 kao i svaku drugu $ komandu, pa ploča ne ulazi u bootloader. Reset to skida i flešovanje može da krene — mašina ne radi i ništa se ne gubi. (Drugi put uvek postoji: drži BOOT, tapni RUN, pa Detektuj.)',
+  'ui.fwAlarm.confirm': 'Resetuj pa nastavi',
   'ui.fw.footer':
     'Posle flešovanja proveri Vodič za izabranu varijantu (broj osa, limit invert, hard limiti). Manuelni bootloader: drži BOOT (SW2), tapni RUN (SW3).',
 

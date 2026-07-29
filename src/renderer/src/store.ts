@@ -601,7 +601,7 @@ export const useStore = create<AppState>((set, get) => ({
   status: null,
   overrides: [100, 100, 100],
   accessory: '',
-  info: { version: null, board: null, options: null, axes: [], spindle: null, spindles: [] },
+  info: { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] },
   travel: null,
   wcsOffsets: {},
   job: emptyJob,

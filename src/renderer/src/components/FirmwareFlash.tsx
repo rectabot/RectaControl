@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { RT } from '@shared/grbl'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import type { BoardDrive, FirmwareVariant } from '@shared/types'
@@ -15,6 +16,10 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   const connected = useStore((s) => s.connected)
   const jobRunning = useStore((s) => s.job.running)
   const askConfirm = useStore((s) => s.askConfirm)
+  // a machine in Alarm refuses `$UF2` like every other `$` command (see below)
+  const alarm = useStore((s) => (s.status?.state ?? '').split(':')[0] === 'Alarm')
+  // what the board says it is running, once $I has come back
+  const firmwareBuild = useStore((s) => s.info.firmwareBuild)
 
   const [variants, setVariants] = useState<FirmwareVariant[]>([])
   const [selected, setSelected] = useState<string>('') // uf2Path
@@ -51,7 +56,31 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
       })
       if (!ok) return
     }
+
+    // A machine in Alarm refuses `$` commands, $UF2 among them — so the board
+    // never reboots, the drive never appears, and fourteen seconds later the app
+    // used to shrug and say "no drive found". The operator is then left to hold
+    // BOOT and tap RUN, wondering what broke. Offer the one thing that unblocks
+    // it instead, and do it here rather than making them find the Reset button.
+    if (alarm) {
+      const ok = await askConfirm({
+        title: t('ui.fwAlarm.title'),
+        body: t('ui.fwAlarm.body'),
+        confirmLabel: t('ui.fwAlarm.confirm'),
+        tone: 'warn'
+      })
+      if (!ok) return
+      window.recta.realtime(RT.softReset)
+      await sleep(900) // let the reset land and the welcome banner pass
+    }
+
     setMsg(t('ui.fw.sendingUf2'))
+    // Watch for the controller's answer: a refused $UF2 comes back as `error:n`
+    // within milliseconds, and saying so beats a silent fourteen-second wait.
+    let refused: string | null = null
+    const off = window.recta.onEvent((e) => {
+      if (e.type === 'line' && /^error:/i.test(e.data.trim())) refused = e.data.trim()
+    })
     try {
       await window.recta.send('$UF2')
     } catch {
@@ -62,14 +91,18 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
       await sleep(700)
       const b = await window.recta.detectBoard()
       if (b) {
+        off()
         setBoard(b)
         setBusy('idle')
         setMsg(null)
         return
       }
+      // the board answered instead of rebooting — no point waiting out the loop
+      if (refused) break
     }
+    off()
     setBusy('idle')
-    setMsg(t('ui.fw.noDrive'))
+    setMsg(refused ? t('ui.fw.refused', { err: refused }) : t('ui.fw.noDrive'))
   }
 
   const pick = async (): Promise<void> => {
@@ -146,6 +179,21 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
       {headerSlot ? createPortal(actions, headerSlot) : null}
       <div className="flex flex-col gap-4 p-4">
         {!headerSlot && actions}
+
+        {/* What is on the board right now. Until the firmware started stamping
+            itself into $I there was no way to answer that except by watching how
+            the machine behaved — and "did my flash take?" is the first question
+            after every flash. Blank when disconnected, honest when the board is
+            running something that is not ours. */}
+        {connected && (
+          <div className="flex items-baseline gap-2 rounded-md border border-border bg-panel2 px-3 py-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{t('ui.fw.onBoard')}</span>
+            <span className={`font-mono text-xs ${firmwareBuild ? 'text-ok' : 'text-slate-500'}`}>
+              {firmwareBuild ?? t('ui.fw.onBoardUnknown')}
+            </span>
+          </div>
+        )}
+
         {/* choose image */}
         <div>
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">{t('ui.fw.step1')}</div>

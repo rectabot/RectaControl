@@ -608,6 +608,13 @@ export const en: Record<string, string> = {
   'ui.fw.detectTitle': 'If you entered manually: hold BOOT, tap RUN',
   'ui.fw.flashBtnBusy': 'Flashing…',
   'ui.fw.flashBtn': 'Flash',
+  'ui.fw.onBoard': 'On the board',
+  'ui.fw.onBoardUnknown': 'not reported — an older build, or not RectaBot firmware',
+  'ui.fw.refused': 'The board refused $UF2 ({err}). It has to be Idle to accept it.',
+  'ui.fwAlarm.title': 'The machine is in an alarm',
+  'ui.fwAlarm.body':
+    'A machine in alarm refuses $UF2 like every other $ command, so the board will not enter the bootloader. Reset clears it and the flash can go ahead — the machine is not moving and nothing is lost. (The other way in is always there: hold BOOT, tap RUN, then Detect.)',
+  'ui.fwAlarm.confirm': 'Reset, then continue',
   'ui.fw.footer':
     'After flashing, check the Guide for the chosen variant (axis count, limit invert, hard limits). Manual bootloader: hold BOOT (SW2), tap RUN (SW3).',
 

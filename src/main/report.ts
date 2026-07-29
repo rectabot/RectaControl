@@ -49,6 +49,9 @@ function summary(info: MachineInfo, connected: boolean, note: string): string {
   L.push('')
   L.push(`connected       ${connected ? 'yes' : 'no'}`)
   L.push(`firmware        ${info.version ?? 'unknown'}`)
+  // which of OUR images is on the board — the first thing to check when a fault
+  // report and a fix do not seem to agree
+  L.push(`build           ${info.firmwareBuild ?? 'not a RectaBot build (or too old to say)'}`)
   L.push(`board           ${info.board ?? 'unknown'}`)
   L.push(`options         ${info.options ?? 'unknown'}`)
   L.push(`axes            ${info.axes.join('') || 'unknown'}`)

@@ -53,6 +53,10 @@ export interface MachineInfo {
   axes: string[]
   /** Active spindle name from `[SPINDLE:...]` in $I, e.g. 'PWM' or 'Huanyang'. */
   spindle: string | null
+  /** RectaBot's own build stamp from $I, e.g. '1.0 4axis-rotary-a Jul 29 2026'.
+   *  Answers "which firmware is on this board" — grblHAL's version and the board
+   *  name cannot. null on a board running anything but our firmware. */
+  firmwareBuild: string | null
   /** Registered spindles enumerated from `$SPINDLESH` (machine-readable), so the
    *  $395 "Default spindle" picker lists the drivers this firmware actually has
    *  (analog PWM + every compiled Modbus VFD) instead of a hard-coded 0/1. */

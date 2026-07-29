@@ -8,6 +8,13 @@ import { useT, useLabel } from '../i18n'
 const DEFAULT_AXES = ['X', 'Y', 'Z']
 const WCS_LIST = ['G54', 'G55', 'G56', 'G57', 'G58', 'G59']
 
+/** Height the axis block never goes under — four rows and the gaps between them.
+ *  One row is 50 px (a 28 px value line + a 10 px secondary line + 2 px between
+ *  them, inside 4 px padding and a 1 px border top and bottom) and the gap is 6 px:
+ *  4 × 50 + 3 × 6. Four because that is the axis count the panel was laid out for;
+ *  a machine reporting fewer must not shrink the panel around it. */
+const MIN_BLOCK_PX = 218
+
 export function DRO(): JSX.Element {
   const t = useT()
   const L = useLabel()
@@ -123,8 +130,13 @@ export function DRO(): JSX.Element {
           onClick={() => zero(axes)}
         />
 
-        {/* per-axis rows */}
-        <div className="flex flex-1 flex-col gap-1.5">
+        {/* Per-axis rows. The block holds the height of FOUR rows whatever the
+            machine reports, and the rows share it: on a 3-axis machine they simply
+            grow instead of leaving a gap, and the two tall action buttons beside
+            them (which stretch to this block) keep their full height — squashed,
+            their stacked letters used to smear from top to bottom. A 5-axis machine
+            is past the floor and grows normally. */}
+        <div className="flex flex-1 flex-col gap-1.5" style={{ minHeight: MIN_BLOCK_PX }}>
           {axes.map((axis, i) => (
             <AxisCell
               key={axis}
@@ -194,7 +206,8 @@ function AxisCell({
   }
 
   return (
-    <div className="flex items-stretch gap-2">
+    // flex-1: the rows divide the block's height between them (see MIN_BLOCK_PX)
+    <div className="flex flex-1 items-stretch gap-2">
       {/* set this axis to zero (X0/Y0/Z0/A0) */}
       <button className={btn} disabled={!enabled} onClick={onZero} title={t('ui.dro.zeroTitle')}>
         {axis}0

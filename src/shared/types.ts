@@ -110,12 +110,27 @@ export interface ResumeMap {
   preambleLines: number // number of synthetic preamble lines before the file tail
 }
 
+/** The machine layout an image was built for, read from the variant's build.conf
+ *  so this never drifts from what was actually compiled. */
+export interface VariantConfig {
+  /** N_AXIS the image was built with. */
+  axes: number
+  /** Axis letters carrying a second motor, e.g. ['Y'] — ganged or auto-squared. */
+  secondMotor: string[]
+  /** True when that second motor has its own limit switch (auto-square). */
+  autoSquare: boolean
+}
+
 /** A prebuilt firmware image available to flash. */
 export interface FirmwareVariant {
   id: string // "<folder>/<file>"
+  /** Variant folder name — also the token our build stamp reports in $I. */
+  variant: string
   label: string
   uf2Path: string
   sizeKB: number
+  /** What it was built for, or null when build.conf is missing/unreadable. */
+  config: VariantConfig | null
 }
 
 /** A detected RP2 UF2 bootloader mass-storage drive. */

@@ -13,6 +13,10 @@ export const en: Record<string, string> = {
   'ui.settings.reading': 'Reading…',
   'ui.settings.export': 'Export',
   'ui.settings.import': 'Import',
+  'ui.settings.importRefusedTitle': 'The board refused some settings',
+  'ui.settings.importRefused':
+    '{count} setting(s) from the file did not go onto the board, and the rest did. Each was tried twice, so this is not an ordering problem — the board does not accept these values in its current state or with this firmware. Refused: {list}',
+  'ui.settings.importRefusedOk': 'Understood',
   'ui.settings.mode.basic': 'Basic',
   'ui.settings.mode.all': 'All',
   'ui.settings.search': 'Search settings (name, number, description)…',
@@ -615,6 +619,27 @@ export const en: Record<string, string> = {
   'ui.fwAlarm.body':
     'A machine in alarm refuses $UF2 like every other $ command, so the board will not enter the bootloader. Reset clears it and the flash can go ahead — the machine is not moving and nothing is lost. (The other way in is always there: hold BOOT, tap RUN, then Detect.)',
   'ui.fwAlarm.confirm': 'Reset, then continue',
+
+  // Does the image fit the board? The badges are quiet by design — only the image
+  // already on the board and the ones that would change the motor layout say
+  // anything, because a mark on every row is a mark nobody reads.
+  'ui.fwFit.same': '✓ on the board',
+  'ui.fwFit.shortAxes': '{from} → {to} axes',
+  'ui.fwFit.shortLose': 'no 2nd motor',
+  'ui.fwFit.shortGain': 'adds a 2nd motor',
+  'ui.fwFit.unchecked': 'cannot be checked',
+  'ui.fwFit.noBoard':
+    'Connect to the board first and the app will mark which of these images matches it. Disconnected, it has nothing to compare against.',
+  'ui.fwFit.title': 'This image is built for a different machine',
+  'ui.fwFit.bodyAxes': 'Your board runs {from} axes; this image is built for {to}.',
+  'ui.fwFit.bodyLose':
+    'This image drives no second motor. If your gantry has two Y motors, only one of them will be stepped — one side moves, the other stays put, and the frame racks.',
+  'ui.fwFit.bodyGain':
+    'This image drives a second motor on an axis your board currently does not, so a motor channel that is idle today will start moving.',
+  'ui.fwFit.bodyWipe':
+    'Either change also resets every setting to factory: travel, steps, speeds, the spindle, and the static IP (the board then comes up on DHCP and disappears off the network). The app has been backing your settings up on every read, so they can be imported back afterwards.',
+  'ui.fwFit.confirm': 'Flash anyway',
+  'ui.fwFit.cancel': 'Choose another image',
   'ui.fw.footer':
     'After flashing, check the Guide for the chosen variant (axis count, limit invert, hard limits). Manual bootloader: hold BOOT (SW2), tap RUN (SW3).',
 

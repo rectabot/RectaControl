@@ -11,6 +11,10 @@ export const sr: Record<string, string> = {
   'ui.settings.reading': 'Čitam…',
   'ui.settings.export': 'Izvezi',
   'ui.settings.import': 'Uvezi',
+  'ui.settings.importRefusedTitle': 'Ploča je odbila neka podešavanja',
+  'ui.settings.importRefused':
+    'Iz fajla nije prošlo {count} podešavanja, ostala jesu. Svako je pokušano dvaput, znači nije u pitanju redosled — ploča ne prihvata te vrednosti u trenutnom stanju ili sa ovim firmverom. Odbijeno: {list}',
+  'ui.settings.importRefusedOk': 'Razumem',
   'ui.settings.mode.basic': 'Osnovno',
   'ui.settings.mode.all': 'Sve',
   'ui.settings.search': 'Pretraži podešavanja (naziv, broj, opis)…',
@@ -599,6 +603,24 @@ export const sr: Record<string, string> = {
   'ui.fwAlarm.body':
     'Mašina u alarmu odbija $UF2 kao i svaku drugu $ komandu, pa ploča ne ulazi u bootloader. Reset to skida i flešovanje može da krene — mašina ne radi i ništa se ne gubi. (Drugi put uvek postoji: drži BOOT, tapni RUN, pa Detektuj.)',
   'ui.fwAlarm.confirm': 'Resetuj pa nastavi',
+
+  'ui.fwFit.same': '✓ na ploči',
+  'ui.fwFit.shortAxes': '{from} → {to} ose',
+  'ui.fwFit.shortLose': 'bez 2. motora',
+  'ui.fwFit.shortGain': 'dodaje 2. motor',
+  'ui.fwFit.unchecked': 'ne može da se proveri',
+  'ui.fwFit.noBoard':
+    'Poveži se prvo sa pločom pa će app označiti koji od ovih fajlova joj odgovara. Bez veze nema sa čim da uporedi.',
+  'ui.fwFit.title': 'Ovaj firmver je za drugačiju mašinu',
+  'ui.fwFit.bodyAxes': 'Tvoja ploča radi na {from} ose, a ovaj firmver je građen za {to}.',
+  'ui.fwFit.bodyLose':
+    'Ovaj firmver ne pobuđuje drugi motor. Ako ti portal ima dva Y motora, koraci idu samo na jedan — jedna strana se pomera, druga stoji, i ram se zakosi.',
+  'ui.fwFit.bodyGain':
+    'Ovaj firmver pobuđuje drugi motor na osi na kojoj ga tvoja ploča sada nema, pa će kanal koji danas miruje početi da se okreće.',
+  'ui.fwFit.bodyWipe':
+    'I jedna i druga promena vraćaju SVA podešavanja na fabrička: hod, korake, brzine, vreteno i fiksnu IP adresu (ploča onda podigne DHCP i nestane sa mreže). App ti čuva rezervnu kopiju podešavanja pri svakom čitanju, pa se posle mogu uvesti nazad.',
+  'ui.fwFit.confirm': 'Ipak flešuj',
+  'ui.fwFit.cancel': 'Izaberi drugi firmver',
   'ui.fw.footer':
     'Posle flešovanja proveri Vodič za izabranu varijantu (broj osa, limit invert, hard limiti). Manuelni bootloader: drži BOOT (SW2), tapni RUN (SW3).',
 

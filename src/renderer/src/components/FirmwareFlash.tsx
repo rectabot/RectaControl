@@ -1,11 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { RT } from '@shared/grbl'
+import { fitVariant, readBoardLayout, type Fit } from '@shared/firmware-match'
 import { useStore } from '../store'
-import { useT } from '../i18n'
+import { useT, type TFunc } from '../i18n'
 import type { BoardDrive, FirmwareVariant } from '@shared/types'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+/** The badge's few words: long enough to say what changes, short enough to sit
+ *  at the end of a row. null for images that agree with the board — silence is
+ *  the right answer there, and marking all seven rows would mark none of them. */
+function fitShort(fit: Fit, t: TFunc): string | null {
+  if (fit.kind === 'same') return t('ui.fwFit.same')
+  if (fit.kind !== 'differs') return null
+  const parts: string[] = []
+  if (fit.axes) parts.push(t('ui.fwFit.shortAxes', { from: fit.axes[0], to: fit.axes[1] }))
+  if (fit.secondMotor === false) parts.push(t('ui.fwFit.shortLose'))
+  if (fit.secondMotor === true) parts.push(t('ui.fwFit.shortGain'))
+  return `⚠ ${parts.join(' · ')}`
+}
 
 /** Flash RectaBot board firmware over the RP2350 UF2 bootloader. Body only —
  *  lives inside the Settings window's Firmware tab (no modal chrome).
@@ -19,7 +33,12 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   // a machine in Alarm refuses `$UF2` like every other `$` command (see below)
   const alarm = useStore((s) => (s.status?.state ?? '').split(':')[0] === 'Alarm')
   // what the board says it is running, once $I has come back
-  const firmwareBuild = useStore((s) => s.info.firmwareBuild)
+  const info = useStore((s) => s.info)
+  const firmwareBuild = info.firmwareBuild
+  // Survives the disconnect that $UF2 causes — the store only clears info when a
+  // *new* connection opens — so the layout is still known at the moment of the
+  // flash, which is exactly when it is needed.
+  const layout = useMemo(() => readBoardLayout(info), [info])
 
   const [variants, setVariants] = useState<FirmwareVariant[]>([])
   const [selected, setSelected] = useState<string>('') // uf2Path
@@ -115,8 +134,44 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
 
   const uf2Path = selected || customPath || ''
 
+  /** How each image relates to the board we last spoke to. Recomputed rather
+   *  than stored: `variants` and `layout` are both cheap and both can change
+   *  under us (a reconnect, a rebuilt image). */
+  const fits = useMemo(() => {
+    const m = new Map<string, Fit>()
+    for (const v of variants) m.set(v.uf2Path, fitVariant(layout, v))
+    return m
+  }, [variants, layout])
+
+  /** Spell out what the mismatch means, in the operator's terms rather than the
+   *  build system's. Both halves are real consequences we have already paid for:
+   *  the wipe took two hours to diagnose, the undriven motor nearly took a frame. */
+  const mismatchBody = (fit: Fit): string => {
+    const parts: string[] = []
+    if (fit.axes) parts.push(t('ui.fwFit.bodyAxes', { from: fit.axes[0], to: fit.axes[1] }))
+    if (fit.secondMotor === false) parts.push(t('ui.fwFit.bodyLose'))
+    if (fit.secondMotor === true) parts.push(t('ui.fwFit.bodyGain'))
+    parts.push(t('ui.fwFit.bodyWipe'))
+    return parts.join(' ')
+  }
+
   const flash = async (): Promise<void> => {
     if (!uf2Path || !board) return
+
+    // The last gate before the copy. Everything up to here is reversible; this
+    // is not — the moment the image lands, the settings are gone with it.
+    const fit = fits.get(uf2Path)
+    if (fit?.kind === 'differs') {
+      const ok = await askConfirm({
+        title: t('ui.fwFit.title'),
+        body: mismatchBody(fit),
+        confirmLabel: t('ui.fwFit.confirm'),
+        cancelLabel: t('ui.fwFit.cancel'),
+        tone: 'danger'
+      })
+      if (!ok) return
+    }
+
     setBusy('flashing')
     setMsg(t('ui.fw.flashing'))
     try {
@@ -198,22 +253,39 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
         <div>
           <div className="mb-2 font-mono text-[11px] uppercase tracking-wider text-slate-500">{t('ui.fw.step1')}</div>
           <div className="flex flex-col gap-1">
-            {variants.map((v) => (
-              <label key={v.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-panel2">
-                <input
-                  type="radio"
-                  name="fw"
-                  className="accent-brand"
-                  checked={selected === v.uf2Path}
-                  onChange={() => {
-                    setSelected(v.uf2Path)
-                    setCustomPath(null)
-                  }}
-                />
-                <span className="flex-1 truncate font-mono text-sm text-slate-200">{v.label}</span>
-                <span className="font-mono text-[10px] text-slate-500">{v.sizeKB} KB</span>
-              </label>
-            ))}
+            {variants.map((v) => {
+              // Marked only where it carries information: the one already on the
+              // board, and the ones that would change the motor layout. A badge
+              // on every row is a badge nobody reads.
+              const fit = fits.get(v.uf2Path)
+              const short = fit ? fitShort(fit, t) : null
+              return (
+                <label key={v.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-panel2">
+                  <input
+                    type="radio"
+                    name="fw"
+                    className="accent-brand"
+                    checked={selected === v.uf2Path}
+                    onChange={() => {
+                      setSelected(v.uf2Path)
+                      setCustomPath(null)
+                    }}
+                  />
+                  <span className="flex-1 truncate font-mono text-sm text-slate-200">{v.label}</span>
+                  {short && (
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                        fit?.kind === 'same' ? 'bg-ok/10 text-ok' : 'bg-warn/10 text-warn'
+                      }`}
+                      title={fit?.kind === 'differs' ? mismatchBody(fit) : undefined}
+                    >
+                      {short}
+                    </span>
+                  )}
+                  <span className="font-mono text-[10px] text-slate-500">{v.sizeKB} KB</span>
+                </label>
+              )
+            })}
             <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-panel2">
               <input
                 type="radio"
@@ -225,8 +297,20 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
               <span className="flex-1 truncate font-mono text-sm text-slate-300">
                 {fileName ? t('ui.fw.custom', { name: fileName }) : t('ui.fw.pickFile')}
               </span>
+              {fileName && (
+                <span className="shrink-0 rounded bg-slate-500/10 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                  {t('ui.fwFit.unchecked')}
+                </span>
+              )}
             </label>
           </div>
+
+          {/* Without a $I from the board there is nothing to compare against, and
+              an unmarked list would read as "all of these are fine". Say why the
+              marks are missing instead of leaving it to be inferred. */}
+          {layout.variant == null && layout.axes == null && (
+            <div className="mt-2 font-mono text-[10px] leading-relaxed text-slate-500">{t('ui.fwFit.noBoard')}</div>
+          )}
         </div>
 
         {msg && <div className="font-mono text-xs text-slate-400">{msg}</div>}

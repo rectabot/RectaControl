@@ -19,7 +19,12 @@ export function Console(): JSX.Element {
   const [history, setHistory] = useState<string[]>([])
   const [hIdx, setHIdx] = useState(-1)
   const [copied, setCopied] = useState(false)
-  const [showTime, setShowTime] = useState(() => localStorage.getItem('consoleTime') !== '0')
+  // Off unless asked for. The timestamps earn their place while commissioning —
+  // the ten seconds between `M3 S12000` and its `ok` is how you prove the spindle
+  // ramp ($340) is real — but that is a day-one job, and the on-disk log carries
+  // the same times to the millisecond for everything after it. Day to day the
+  // column just costs the text width it needs.
+  const [showTime, setShowTime] = useState(() => localStorage.getItem('consoleTime') === '1')
   const endRef = useRef<HTMLDivElement>(null)
 
   const toggleTime = (): void => {
@@ -96,12 +101,19 @@ export function Console(): JSX.Element {
             {copied ? `✓ ${t('ui.console.copied')}` : `⧉ ${t('ui.console.copy')}`}
           </button>
         </div>
-        <div className="h-full select-text overflow-y-auto bg-panel2 px-3 py-2 font-mono text-xs leading-relaxed">
+        {/* Long lines wrap instead of scrolling sideways. A terminal must never
+            hide the end of what the machine said, and a horizontal scrollbar does
+            exactly that — the tail of an `error:` or a `[MSG:…]` ends up off-screen
+            in the one pane you read when something is wrong. The timestamp keeps its
+            own column, so a wrapped line stays indented under its text. */}
+        <div className="h-full select-text overflow-y-auto overflow-x-hidden bg-panel2 px-3 py-2 font-mono text-xs leading-relaxed">
           {lines.map((l, i) => (
-            <div key={i} className={lineColor(l.text)}>
-              {showTime && <span className="mr-2 text-slate-600">{fmtTime(l.time)}</span>}
-              {l.text}
-              {l.n > 1 && <span className="text-slate-500"> (×{l.n})</span>}
+            <div key={i} className={`flex gap-2 ${lineColor(l.text)}`}>
+              {showTime && <span className="shrink-0 text-slate-600">{fmtTime(l.time)}</span>}
+              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words">
+                {l.text}
+                {l.n > 1 && <span className="text-slate-500"> (×{l.n})</span>}
+              </span>
             </div>
           ))}
           <div ref={endRef} />

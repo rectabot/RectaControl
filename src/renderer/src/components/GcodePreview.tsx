@@ -235,7 +235,7 @@ export function GcodePreview(): JSX.Element {
       <div
         ref={scrollBoxRef}
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        className={`h-full overflow-auto bg-panel2 px-2 py-1 ${CELL}`}
+        className={`h-full overflow-y-auto overflow-x-hidden bg-panel2 px-2 py-1 ${CELL}`}
       >
         {/* full-height spacer preserves the real scrollbar; the mounted window is
             offset into place, so scrolling behaves exactly as with every row present */}
@@ -249,9 +249,16 @@ export function GcodePreview(): JSX.Element {
                   key={i}
                   style={{ height: ROW }}
                   className={`flex gap-3 rounded px-1 ${active ? 'bg-brand/20' : ''}`}
+                  // the full line on hover, since an over-long one is cut off below
+                  title={l}
                 >
                   <span className="w-10 shrink-0 select-none text-right text-slate-600">{i + 1}</span>
-                  <span className="whitespace-pre">{colorize(l)}</span>
+                  {/* Cut with an ellipsis rather than wrapped: every row here MUST be
+                      exactly ROW px tall — the mounted window and the auto-scroll to
+                      the executing line are both plain index × ROW arithmetic, and a
+                      line that wrapped to two rows would send the highlight to the
+                      wrong place on a long program. Edit mode shows the whole line. */}
+                  <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-pre">{colorize(l)}</span>
                 </div>
               )
             })}

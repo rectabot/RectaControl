@@ -6,6 +6,22 @@ import { DEFAULT_BINDINGS, type Binding } from './controls'
 
 const MAX_CONSOLE = 1000
 
+/** What we know about the machine before it has said anything. Everything here is
+ *  answered by `$I`, which only arrives a moment AFTER a connection opens — so
+ *  this is also what a new connection resets to, rather than carrying the last
+ *  board's answers into the next one. Flash a 3-axis firmware onto a machine the
+ *  app had learned as 4-axis and the stale axis list met three fresh positions:
+ *  the DRO asked for a fourth number that no longer existed. */
+const EMPTY_INFO: MachineInfo = {
+  version: null,
+  board: null,
+  options: null,
+  axes: [],
+  spindle: null,
+  firmwareBuild: null,
+  spindles: []
+}
+
 /** One terminal entry. `time` is when it arrived; `n` counts collapsed repeats
  *  (an identical consecutive line bumps the count instead of flooding). */
 export interface ConsoleLine {
@@ -601,7 +617,7 @@ export const useStore = create<AppState>((set, get) => ({
   status: null,
   overrides: [100, 100, 100],
   accessory: '',
-  info: { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] },
+  info: EMPTY_INFO,
   travel: null,
   wcsOffsets: {},
   job: emptyJob,
@@ -676,6 +692,10 @@ export const useStore = create<AppState>((set, get) => ({
           return {
             connected: true,
             connKind: e.data.kind,
+            // the board on the other end may not be the one we last spoke to —
+            // a different firmware, a different machine — so forget what we knew
+            // and let this connection's own $I say who it is
+            info: EMPTY_INFO,
             // A crash / pulled cable mid-suspend left the board with hard limits
             // off. Pick the pending restore back up so the warning is visible and
             // the first clear status report re-arms them.

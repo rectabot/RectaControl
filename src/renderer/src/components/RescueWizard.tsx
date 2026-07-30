@@ -48,6 +48,10 @@ function Mark({ state }: { state: StepState }): React.JSX.Element {
 export function RescueWizard(): React.JSX.Element | null {
   const t = useT()
   const open = useStore((s) => s.rescueWizardOpen)
+  // Opened by the detector, or by hand from Diagnostics? The subtitle asserted a
+  // fault either way, so a healthy board opened out of curiosity was told it was
+  // broken. It now says what was detected only when something was.
+  const suggested = useStore((s) => s.rescueSuggested)
   const setOpen = useStore((s) => s.setRescueWizardOpen)
   const setNoReconnect = useStore((s) => s.setNoReconnect)
   const setFirmwareOpen = useStore((s) => s.setFirmwareOpen)
@@ -89,19 +93,22 @@ export function RescueWizard(): React.JSX.Element | null {
   const run = async (): Promise<void> => {
     setRunning(true)
     setFinished(false)
-    // The board is about to go away on purpose, twice. Hold off the app-wide
-    // reconnect so it does not race us for the port, and tell the backup that what
-    // comes back may be factory values rather than this machine.
-    setNoReconnect(true)
+    // Whatever the board dumps after this describes the firmware, not the machine.
     await window.recta.markSettingsFactory()
 
     try {
       // ---- 1. erase settings ------------------------------------------------
+      // The app-wide reconnect is deliberately left ARMED here. The board reboots on
+      // receipt and the link drops within the second — that drop is the event the
+      // reconnect keys on, and it is the only thing that brings the board back for
+      // the probe below to reach. Suppressing it "because the board is meant to go
+      // away" broke this step on the first hardware run: the wipe worked, the board
+      // came back, and the app sat there with no session, reported a failure, and
+      // escalated to the bootloader for nothing.
       set('wipe', 'busy')
       setNote(t('ui.rescue.note.wiping'))
       await window.recta.rescueSend('wipe')
       await sleep(2500) // the board reboots on receipt; do not probe into the reset
-      setNoReconnect(false) // let the reconnect pick it up as it comes back
       if (await waitForParser()) {
         set('wipe', 'ok')
         set('reflash', 'skipped')
@@ -125,9 +132,27 @@ export function RescueWizard(): React.JSX.Element | null {
       }
       set('reflash', 'busy')
       setNote(t('ui.rescue.note.bootloader'))
+      // Now the suppression is right: the board is going to sit in the bootloader,
+      // where there is nothing to connect to and a reconnect loop would only hunt.
       setNoReconnect(true)
+      // Windows opens a folder window on the bootloader drive a moment after it
+      // mounts, and it lands on top of this dialog — the operator is left reading
+      // instructions that are no longer on screen. Same treatment as the flash flow:
+      // hold the app in front, then minimise that window once the drive is up.
+      // Minimised rather than closed, because while the drive is live it is also the
+      // manual fallback — a .uf2 dragged onto it flashes the board without us.
+      await window.recta.pinWindow(true)
       await window.recta.rescueSend('bootsel')
-      await sleep(2500)
+      for (let i = 0; i < 12; i++) {
+        await sleep(700)
+        const b = await window.recta.detectBoard()
+        if (!b) continue
+        await window.recta.dismissDriveWindow(b.drive, 'minimize')
+        await sleep(1200) // Explorer opens it after the mount, not with it — sweep twice
+        await window.recta.dismissDriveWindow(b.drive, 'minimize')
+        break
+      }
+      await window.recta.pinWindow(false)
       setNote(t('ui.rescue.note.pickImage'))
       setFirmwareOpen(true)
       setFinished(true) // the operator continues in the firmware panel from here
@@ -185,7 +210,9 @@ export function RescueWizard(): React.JSX.Element | null {
       <div className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-2xl">
         <div className="shrink-0 border-b border-border px-6 py-3">
           <h2 className="text-sm font-semibold text-slate-100">{t('ui.rescue.title')}</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-slate-400">{t('ui.rescue.subtitle')}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-slate-400">
+            {t(suggested ? 'ui.rescue.subtitle' : 'ui.rescue.subtitleManual')}
+          </p>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">

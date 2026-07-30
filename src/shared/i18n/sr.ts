@@ -888,6 +888,7 @@ export const sr: Record<string, string> = {
   // ── App-level ──────────────────────────────────────────────────────────────
   'ui.rescue.title': 'Oporavak ploče',
   'ui.rescue.subtitle': 'Ploča odgovara na upit o stanju ali ignoriše komande. To su najčešće podešavanja sa kojima ne ume da radi, a ne pokvarena ploča — ovo je vraća, počevši od najjeftinijeg koraka.',
+  'ui.rescue.subtitleManual': 'Za ploču koja te pozdravi pa ignoriše svaku komandu. Briše podešavanja, restartuje ploču i vraća tvoja podešavanja — počevši od najjeftinijeg koraka, i svaki se proveri pre nego što se ponudi sledeći.',
   'ui.rescue.step.wipe': 'Obriši podešavanja i restartuj ploču',
   'ui.rescue.step.reflash': 'Preflešuj firmver (samo ako brisanje nije bilo dovoljno)',
   'ui.rescue.step.restore': 'Vrati tvoja podešavanja',

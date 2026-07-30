@@ -915,6 +915,7 @@ export const en: Record<string, string> = {
   // ── App-level ──────────────────────────────────────────────────────────────
   'ui.rescue.title': 'Recover the board',
   'ui.rescue.subtitle': 'The board is answering status requests but ignoring commands. That is usually settings it cannot work with, not a broken board — this puts it back, cheapest step first.',
+  'ui.rescue.subtitleManual': 'For a board that greets you and then ignores every command. It erases the settings, restarts the board, and puts your own settings back — cheapest step first, and each one is checked before the next is offered.',
   'ui.rescue.step.wipe': 'Erase the settings and restart the board',
   'ui.rescue.step.reflash': 'Reflash the firmware (only if erasing was not enough)',
   'ui.rescue.step.restore': 'Put your settings back',

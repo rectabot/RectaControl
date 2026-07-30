@@ -101,30 +101,78 @@ export async function applySettings(
   // it by one — see `bulkWriting` in the store.
   useStore.getState().setBulkWriting(true)
   try {
-    const refused: string[] = []
+    // Let whatever is already in flight finish. A restore starts the moment the
+    // board answers again, which after a reboot is in the middle of the app's own
+    // $#, $$, $G, $I, $SPINDLESH burst — every one of them trailing an `ok` with
+    // nobody's name on it.
+    await quiet()
+
+    // Write, check, rewrite what did not take, check again. Acks are used for
+    // PACING ONLY and their verdict is discarded: one stray `ok` from something
+    // else shifts every reply-to-command match after it by one, which is how a
+    // refused `$20` got credited to its neighbour and never made the retry list —
+    // the machine kept its soft limits off and the restore said it was fine
+    // (30 Jul 2026). What the board holds afterwards is the only honest answer, so
+    // that is what decides both the retry and the report.
     let done = 0
     for (const line of lines) {
-      if (await sendSetting(line)) refused.push(line)
+      await sendSetting(line)
       onProgress?.(++done, lines.length)
     }
-    for (const line of refused) await sendSetting(line)
 
-    // Verify by reading the board, not by trusting what came back while writing.
-    // A restore that reports success and leaves soft limits off is the failure
-    // this whole routine exists to prevent, and on 30 Jul 2026 it did exactly
-    // that — every line acked, `$20` still 0.
-    const actual = await readBack()
-    const missed: string[] = []
-    for (const line of lines) {
-      const m = /^\$(\d+)=(.*)$/.exec(line)
-      if (!m) continue
-      const now = actual.get(m[1])
-      if (now === undefined) missed.push(`${line} → not on this board`)
-      else if (!same(now, m[2].trim())) missed.push(`${line} → board says ${now}`)
+    // A second pass fixes the ordering the file cannot express: a dump is written
+    // in numeric order while `$20` (soft limits) is refused until `$22` (homing) is
+    // on, several lines later.
+    let missed = await diff(lines)
+    if (missed.length) {
+      await quiet()
+      for (const { line } of missed) await sendSetting(line)
+      missed = await diff(lines)
     }
 
-    return { total: lines.length, refused: missed }
+    return {
+      total: lines.length,
+      refused: missed.map((m) => (m.now === null ? `${m.line} → not on this board` : `${m.line} → board says ${m.now}`))
+    }
   } finally {
     useStore.getState().setBulkWriting(false)
   }
+}
+
+/** Read the board and report every line the file and the board disagree on. */
+async function diff(lines: string[]): Promise<{ line: string; now: string | null }[]> {
+  const actual = await readBack()
+  const out: { line: string; now: string | null }[] = []
+  for (const line of lines) {
+    const m = /^\$(\d+)=(.*)$/.exec(line)
+    if (!m) continue
+    const now = actual.get(m[1])
+    if (now === undefined) out.push({ line, now: null })
+    else if (!same(now, m[2].trim())) out.push({ line, now })
+  }
+  return out
+}
+
+/** Wait until nothing has arrived from the board for a moment, so a reply left over
+ *  from somebody else's command cannot be mistaken for an answer to ours. */
+function quiet(idleMs = 600, maxMs = 4000): Promise<void> {
+  return new Promise((resolve) => {
+    let off: (() => void) | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const finish = (): void => {
+      off?.()
+      off = null
+      if (timer) clearTimeout(timer)
+      resolve()
+    }
+    const bump = (): void => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(finish, idleMs)
+    }
+    off = window.recta.onEvent((ev) => {
+      if (ev.type === 'line' && off) bump()
+    })
+    bump()
+    setTimeout(finish, maxMs)
+  })
 }

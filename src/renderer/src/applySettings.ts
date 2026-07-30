@@ -87,9 +87,16 @@ function same(a: string, b: string): boolean {
  *  until the file and the board were diffed by hand. Whatever is still refused after
  *  the retry is a real mismatch and is reported.
  */
+/** Where the time goes, as a share of this routine's whole job. Writing dominates;
+ *  the checks are a `$$` each; the restart is a boot. Rough, but each boundary is a
+ *  real event — the bar only moves when something has actually finished, so it can
+ *  jump forward and never has to go back. */
+const PHASE = { write: 0.6, verify: 0.7, retry: 0.85, reboot: 1 }
+
 export async function applySettings(
   text: string,
-  onProgress?: (done: number, total: number) => void,
+  /** 0..1 across everything this routine does, not just the writing loop. */
+  onProgress?: (frac: number) => void,
   opts?: {
     /** Restart the board once, and retry whatever is still missing.
      *
@@ -132,30 +139,33 @@ export async function applySettings(
     let done = 0
     for (const line of lines) {
       await sendSetting(line)
-      onProgress?.(++done, lines.length)
+      onProgress?.((++done / lines.length) * PHASE.write)
     }
 
     // A second pass fixes the ordering the file cannot express: a dump is written
     // in numeric order while `$20` (soft limits) is refused until `$22` (homing) is
     // on, several lines later.
     let missed = await diff(lines)
+    onProgress?.(PHASE.verify)
     if (missed.length) {
       await quiet()
       for (const { line } of missed) await sendSetting(line)
       missed = await diff(lines)
     }
+    onProgress?.(PHASE.retry)
 
     // Anything left may simply not exist yet on a board that has not restarted with
     // these settings in it — see rebootToFinish above. One restart, one more pass.
     if (missed.length && opts?.rebootToFinish) {
       opts.onReboot?.()
       window.recta.send('$REBOOT')
-      if (await waitForBoard()) {
+      if (await waitForBoard((f) => onProgress?.(PHASE.retry + f * (PHASE.reboot - PHASE.retry)))) {
         await quiet()
         for (const { line } of missed) await sendSetting(line)
         missed = await diff(lines)
       }
     }
+    onProgress?.(PHASE.reboot)
 
     return {
       total: lines.length,
@@ -169,11 +179,12 @@ export async function applySettings(
 /** Wait for the board to come back and answer a line command. The app reconnects on
  *  its own after a reboot; this only has to wait for it and then check that the
  *  parser — not merely the link — is up. */
-async function waitForBoard(totalMs = 25000): Promise<boolean> {
-  const until = Date.now() + totalMs
+async function waitForBoard(onProgress?: (frac: number) => void, totalMs = 25000): Promise<boolean> {
+  const start = Date.now()
   await new Promise((r) => setTimeout(r, 2500)) // do not probe into the reset itself
-  while (Date.now() < until) {
+  while (Date.now() - start < totalMs) {
     if (useStore.getState().connected && (await window.recta.rescueProbe(1500))) return true
+    onProgress?.(Math.min(1, (Date.now() - start) / totalMs))
     await new Promise((r) => setTimeout(r, 700))
   }
   return false

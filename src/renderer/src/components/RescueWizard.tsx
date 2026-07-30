@@ -24,6 +24,15 @@ type StepState = 'todo' | 'busy' | 'ok' | 'skipped' | 'failed'
 
 const ORDER: StepId[] = ['wipe', 'reflash', 'restore']
 
+/** One bar for the whole procedure, not one per step. A bar that stops and starts
+ *  reads as "stuck" at exactly the moments the operator is least sure anything is
+ *  happening — which is when they reach for the power switch. Each step owns a share
+ *  of the whole and fills within it by something real: the erase is paced by the wait
+ *  for the board to answer, the restore by settings actually written. The shares are
+ *  estimates, but every boundary is a real event, so the bar can jump forward and
+ *  never has to go back. */
+const SPAN = { wipeEnd: 0.3, restoreEnd: 1 }
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** Wait for the board to answer a line command again, polling the probe. Returns
@@ -75,8 +84,9 @@ export function RescueWizard(): React.JSX.Element | null {
     restore: 'todo'
   })
   const [note, setNote] = useState<string | null>(null)
-  /** 0..1 for the current step, or null when there is nothing honest to show. */
+  /** 0..1 across the whole procedure, or null before it starts. Monotonic — see SPAN. */
   const [progress, setProgress] = useState<number | null>(null)
+  const advance = (frac: number): void => setProgress((p) => (p === null ? frac : Math.max(p, frac)))
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
   const [backups, setBackups] = useState<{ name: string; taken: string }[]>([])
@@ -138,9 +148,9 @@ export function RescueWizard(): React.JSX.Element | null {
       setNote(t('ui.rescue.note.wiping'))
       await window.recta.rescueSend('wipe')
       await sleep(2500) // the board reboots on receipt; do not probe into the reset
-      setProgress(0)
-      if (await waitForParser(setProgress)) {
-        setProgress(null)
+      advance(0.02)
+      if (await waitForParser((f) => advance(f * SPAN.wipeEnd))) {
+        advance(SPAN.wipeEnd)
         set('wipe', 'ok')
         set('reflash', 'skipped')
         await restore()
@@ -215,19 +225,16 @@ export function RescueWizard(): React.JSX.Element | null {
       setFinished(true)
       return
     }
-    setProgress(0)
+    advance(SPAN.wipeEnd)
     const { total, refused } = await applySettings(
       text,
-      (done, all) => setProgress(done / all),
+      (f) => advance(SPAN.wipeEnd + f * (SPAN.restoreEnd - SPAN.wipeEnd)),
       {
         // A board that has just been wiped comes up before it knows it has a VFD, so
         // the settings that belong to one do not exist yet. One restart finishes the
         // job rather than handing the operator a list to type in by hand.
         rebootToFinish: true,
-        onReboot: () => {
-          setProgress(null)
-          setNote(t('ui.rescue.note.rebooting'))
-        }
+        onReboot: () => setNote(t('ui.rescue.note.rebooting'))
       }
     )
     setProgress(null)

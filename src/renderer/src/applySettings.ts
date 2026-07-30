@@ -6,6 +6,8 @@
  *  is worse than one that refuses out loud, and it is not a thing to get right twice.
  */
 
+import { useStore } from './store'
+
 /** Send one `$n=v` and wait for the board's verdict. Resolves null on `ok`, else
  *  the refusal (or 'no answer' when nothing comes back in time). */
 function sendSetting(line: string): Promise<string | null> {
@@ -29,11 +31,50 @@ function sendSetting(line: string): Promise<string | null> {
   })
 }
 
+/** Read the board's settings back as a map. The only trustworthy way to know what
+ *  landed: matching replies to commands means taking the next `ok`, and anything
+ *  else writing to the board mid-restore shifts every verdict after it by one. */
+function readBack(timeoutMs = 4000): Promise<Map<string, string>> {
+  return new Promise((resolve) => {
+    const out = new Map<string, string>()
+    let off: (() => void) | null = null
+    let quiet: ReturnType<typeof setTimeout> | null = null
+    const finish = (): void => {
+      off?.()
+      off = null
+      if (quiet) clearTimeout(quiet)
+      resolve(out)
+    }
+    off = window.recta.onEvent((ev) => {
+      if (ev.type !== 'line' || !off) return
+      const m = /^\$(\d+)=(.*)$/.exec(ev.data.trim())
+      if (!m) return
+      out.set(m[1], m[2].trim())
+      // the dump ends when the lines stop coming, not on `ok` — which may itself
+      // belong to something else
+      if (quiet) clearTimeout(quiet)
+      quiet = setTimeout(finish, 700)
+    })
+    setTimeout(finish, timeoutMs)
+    window.recta.send('$$')
+  })
+}
+
 export interface ApplyResult {
   /** how many `$n=v` lines the file held */
   total: number
-  /** `$n=v → error:n` for everything still refused after the retry pass */
+  /** `$n=v` for every setting that is NOT on the board afterwards, with what the
+   *  board says instead — read back, not inferred from the replies. */
   refused: string[]
+}
+
+/** grblHAL prints numbers back in its own format (`$100=640.000` for a written
+ *  `640`), so compare as numbers where both sides are numeric. */
+function same(a: string, b: string): boolean {
+  if (a === b) return true
+  const na = Number(a)
+  const nb = Number(b)
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb
 }
 
 /** Apply every `$n=v` line in `text`.
@@ -55,18 +96,35 @@ export async function applySettings(
     .map((l) => l.trim())
     .filter((l) => /^\$\d+=/.test(l))
 
-  const refused: string[] = []
-  let done = 0
-  for (const line of lines) {
-    if (await sendSetting(line)) refused.push(line)
-    onProgress?.(++done, lines.length)
-  }
+  // Take the wire. The limits machinery writes `$21` off its own status handler,
+  // and one injected command is enough to shift every reply-to-command match after
+  // it by one — see `bulkWriting` in the store.
+  useStore.getState().setBulkWriting(true)
+  try {
+    const refused: string[] = []
+    let done = 0
+    for (const line of lines) {
+      if (await sendSetting(line)) refused.push(line)
+      onProgress?.(++done, lines.length)
+    }
+    for (const line of refused) await sendSetting(line)
 
-  const stillRefused: string[] = []
-  for (const line of refused) {
-    const err = await sendSetting(line)
-    if (err) stillRefused.push(`${line} → ${err}`)
-  }
+    // Verify by reading the board, not by trusting what came back while writing.
+    // A restore that reports success and leaves soft limits off is the failure
+    // this whole routine exists to prevent, and on 30 Jul 2026 it did exactly
+    // that — every line acked, `$20` still 0.
+    const actual = await readBack()
+    const missed: string[] = []
+    for (const line of lines) {
+      const m = /^\$(\d+)=(.*)$/.exec(line)
+      if (!m) continue
+      const now = actual.get(m[1])
+      if (now === undefined) missed.push(`${line} → not on this board`)
+      else if (!same(now, m[2].trim())) missed.push(`${line} → board says ${now}`)
+    }
 
-  return { total: lines.length, refused: stillRefused }
+    return { total: lines.length, refused: missed }
+  } finally {
+    useStore.getState().setBulkWriting(false)
+  }
 }

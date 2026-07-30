@@ -349,6 +349,15 @@ interface AppState {
   alert: RecoveryAlert | null
   /** Whether the recovery popup is currently shown. */
   recoveryOpen: boolean
+  /** A bulk settings write is in progress and owns the wire.
+   *
+   *  The limits machinery talks to the board on its own — the status handler calls
+   *  restoreLimits(), which sends `$21=…` and `$21`. A bulk restore matches replies
+   *  to commands by taking the next `ok`, so one injected write shifts every verdict
+   *  after it by one: a refusal gets credited to the line before it and a setting
+   *  that never landed is reported as written. That is how a restore left soft
+   *  limits off on 30 Jul 2026 while reporting nothing refused. */
+  bulkWriting: boolean
   /** The guided recovery dialog is open. */
   rescueWizardOpen: boolean
   /** The board is answering `?` but not commands — offer the recovery. Raised by the
@@ -540,6 +549,7 @@ interface AppState {
   /** Open/close the recovery popup without dismissing the underlying alert. */
   setRecoveryOpen: (open: boolean) => void
   setNoReconnect: (on: boolean) => void
+  setBulkWriting: (on: boolean) => void
   setRescueWizardOpen: (open: boolean) => void
   setRescueSuggested: (on: boolean) => void
   /** One-tap escape from a limit switch: suspend hard limits, back the axis off by
@@ -640,6 +650,7 @@ export const useStore = create<AppState>((set, get) => ({
   message: null,
   alert: null,
   recoveryOpen: false,
+  bulkWriting: false,
   rescueWizardOpen: false,
   rescueSuggested: false,
   noReconnect: false,
@@ -836,7 +847,7 @@ export const useStore = create<AppState>((set, get) => ({
           // for as long as it runs. Without this exception the first released switch
           // would re-arm them and the next press would alarm — the exact noise the
           // test exists to avoid. stopPinTest() restores them.
-          if (s.limitsSuspended != null && !s.pinTest && !hasLimitPin(e.data.pins) && Date.now() - s.limitsPendingAt > 1500)
+          if (s.limitsSuspended != null && !s.pinTest && !s.bulkWriting && !hasLimitPin(e.data.pins) && Date.now() - s.limitsPendingAt > 1500)
             get().restoreLimits()
           return {
             status: e.data,
@@ -1028,6 +1039,7 @@ export const useStore = create<AppState>((set, get) => ({
   clearAlert: () => set({ alert: null, message: null, recoveryOpen: false, alarmHandled: true }),
   setRecoveryOpen: (open) => set({ recoveryOpen: open }),
   setNoReconnect: (on) => set({ noReconnect: on }),
+  setBulkWriting: (on) => set({ bulkWriting: on }),
   setRescueWizardOpen: (open) => set({ rescueWizardOpen: open }),
   setRescueSuggested: (on) => set({ rescueSuggested: on }),
   escapeSwitch: (axis, dir) => {
@@ -1046,6 +1058,7 @@ export const useStore = create<AppState>((set, get) => ({
     // a reply that never came (busy board, dropped line) must not wedge the button
     if (s.limitsSuspended != null || (s.limitsPending && Date.now() - s.limitsPendingAt < 1500))
       return
+    if (s.bulkWriting) return // a restore owns the wire — see bulkWriting
     if (!settingsWritable(s.status?.state)) return
     // Read $21 off the board first. Whatever we think we know can be stale — the
     // Settings page writes $21 without the board echoing it back — and saving a
@@ -1058,6 +1071,7 @@ export const useStore = create<AppState>((set, get) => ({
     const s = get()
     const saved = s.limitsSuspended ?? localStorage.getItem('limitsSuspended')
     if (saved == null) return
+    if (s.bulkWriting) return // a restore owns the wire — see bulkWriting
     // A `$` write outside Idle answers error:8 and changes nothing; the status
     // handler calls this again on the next report, so waiting costs nothing.
     if (!settingsWritable(s.status?.state)) return

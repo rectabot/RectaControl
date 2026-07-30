@@ -12,10 +12,15 @@
  *
  *  Two things are deliberate:
  *
- *  - **Buffered, flushed on a timer.** A job acks ~20 lines a second; one
- *    filesystem call per line would put disk latency inside the streaming loop.
- *    Lines queue up and go out every 500 ms, so a crash costs at most half a
- *    second of log and never a millisecond of motion.
+ *  - **Buffered, flushed on a timer, and off the main thread.** A job acks ~20
+ *    lines a second; one filesystem call per line would put disk latency inside
+ *    the streaming loop. Lines queue up and go out every 500 ms, so a crash costs
+ *    at most half a second of log and never a millisecond of motion. The periodic
+ *    write is async because it runs in the main process, where the board's
+ *    connection lives and every IPC message passes: a synchronous append twice a
+ *    second is a stutter you can feel in the DRO. Synchronous writes are kept for
+ *    the one-shot paths where the process may not survive to finish an async one —
+ *    quit, a UI crash, a problem report.
  *  - **`ok` is dropped while a job runs.** A 4000-line program answers with 4000
  *    bare `ok`s, which bury the one line that matters. The job's start and end are
  *    logged instead — exactly what the terminal does, and for the same reason.
@@ -23,6 +28,7 @@
 
 import { app } from 'electron'
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { appendFile, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ControllerEvent } from '@shared/types'
 
@@ -38,13 +44,18 @@ let queue: string[] = []
 let timer: ReturnType<typeof setInterval> | null = null
 let size = -1 // bytes in the current file; -1 = not measured yet
 let dropped = 0 // lines lost to MAX_QUEUE, reported once we catch up
+let writing = false // an async flush is on disk; the next tick waits it out
 let jobRunning = false
 let lastInfo = '' // dedupe the repeated `info` events one connect produces
+let dirMade = '' // the folder, once created — checking it twice a second is not free
 
 /** The log folder, created on first use. */
 export function logDir(): string {
   const dir = process.env.RECTA_LOG_DIR || join(app.getPath('userData'), 'logs')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  if (dir !== dirMade) {
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    dirMade = dir
+  }
   return dir
 }
 
@@ -72,43 +83,90 @@ export function log(tag: Tag, text: string): void {
   queue.push(`${stamp()}  ${tag.padEnd(3)}  ${text}`)
 }
 
-/** Write the queue out and rotate if the file has grown past its limit. */
-export function flushLog(): void {
-  if (!queue.length) return
+/** Take the queue, with the overflow note in front if we lost anything. */
+function take(): string[] {
+  if (!queue.length) return []
   const lines = queue
   queue = []
   if (dropped) {
     lines.unshift(`${stamp()}  err  log queue overflowed — ${dropped} lines dropped`)
     dropped = 0
   }
+  return lines
+}
+
+/** Where the writes and the rotations fall for one batch, given the file's current size.
+ *
+ *  The batch is cut where it crosses the limit rather than written whole and rotated
+ *  afterwards — otherwise one busy flush could leave a file well over 2 MB and the
+ *  folder would no longer be bounded by KEEP × MAX_BYTES. Planned separately from the
+ *  writing so the sync and async paths cut the batch in exactly the same places. */
+function planWrites(lines: string[], from: number): { writes: { rotateFirst: boolean; text: string }[]; end: number } {
+  const writes: { rotateFirst: boolean; text: string }[] = []
+  let cur = { rotateFirst: false, text: '' }
+  let used = from
+  for (const line of lines) {
+    const piece = line + '\n'
+    const n = Buffer.byteLength(piece)
+    if (used + n > MAX_BYTES) {
+      if (cur.text) writes.push(cur)
+      cur = { rotateFirst: true, text: '' }
+      used = 0
+    }
+    cur.text += piece
+    used += n
+  }
+  if (cur.text) writes.push(cur)
+  return { writes, end: used }
+}
+
+/** Write the queue out and rotate if the file has grown past its limit.
+ *
+ *  Synchronous, and therefore only for the paths that may be the process's last:
+ *  quit, a UI crash, packing a problem report. The timer uses `flushAsync`. */
+export function flushLog(): void {
+  const lines = take()
+  if (!lines.length) return
   try {
     const path = logPath()
     if (size < 0) size = existsSync(path) ? statSync(path).size : 0
-    // The batch is cut where it crosses the limit rather than written whole and
-    // rotated afterwards — otherwise one busy flush could leave a file well over
-    // 2 MB and the folder would no longer be bounded by KEEP × MAX_BYTES.
-    let chunk = ''
-    const write = (text: string): void => {
-      appendFileSync(path, text, 'utf8')
-      size += Buffer.byteLength(text)
+    const { writes, end } = planWrites(lines, size)
+    for (const w of writes) {
+      if (w.rotateFirst) rotate()
+      appendFileSync(path, w.text, 'utf8')
     }
-    for (const line of lines) {
-      const piece = line + '\n'
-      if (size + Buffer.byteLength(chunk) + Buffer.byteLength(piece) > MAX_BYTES) {
-        if (chunk) {
-          write(chunk)
-          chunk = ''
-        }
-        rotate()
-        size = 0
-      }
-      chunk += piece
-    }
-    if (chunk) write(chunk)
+    size = end
   } catch {
     // a full disk, a locked file, a folder the user deleted mid-session: none of
     // that is worth taking the machine down for. Drop the lines and carry on.
     size = -1
+  }
+}
+
+/** The timer's flush: the same work, without blocking the thread the machine is on.
+ *
+ *  Only one is ever in flight — if the disk is slow the lines simply stay queued and
+ *  go out on the next tick, in order, instead of racing a second writer. (A quit or a
+ *  crash can still fire a sync flush over the top of one; appends are appends, so the
+ *  worst case there is two batches landing out of order in a log we are abandoning.) */
+async function flushAsync(): Promise<void> {
+  if (writing) return
+  const lines = take()
+  if (!lines.length) return
+  writing = true
+  try {
+    const path = logPath()
+    if (size < 0) size = await stat(path).then((s) => s.size, () => 0)
+    const { writes, end } = planWrites(lines, size)
+    for (const w of writes) {
+      if (w.rotateFirst) await rotateAsync()
+      await appendFile(path, w.text, 'utf8')
+    }
+    size = end
+  } catch {
+    size = -1
+  } finally {
+    writing = false
   }
 }
 
@@ -122,10 +180,21 @@ function rotate(): void {
   }
 }
 
+/** Rotation off the main thread: five renames of a 2 MB file is the longest stall
+ *  the logger can cause, and it lands in the middle of whatever the job is doing. */
+async function rotateAsync(): Promise<void> {
+  try {
+    await rm(logPath(KEEP - 1), { force: true })
+    for (let n = KEEP - 2; n >= 0; n--) await rename(logPath(n), logPath(n + 1)).catch(() => {}) // missing file: nothing to shift
+  } catch {
+    /* see rotate() */
+  }
+}
+
 /** Open the log for this run: header first, then the flush timer. Idempotent. */
 export function startLog(): void {
   if (timer) return
-  timer = setInterval(flushLog, FLUSH_MS)
+  timer = setInterval(() => void flushAsync(), FLUSH_MS)
   ;(timer as unknown as { unref?: () => void }).unref?.() // never hold the process open on our account
 
   log('app', '='.repeat(60))

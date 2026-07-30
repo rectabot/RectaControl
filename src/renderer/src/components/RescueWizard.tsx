@@ -280,7 +280,7 @@ export function RescueWizard(): React.JSX.Element | null {
             button out from under the pointer and makes the whole thing feel unsteady
             at the moment it is asking to be trusted. Sized for the longest message
             (the bootloader one); anything longer scrolls inside instead of growing. */}
-        <div className="h-[280px] overflow-y-auto px-6 py-4">
+        <div className="flex h-[260px] flex-col overflow-y-auto px-6 py-4">
           <ol className="space-y-2">
             {ORDER.map((id) => (
               <li key={id} className="flex gap-3 text-[13px]">
@@ -322,19 +322,23 @@ export function RescueWizard(): React.JSX.Element | null {
             </div>
           )}
 
+          {/* Everything that CHANGES sits here, above the bar. */}
           {note && <p className="mt-4 text-[13px] leading-relaxed text-slate-100">{note}</p>}
 
+          {jobRunning && (
+            <p className="mt-4 text-[12px] font-semibold text-danger">{t('ui.rescue.jobRunning')}</p>
+          )}
+
+          {/* Pinned to the bottom edge, not floated under the last line of text: a bar
+              that moves with the length of the message above it is one more thing
+              twitching on screen while the operator waits. */}
           {progress !== null && (
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-border2">
+            <div className="mt-auto h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-border2">
               <div
                 className="h-full rounded-full bg-brand transition-[width] duration-300"
                 style={{ width: `${Math.round(progress * 100)}%` }}
               />
             </div>
-          )}
-
-          {jobRunning && (
-            <p className="mt-4 text-[12px] font-semibold text-danger">{t('ui.rescue.jobRunning')}</p>
           )}
         </div>
 

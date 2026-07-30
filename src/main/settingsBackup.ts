@@ -44,6 +44,15 @@ function stamp(): string {
 export class SettingsBackup {
   private buf = new Map<number, string>()
   private timer: ReturnType<typeof setTimeout> | null = null
+  private factory = false
+
+  /** The board has just been reset to defaults — whatever it dumps next describes
+   *  the firmware, not this machine. Keep it (it is still evidence for a problem
+   *  report) but do not let it become `latest.txt`, which is what a restore reaches
+   *  for. Cleared by the dump it applies to. */
+  markFactory(): void {
+    this.factory = true
+  }
 
   /** Feed every line the controller sends; non-setting lines are ignored. */
   feed(line: string): void {
@@ -67,12 +76,18 @@ export class SettingsBackup {
     this.buf.clear()
     if (entries.length < MIN_LINES) return // a single edited setting, not a dump
 
+    const factory = this.factory
+    this.factory = false
+
     const text = entries.map(([n, v]) => `$${n}=${v}`).join('\n') + '\n'
     try {
       const dir = settingsDir()
       const latest = join(dir, 'latest.txt')
       const previous = existsSync(latest) ? readFileSync(latest, 'utf8') : ''
-      writeFileSync(latest, text, 'utf8')
+      // `latest.txt` is what a restore reaches for, so it must keep describing the
+      // machine. A dump that follows a wipe describes the firmware instead, and is
+      // still written below as a dated copy — evidence, not a restore point.
+      if (!factory) writeFileSync(latest, text, 'utf8')
       if (previous === text) return // nothing changed → no new dated copy
 
       // Development convenience: if the source tree has a sibling `.private`

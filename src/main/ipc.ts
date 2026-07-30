@@ -47,6 +47,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
 
   ipcMain.handle('disconnect', () => controller.disconnect())
 
+  ipcMain.handle('settings:markFactory', () => controller.markSettingsFactory())
+
   ipcMain.handle('send', (_e, line: string) => controller.sendLine(line))
 
   ipcMain.handle('realtime', (_e, byte: number) => controller.sendRealtime(byte))

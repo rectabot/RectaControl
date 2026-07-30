@@ -185,6 +185,10 @@ export interface RectaApi {
     baud: number
   }): Promise<TransportKind | null>
   disconnect(): Promise<void>
+  /** Tell the settings backup that the next `$$` dump may be factory values, so it
+   *  is kept as a dated copy but not promoted to `latest.txt` — the file a restore
+   *  reaches for has to keep describing the machine, not the firmware. */
+  markSettingsFactory(): Promise<void>
   send(line: string): Promise<void>
   realtime(byte: number): Promise<void>
   jog(axis: string, distance: number, feed: number): Promise<void>

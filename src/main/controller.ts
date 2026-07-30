@@ -142,6 +142,14 @@ export class Controller {
     }
   }
 
+  /** See RectaApi.markSettingsFactory. Called by whoever is about to do something
+   *  that can reset NVS — flashing, or a rescue erase — because the app knows that
+   *  with certainty and the board's own announcement does not survive the reboot:
+   *  it is printed at startup, seconds before anything reconnects to hear it. */
+  markSettingsFactory(): void {
+    this.backup.markFactory()
+  }
+
   async disconnect(): Promise<void> {
     this.stopPoll()
     this.resetJob()
@@ -340,6 +348,18 @@ export class Controller {
       }
       return
     }
+
+    // A board that has just lost its settings is about to dump factory values, and the
+    // app pulls `$$` on every connect — so without this the newest backup silently
+    // becomes the factory one, at exactly the moment the operator needs the real one
+    // to put the machine back. On 30 Jul 2026 that was only avoided by copying the file
+    // out by hand before reconnecting, which is not something a customer will know to do.
+    //
+    // Two signals, no guessing at content: `error:7` is the core saying it could not read
+    // NVS and has restored defaults (what a variant flash causes — the 29 Jul wipe), and
+    // the driver's own message covers a deliberate erase over the rescue path.
+    if (/^error:7\b/.test(line) || /Settings were erased by a recovery request/i.test(line))
+      this.backup.markFactory()
 
     this.backup.feed(line)
 

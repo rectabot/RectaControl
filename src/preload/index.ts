@@ -14,6 +14,7 @@ const api: RectaApi = {
   autoConnect: (opts: { ethHost: string; ethPort: number; baud: number }) =>
     ipcRenderer.invoke('autoConnect', opts),
   disconnect: () => ipcRenderer.invoke('disconnect'),
+  markSettingsFactory: () => ipcRenderer.invoke('settings:markFactory'),
   send: (line: string) => ipcRenderer.invoke('send', line),
   realtime: (byte: number) => ipcRenderer.invoke('realtime', byte),
   jog: (axis: string, distance: number, feed: number) =>

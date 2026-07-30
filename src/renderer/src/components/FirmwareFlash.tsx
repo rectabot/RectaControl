@@ -278,6 +278,14 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
     const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
     const baud = Number(localStorage.getItem('conn.baud')) || 115200
 
+    // Flashing a variant whose axis or motor count differs from the running one relays
+    // grblHAL's settings and resets NVS to factory — so the dump this reconnect pulls
+    // may describe the firmware rather than the machine, and must not become the file a
+    // restore reaches for. Marked unconditionally: when NVS survived, the dump matches
+    // what is already stored and skipping the write changes nothing, so there is no
+    // reason to try to predict which flashes wipe.
+    await window.recta.markSettingsFactory()
+
     setBusy('reconnecting')
     setMsg(t('ui.fw.reconnecting'))
     for (let i = 0; i < 14; i++) {

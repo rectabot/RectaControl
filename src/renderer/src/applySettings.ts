@@ -173,6 +173,14 @@ export async function applySettings(
     }
   } finally {
     useStore.getState().setBulkWriting(false)
+    // Writing a whole dump back IS the event that ends the factory window: whatever
+    // the board reports from here describes this machine again. It used to be cleared
+    // by the guided recovery alone, so a restore done from the Settings import left
+    // the window open — and the dump that confirmed 116 restored settings was filed
+    // as a factory copy while latest.txt kept the older, incomplete one. Found on
+    // 30 Jul 2026 by Filip noticing his own variant reported one setting fewer than
+    // the others. Belongs here, where both callers pass through.
+    void window.recta.clearSettingsFactory()
   }
 }
 

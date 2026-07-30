@@ -238,9 +238,6 @@ export function RescueWizard(): React.JSX.Element | null {
       }
     )
     setProgress(null)
-    // The machine's own numbers are on the board again, so the dump that confirms
-    // them is a real backup and must be filed as one.
-    await window.recta.clearSettingsFactory()
     set('restore', refused.length ? 'failed' : 'ok')
     setNote(
       refused.length

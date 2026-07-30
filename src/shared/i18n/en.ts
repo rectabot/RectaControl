@@ -16,6 +16,10 @@ export const en: Record<string, string> = {
   'ui.settings.importRefusedTitle': 'The board refused some settings',
   'ui.settings.importRefused':
     '{count} setting(s) from the file did not go onto the board, and the rest did. Each was tried twice, so this is not an ordering problem — the board does not accept these values in its current state or with this firmware. Refused: {list}',
+  'ui.settings.importRefusedReboot':
+    '{count} setting(s) could not be written yet: {list}. Some settings only exist once the board has started with the thing they belong to — the VFD address needs a Modbus spindle chosen at startup, for example. Restarting the board writes them. The connection drops for a few seconds and comes back on its own.',
+  'ui.settings.importRebootNow': 'Restart and finish',
+  'ui.settings.importRebootLater': 'Leave it',
   'ui.settings.importRefusedOk': 'Understood',
   'ui.settings.mode.basic': 'Basic',
   'ui.settings.mode.all': 'All',

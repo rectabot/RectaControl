@@ -14,6 +14,10 @@ export const sr: Record<string, string> = {
   'ui.settings.importRefusedTitle': 'Ploča je odbila neka podešavanja',
   'ui.settings.importRefused':
     'Iz fajla nije prošlo {count} podešavanja, ostala jesu. Svako je pokušano dvaput, znači nije u pitanju redosled — ploča ne prihvata te vrednosti u trenutnom stanju ili sa ovim firmverom. Odbijeno: {list}',
+  'ui.settings.importRefusedReboot':
+    '{count} podešavanja još nisu mogla da se upišu: {list}. Neka podešavanja postoje tek kad se ploča digne sa onim čemu pripadaju — adresa VFD-a, na primer, traži da je Modbus vreteno izabrano pri dizanju. Restart ploče ih upisuje. Veza padne na par sekundi i sama se vrati.',
+  'ui.settings.importRebootNow': 'Restartuj i završi',
+  'ui.settings.importRebootLater': 'Ostavi tako',
   'ui.settings.importRefusedOk': 'Razumem',
   'ui.settings.mode.basic': 'Osnovno',
   'ui.settings.mode.all': 'Sve',

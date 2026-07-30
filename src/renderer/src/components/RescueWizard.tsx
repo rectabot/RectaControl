@@ -213,9 +213,13 @@ export function RescueWizard(): React.JSX.Element | null {
                     value={pick ?? ''}
                     onChange={(e) => setPick(e.target.value)}
                   >
+                    {/* Filenames are ours, not the operator's. What they pick by is when
+                        the settings were taken, so that is what the row says — with the
+                        newest one named rather than dated twice. */}
                     {backups.map((b) => (
                       <option key={b.name} value={b.name} className="bg-panel">
-                        {b.name} — {new Date(b.taken).toLocaleString()}
+                        {b.name === 'latest.txt' ? `${t('ui.rescue.backupLatest')} · ` : ''}
+                        {new Date(b.taken).toLocaleString()}
                       </option>
                     ))}
                   </select>

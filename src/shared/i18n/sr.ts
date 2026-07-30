@@ -893,6 +893,7 @@ export const sr: Record<string, string> = {
   'ui.rescue.step.restore': 'Vrati tvoja podešavanja',
   'ui.rescue.restoreFrom': 'Podešavanja se vraćaju iz',
   'ui.rescue.noBackupWarn': 'Nema sačuvane kopije podešavanja ove mašine. Ploča se i dalje može oporaviti, ali će se dići na fabričko — ne homuj i ne jogiraj dok ne uneseš korake po milimetru i smer hominga.',
+  'ui.rescue.backupLatest': 'Najnovija',
   'ui.rescue.jobRunning': 'Posao je u toku. Prvo ga zaustavi — ovo restartuje ploču.',
   'ui.rescue.start': 'Kreni',
   'ui.rescue.cancel': 'Odustani',

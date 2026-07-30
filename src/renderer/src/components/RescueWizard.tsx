@@ -280,7 +280,7 @@ export function RescueWizard(): React.JSX.Element | null {
             button out from under the pointer and makes the whole thing feel unsteady
             at the moment it is asking to be trusted. Sized for the longest message
             (the bootloader one); anything longer scrolls inside instead of growing. */}
-        <div className="flex h-[260px] flex-col overflow-y-auto px-6 py-4">
+        <div className="flex h-[250px] flex-col overflow-y-auto px-6 py-4">
           <ol className="space-y-2">
             {ORDER.map((id) => (
               <li key={id} className="flex gap-3 text-[13px]">

@@ -12,7 +12,7 @@ import { ProbeSettings } from './ProbeSettings'
 import { StockSettings } from './StockSettings'
 import { Diagnostics } from './Diagnostics'
 import { LanguageSelect } from './LanguageSelect'
-import { GearIcon, UploadIcon, ChipIcon, SearchIcon, SectionIcon, ListIcon, AlertIcon, ThemeIcon, ControlsIcon, ProbeIcon, StockIcon, PulseIcon } from './icons'
+import { GearIcon, UploadIcon, ChipIcon, SearchIcon, SectionIcon, ListIcon, AlertIcon, ThemeIcon, ControlsIcon, ProbeIcon, StockIcon, PulseIcon, InfoIcon } from './icons'
 import { SECTIONS } from '@shared/machine-config'
 
 interface Row {
@@ -193,7 +193,7 @@ export function SettingsBrowser(): JSX.Element | null {
     },
     { label: t('ui.settings.group.connectivity'), ids: ['network', 'pendant'] },
     { label: t('ui.settings.group.other'), ids: ['controls', 'probe', 'stock', 'macros', 'behavior'] },
-    { label: t('ui.settings.group.system'), ids: ['advanced', 'firmware', 'board', 'errors', 'diagnostics', 'theme'] }
+    { label: t('ui.settings.group.system'), ids: ['advanced', 'firmware', 'board', 'errors', 'diagnostics', 'theme', 'about'] }
   ]
 
   const catLabel = (id: string): string => {
@@ -201,6 +201,7 @@ export function SettingsBrowser(): JSX.Element | null {
     if (id === 'firmware') return t('ui.settings.tab.firmware')
     if (id === 'board') return t('ui.settings.tab.board')
     if (id === 'errors') return t('ui.settings.cat.errors')
+    if (id === 'about') return t('ui.settings.cat.about')
     if (id === 'diagnostics') return t('ui.settings.cat.diagnostics')
     if (id === 'theme') return t('ui.settings.cat.theme')
     if (id === 'controls') return t('ui.settings.cat.controls')
@@ -214,6 +215,7 @@ export function SettingsBrowser(): JSX.Element | null {
     if (id === 'firmware') return <UploadIcon className="h-4 w-4" />
     if (id === 'board') return <ChipIcon className="h-4 w-4" />
     if (id === 'errors') return <AlertIcon className="h-4 w-4" />
+    if (id === 'about') return <InfoIcon className="h-4 w-4" />
     if (id === 'diagnostics') return <PulseIcon className="h-4 w-4" />
     if (id === 'theme') return <ThemeIcon className="h-4 w-4" />
     if (id === 'controls') return <ControlsIcon className="h-4 w-4" />
@@ -225,6 +227,7 @@ export function SettingsBrowser(): JSX.Element | null {
   // is the current category a $-settings view (vs firmware/board/errors/theme/controls)?
   const isSettings =
     cat !== 'firmware' &&
+    cat !== 'about' &&
     cat !== 'board' &&
     cat !== 'errors' &&
     cat !== 'diagnostics' &&
@@ -235,11 +238,14 @@ export function SettingsBrowser(): JSX.Element | null {
   const searchable = isSettings || cat === 'errors'
 
   const pane =
+    // The app's own version and updates used to sit under the board firmware
+    // panel. Two things called "version" on one screen, one of them the desktop
+    // program and the other the thing that drives the motors — and this is the
+    // screen where picking the wrong one bends a gantry. They are now separate.
     cat === 'firmware' ? (
-      <>
-        <FirmwareFlash headerSlot={headerSlot} />
-        <AppUpdate />
-      </>
+      <FirmwareFlash headerSlot={headerSlot} />
+    ) : cat === 'about' ? (
+      <AppUpdate />
     ) : cat === 'board' ? (
       <BoardDiagram />
     ) : cat === 'errors' ? (

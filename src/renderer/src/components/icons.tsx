@@ -179,6 +179,20 @@ export function PulseIcon({ className }: { className?: string }): JSX.Element {
   )
 }
 
+/** Circled "i" — the About category (which version of the app this is, and
+ *  whether there is a newer one). Deliberately not the same glyph family as the
+ *  firmware upload arrow: the app and the board are two different things to
+ *  update, and they were sharing a screen until they were not. */
+export function InfoIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <Svg className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <line x1="12" y1="11" x2="12" y2="16" />
+      <line x1="12" y1="8" x2="12" y2="8" />
+    </Svg>
+  )
+}
+
 /** Contrast circle — the Theme category (appearance). */
 export function ThemeIcon({ className = 'h-4 w-4' }: { className?: string }): JSX.Element {
   return (

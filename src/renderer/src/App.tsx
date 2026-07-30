@@ -154,6 +154,59 @@ export default function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Pick the link back up after the board goes away on its own.
+  //
+  // A controller reboot — $REBOOT, a watchdog reset, the rescue byte pairs — drops the
+  // link in well under a second and the board is back a few seconds later. Until now the
+  // app just sat there saying Offline, and the operator had to go and reconnect by hand
+  // at the one moment they most want to see the machine answer. The flash flow already
+  // did this; nothing else did.
+  //
+  // Ethernet alone for the first few tries, for the same reason as after a flash: the
+  // W5500 takes longer to start listening than USB CDC does, and falling back the instant
+  // TCP refuses would hand back a serial link to a machine that was on the network a
+  // moment ago. `noReconnect` covers the two cases where the board is *meant* to be gone —
+  // the operator disconnecting, and a flash in progress.
+  const prevConnected = useRef(false)
+  useEffect(() => {
+    const wasConnected = prevConnected.current
+    prevConnected.current = connected
+    if (connected || !wasConnected) return
+    if (useStore.getState().noReconnect) return
+
+    let cancelled = false
+    void (async () => {
+      const lang = useStore.getState().lang
+      const ethHost = localStorage.getItem('conn.ethHost') || '192.168.5.1'
+      const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
+      const baud = Number(localStorage.getItem('conn.baud')) || 115200
+      pushConsole(`* ${translate('ui.app.reconnecting', lang)}`)
+      for (let i = 0; i < 14; i++) {
+        await new Promise((r) => setTimeout(r, 1500))
+        // bail out if the operator reconnected by hand, unplugged on purpose, or
+        // started a flash while we were waiting
+        if (cancelled) return
+        const s = useStore.getState()
+        if (s.connected || s.noReconnect) return
+        try {
+          if (i < 5) {
+            await window.recta.connect({ kind: 'ethernet', host: ethHost, port: ethPort })
+            return
+          }
+          if (await window.recta.autoConnect({ ethHost, ethPort, baud })) return
+        } catch {
+          /* not up yet — still booting, or this is not the cable it came back on */
+        }
+      }
+      if (!cancelled && !useStore.getState().connected)
+        pushConsole(`! ${translate('ui.app.reconnectGaveUp', lang)}`)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [connected])
+
   // Adopt the board's park spot (G30) the first time the machine reaches Idle on a
   // connection. G30 is non-volatile (verified on hardware), so the board is the durable
   // truth: this keeps a spot cached from an earlier session — or from another machine —

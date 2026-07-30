@@ -101,6 +101,9 @@ export function TopBar(): JSX.Element {
       })
       if (!ok) return
     }
+    // Meant to be gone: hold off the automatic reconnect, or the app would walk
+    // straight back onto the board the operator just stepped away from.
+    useStore.getState().setNoReconnect(true)
     window.recta.disconnect()
   }
   // The state readout is a label, so it stays English in every language, exactly

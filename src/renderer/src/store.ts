@@ -349,6 +349,10 @@ interface AppState {
   alert: RecoveryAlert | null
   /** Whether the recovery popup is currently shown. */
   recoveryOpen: boolean
+  /** Hold off the automatic reconnect. Set while the operator disconnects on
+   *  purpose, and for the length of a flash — the board is *meant* to be gone in
+   *  both cases, and a reconnect racing the flash would fight it for the port. */
+  noReconnect: boolean
   /** This alarm episode has already been announced (an `ALARM:` line arrived, the
    *  state raised one, or the operator dismissed it). Cleared when the machine
    *  leaves Alarm, so the next one speaks up again — and so the state-derived alert
@@ -530,6 +534,7 @@ interface AppState {
   clearAlert: () => void
   /** Open/close the recovery popup without dismissing the underlying alert. */
   setRecoveryOpen: (open: boolean) => void
+  setNoReconnect: (on: boolean) => void
   /** One-tap escape from a limit switch: suspend hard limits, back the axis off by
    *  ESCAPE_MM in the chosen direction, and let the automatic restore re-arm them.
    *  The DIRECTION is the operator's call, never a guess: with MIN and MAX sharing
@@ -628,6 +633,7 @@ export const useStore = create<AppState>((set, get) => ({
   message: null,
   alert: null,
   recoveryOpen: false,
+  noReconnect: false,
   alarmHandled: false,
   recoveryPopup: localStorage.getItem('recoveryPopup') !== '0',
   limitsSuspended: null,
@@ -701,6 +707,11 @@ export const useStore = create<AppState>((set, get) => ({
             // the first clear status report re-arms them.
             limitsSuspended: localStorage.getItem('limitsSuspended'),
             limitsPending: null,
+            // Re-arm the automatic reconnect. Whatever the board was deliberately
+            // taken away for — a manual disconnect, a flash — is over the moment we
+            // are talking to it again, and this is the one place that is true of
+            // every route back in.
+            noReconnect: false,
             consoleLines: cap(s.consoleLines, t('store.connected', s.lang, { kind: e.data.kind }))
           }
         case 'disconnected':
@@ -1007,6 +1018,7 @@ export const useStore = create<AppState>((set, get) => ({
   // state-derived alert would otherwise put the popup straight back on screen.
   clearAlert: () => set({ alert: null, message: null, recoveryOpen: false, alarmHandled: true }),
   setRecoveryOpen: (open) => set({ recoveryOpen: open }),
+  setNoReconnect: (on) => set({ noReconnect: on }),
   escapeSwitch: (axis, dir) => {
     const s = get()
     // strictly Idle: a jog is refused in Alarm, and mid-move it would queue up

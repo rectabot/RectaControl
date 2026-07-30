@@ -31,6 +31,7 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   const connected = useStore((s) => s.connected)
   const jobRunning = useStore((s) => s.job.running)
   const askConfirm = useStore((s) => s.askConfirm)
+  const setNoReconnect = useStore((s) => s.setNoReconnect)
   // a machine in Alarm refuses `$UF2` like every other `$` command (see below)
   const alarm = useStore((s) => (s.status?.state ?? '').split(':')[0] === 'Alarm')
   // what the board says it is running, once $I has come back
@@ -109,6 +110,13 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
       await sleep(900) // let the reset land and the welcome banner pass
     }
 
+    // From here until this component hands the link back, the board is meant to be
+    // gone. Hold off the app-wide reconnect, which would otherwise start hunting for
+    // a board that is sitting in the bootloader and race the loop below for the port.
+    // Cleared again once we are talking to a board (see the 'connected' case in the
+    // store), and in the bail-out paths here.
+    setNoReconnect(true)
+
     setMsg(t('ui.fw.sendingUf2'))
     // Watch for the controller's answer: a refused $UF2 comes back as `error:n`
     // within milliseconds, and saying so beats a silent fourteen-second wait.
@@ -165,6 +173,11 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
     off()
     setBusy('idle')
     await window.recta.pinWindow(false)
+    // No drive: either the board refused $UF2 and is still sitting there connected, or
+    // it went somewhere we cannot see. Either way this flow is over, so re-arm the
+    // reconnect by hand — the store only does it on a fresh 'connected', which never
+    // arrives for a board that never left.
+    setNoReconnect(false)
     // error:79 is the one refusal worth spelling out. It means a critical event is
     // latched, which a Reset does not clear while its cause is still there — so the
     // operator can press Reset all morning and get the same answer. Boards built
@@ -288,6 +301,10 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
       }
     }
     setBusy('idle')
+    // This loop is done either way. Hand the job back to the app-wide reconnect, which
+    // keeps watching — a board that took longer than twenty seconds to come up is still
+    // a board worth picking up when it does.
+    setNoReconnect(false)
     setMsg(useStore.getState().connected ? t('ui.fw.flashed') : t('ui.fw.reconnectFail'))
   }
 

@@ -914,6 +914,8 @@ export const en: Record<string, string> = {
 
   // ── App-level ──────────────────────────────────────────────────────────────
   'ui.app.autoFailManual': 'Auto-connect failed — connect manually (Connect ▾).',
+  'ui.app.reconnecting': 'The board went away — waiting for it to come back…',
+  'ui.app.reconnectGaveUp': 'The board did not come back — connect manually (Connect ▾).',
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Click a connector on the board for wiring details.',

@@ -887,6 +887,8 @@ export const sr: Record<string, string> = {
 
   // ── App-level ──────────────────────────────────────────────────────────────
   'ui.app.autoFailManual': 'Auto-povezivanje nije uspelo — poveži ručno (Connect ▾).',
+  'ui.app.reconnecting': 'Ploča je otišla — čekam da se vrati…',
+  'ui.app.reconnectGaveUp': 'Ploča se nije vratila — poveži ručno (Connect ▾).',
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Klikni konektor na ploči za objašnjenje povezivanja.',

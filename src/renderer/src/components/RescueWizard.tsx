@@ -27,11 +27,21 @@ const ORDER: StepId[] = ['wipe', 'reflash', 'restore']
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /** Wait for the board to answer a line command again, polling the probe. Returns
- *  false if it never does — which is a real answer, not a timeout to shrug at. */
-async function waitForParser(totalMs = 20000): Promise<boolean> {
-  const until = Date.now() + totalMs
-  while (Date.now() < until) {
+ *  false if it never does — which is a real answer, not a timeout to shrug at.
+ *
+ *  Reports how much of the wait has gone, because the alternative is a still screen
+ *  during the twenty seconds where the operator is most likely to conclude it has
+ *  hung and pull the power. It measures the wait it is actually doing — there is no
+ *  bar over the erase itself, which is three bytes and a reboot and finishes before
+ *  a bar could be drawn. */
+async function waitForParser(
+  onProgress: (frac: number) => void,
+  totalMs = 20000
+): Promise<boolean> {
+  const start = Date.now()
+  while (Date.now() - start < totalMs) {
     if (useStore.getState().connected && (await window.recta.rescueProbe(1500))) return true
+    onProgress(Math.min(1, (Date.now() - start) / totalMs))
     await sleep(700)
   }
   return false
@@ -65,10 +75,18 @@ export function RescueWizard(): React.JSX.Element | null {
     restore: 'todo'
   })
   const [note, setNote] = useState<string | null>(null)
+  /** 0..1 for the current step, or null when there is nothing honest to show. */
+  const [progress, setProgress] = useState<number | null>(null)
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
   const [backups, setBackups] = useState<{ name: string; taken: string }[]>([])
   const [pick, setPick] = useState<string | null>(null)
+  // The chosen backup's CONTENT, taken before anything is erased. Reading it later
+  // is what went wrong on the first working run: the file was re-read after the
+  // wipe, by which time a factory dump had overwritten it, and the recovery wrote
+  // 250 steps/mm onto a tuned gantry and called it done. Whatever is restored has
+  // to be what was on screen when the operator agreed to erase.
+  const held = useRef<string | null>(null)
   const cancelled = useRef(false)
 
   // The backup list is the honest part of the warning: the operator is about to lose
@@ -85,6 +103,17 @@ export function RescueWizard(): React.JSX.Element | null {
       cancelled.current = true
     }
   }, [open])
+
+  // Hold the chosen file's content the moment it is chosen — see `held`.
+  useEffect(() => {
+    if (!open || !pick) {
+      held.current = null
+      return
+    }
+    void window.recta.readSettingsBackup(pick).then((txt) => {
+      held.current = txt
+    })
+  }, [open, pick])
 
   if (!open) return null
 
@@ -109,12 +138,15 @@ export function RescueWizard(): React.JSX.Element | null {
       setNote(t('ui.rescue.note.wiping'))
       await window.recta.rescueSend('wipe')
       await sleep(2500) // the board reboots on receipt; do not probe into the reset
-      if (await waitForParser()) {
+      setProgress(0)
+      if (await waitForParser(setProgress)) {
+        setProgress(null)
         set('wipe', 'ok')
         set('reflash', 'skipped')
         await restore()
         return
       }
+      setProgress(null)
       set('wipe', 'failed')
       if (cancelled.current) return
 
@@ -160,6 +192,7 @@ export function RescueWizard(): React.JSX.Element | null {
       setNote(t('ui.rescue.note.error', { msg: (e as Error).message }))
       setFinished(true)
     } finally {
+      setProgress(null)
       setRunning(false)
       setNoReconnect(false)
     }
@@ -175,14 +208,19 @@ export function RescueWizard(): React.JSX.Element | null {
     }
     set('restore', 'busy')
     setNote(t('ui.rescue.note.restoring'))
-    const text = await window.recta.readSettingsBackup(pick)
+    const text = held.current
     if (!text) {
       set('restore', 'failed')
       setNote(t('ui.rescue.note.noBackup'))
       setFinished(true)
       return
     }
-    const { total, refused } = await applySettings(text)
+    setProgress(0)
+    const { total, refused } = await applySettings(text, (done, all) => setProgress(done / all))
+    setProgress(null)
+    // The machine's own numbers are on the board again, so the dump that confirms
+    // them is a real backup and must be filed as one.
+    await window.recta.clearSettingsFactory()
     set('restore', refused.length ? 'failed' : 'ok')
     setNote(
       refused.length
@@ -202,6 +240,7 @@ export function RescueWizard(): React.JSX.Element | null {
     setOpen(false)
     setState({ wipe: 'todo', reflash: 'todo', restore: 'todo' })
     setNote(null)
+    setProgress(null)
     setFinished(false)
   }
 
@@ -258,6 +297,15 @@ export function RescueWizard(): React.JSX.Element | null {
           )}
 
           {note && <p className="mt-4 text-[13px] leading-relaxed text-slate-100">{note}</p>}
+
+          {progress !== null && (
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-border2">
+              <div
+                className="h-full rounded-full bg-brand transition-[width] duration-300"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+          )}
 
           {jobRunning && (
             <p className="mt-4 text-[12px] font-semibold text-danger">{t('ui.rescue.jobRunning')}</p>

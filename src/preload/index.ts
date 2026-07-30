@@ -15,6 +15,7 @@ const api: RectaApi = {
     ipcRenderer.invoke('autoConnect', opts),
   disconnect: () => ipcRenderer.invoke('disconnect'),
   markSettingsFactory: () => ipcRenderer.invoke('settings:markFactory'),
+  clearSettingsFactory: () => ipcRenderer.invoke('settings:clearFactory'),
   rescueSend: (action: 'wipe' | 'bootsel', portPath?: string) =>
     ipcRenderer.invoke('rescue:send', action, portPath),
   rescueProbe: (timeoutMs?: number) => ipcRenderer.invoke('rescue:probe', timeoutMs),

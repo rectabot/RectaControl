@@ -148,6 +148,11 @@ export class Controller {
     this.backup.markFactory()
   }
 
+  /** The machine's own settings are back on the board — file dumps normally again. */
+  clearSettingsFactory(): void {
+    this.backup.clearFactory()
+  }
+
   /** Fire a rescue pair down the live connection. Returns false when there is none
    *  to fire it down — the caller then falls back to the blind serial path. */
   sendRescue(action: RescueAction): boolean {

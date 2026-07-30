@@ -50,6 +50,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   ipcMain.handle('disconnect', () => controller.disconnect())
 
   ipcMain.handle('settings:markFactory', () => controller.markSettingsFactory())
+  ipcMain.handle('settings:clearFactory', () => controller.clearSettingsFactory())
 
   // Rescue. Prefer the live connection; fall back to writing straight at a serial
   // port, because the board this exists for may never have answered at all.

@@ -189,6 +189,9 @@ export interface RectaApi {
    *  is kept as a dated copy but not promoted to `latest.txt` — the file a restore
    *  reaches for has to keep describing the machine, not the firmware. */
   markSettingsFactory(): Promise<void>
+  /** The machine's own settings have been written back — end the factory window so
+   *  the dump that confirms them is filed as a real backup again. */
+  clearSettingsFactory(): Promise<void>
   /** Fire a rescue byte pair at the board: 'wipe' erases settings and reboots,
    *  'bootsel' reboots into the UF2 bootloader (USB only). Sent down the live
    *  connection when there is one, else written straight at a serial port — the

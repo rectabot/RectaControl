@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ConnectOptions, ControllerEvent, RectaApi, ResumeMap, UpdateReady } from '@shared/types'
+import type {
+  ConnectOptions,
+  ControllerEvent,
+  FlashProgress,
+  RectaApi,
+  ResumeMap,
+  UpdateReady
+} from '@shared/types'
 
 const api: RectaApi = {
   listPorts: () => ipcRenderer.invoke('ports:list'),
@@ -21,6 +28,14 @@ const api: RectaApi = {
   pickFirmware: () => ipcRenderer.invoke('firmware:pick'),
   flashFirmware: (uf2Path: string, drive: string) =>
     ipcRenderer.invoke('firmware:flash', uf2Path, drive),
+  dismissDriveWindow: (drive: string, action: 'minimize' | 'close') =>
+    ipcRenderer.invoke('firmware:dismissDriveWindow', drive, action),
+  pinWindow: (on: boolean) => ipcRenderer.invoke('firmware:pinWindow', on),
+  onFlashProgress: (cb: (p: FlashProgress) => void) => {
+    const h = (_e: unknown, p: FlashProgress): void => cb(p)
+    ipcRenderer.on('firmware:progress', h)
+    return () => ipcRenderer.removeListener('firmware:progress', h)
+  },
   fmList: (host: string, dir: string) => ipcRenderer.invoke('fm:list', host, dir),
   fmUpload: (host: string, dir: string) => ipcRenderer.invoke('fm:upload', host, dir),
   fmDownload: (host: string, path: string) => ipcRenderer.invoke('fm:download', host, path),

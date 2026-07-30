@@ -40,6 +40,7 @@ export const en: Record<string, string> = {
   'ui.settings.cat.errors': 'Errors & alarms',
   'ui.settings.cat.diagnostics': 'Diagnostics',
   'ui.settings.cat.theme': 'Theme',
+  'ui.settings.cat.about': 'About the app',
   'ui.settings.cat.controls': 'Controls',
   // Controls (keyboard / gamepad)
   'ui.controls.enable': 'Keyboard control',
@@ -596,6 +597,16 @@ export const en: Record<string, string> = {
   'ui.fw.noDrive': 'The bootloader drive did not appear. Try manually: hold BOOT, tap RUN.',
   'ui.fw.flashing': 'Flashing… do not touch the board.',
   'ui.fw.flashed': '✓ Flashed. The board restarts with the new firmware.',
+  'ui.fwDiag.unknown': 'This image carries no build.conf, so what it drives cannot be shown.',
+  'ui.fwDiag.singleY': 'one Y motor — the second side is not driven',
+  'ui.fwDiag.dualGanged': 'two Y motors (ganged) — they home as one',
+  'ui.fwDiag.dualAuto': 'two Y motors (auto-square) — one switch each, the gantry is squared',
+  'ui.fw.phaseVerify': 'checking the image…',
+  'ui.fw.phaseWrite': 'writing to the board…',
+  'ui.fw.reconnecting': '✓ Flashed. Waiting for the board to come back…',
+  'ui.fw.reconnected': '✓ Flashed and reconnected over {kind}.',
+  'ui.fw.reconnectFail':
+    '✓ Flashed, but the board has not answered yet. Give it a moment and press Auto-connect — the flash itself went through.',
   'ui.fw.error': '✗ Error: {msg}',
   // no longer numbered: the doing steps (bootloader / detect / flash) moved up into
   // the Settings header, so this pane is simply "what to flash"
@@ -612,9 +623,9 @@ export const en: Record<string, string> = {
   'ui.fw.detectTitle': 'If you entered manually: hold BOOT, tap RUN',
   'ui.fw.flashBtnBusy': 'Flashing…',
   'ui.fw.flashBtn': 'Flash',
-  'ui.fw.onBoard': 'On the board',
-  'ui.fw.onBoardUnknown': 'not reported — an older build, or not RectaBot firmware',
-  'ui.fw.refused': 'The board refused $UF2 ({err}). It has to be Idle to accept it.',
+  'ui.fw.refused': 'The board refused $UF2 ({err}). Reset it and try again.',
+  'ui.fw.refusedCritical':
+    'The board refused $UF2 ({err}) — a critical event is latched. Only five things do that: e-stop, a hard limit, a soft limit, a motor fault, an I/O expander fault. Reset will not clear it while the cause is still present, so clear the cause first, then Reset. Type $LEV in the console to see which signal fired — that command still answers in this state. (Firmware built on 30 Jul 2026 or later accepts $UF2 here; older boards have to be cleared first.)',
   'ui.fwAlarm.title': 'The machine is in an alarm',
   'ui.fwAlarm.body':
     'A machine in alarm refuses $UF2 like every other $ command, so the board will not enter the bootloader. Reset clears it and the flash can go ahead — the machine is not moving and nothing is lost. (The other way in is always there: hold BOOT, tap RUN, then Detect.)',
@@ -641,7 +652,7 @@ export const en: Record<string, string> = {
   'ui.fwFit.confirm': 'Flash anyway',
   'ui.fwFit.cancel': 'Choose another image',
   'ui.fw.footer':
-    'After flashing, check the Guide for the chosen variant (axis count, limit invert, hard limits). Manual bootloader: hold BOOT (SW2), tap RUN (SW3).',
+    'Flashing works with 24 V on and with 24 V off — both are known good. When the board is installed and only needs a newer firmware: switch 24 V off and flash over USB, opening nothing and touching nothing — that way nothing can move at all. On the bench, whichever you prefer; it is harmless. Afterwards check the Guide for the chosen variant (axis count, limit invert, hard limits); BOOT (SW2) + RUN (SW3) only with the board out of the cabinet.',
 
   // ── Diagnostics (log + problem report) ─────────────────────────────────────
   'ui.diag.logTitle': 'Log',

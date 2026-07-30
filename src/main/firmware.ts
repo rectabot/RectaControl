@@ -5,10 +5,15 @@
  *  by copying a .uf2 file onto it. The board reboots into the new firmware. */
 
 import { app, dialog } from 'electron'
-import { existsSync, readFileSync, readdirSync, statSync, copyFileSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { access, open, readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 import { log } from './logger'
-import type { BoardDrive, FirmwareVariant, VariantConfig } from '@shared/types'
+import type { BoardDrive, FirmwareVariant, FlashProgress, VariantConfig } from '@shared/types'
+
+const execFileAsync = promisify(execFile)
 
 /** Folder holding prebuilt variant .uf2 files (one subfolder per variant).
  *
@@ -111,21 +116,78 @@ export function listVariants(): FirmwareVariant[] {
   return out
 }
 
-/** Look for an RP2 bootloader mass-storage drive (D:..Z:) by its INFO_UF2.TXT. */
-export function detectBoard(): BoardDrive | null {
-  for (let c = 'D'.charCodeAt(0); c <= 'Z'.charCodeAt(0); c++) {
-    const drive = `${String.fromCharCode(c)}:\\`
-    const info = join(drive, 'INFO_UF2.TXT')
-    try {
-      if (!existsSync(info)) continue
-      const txt = readFileSync(info, 'utf8')
+/** Look for an RP2 bootloader mass-storage drive (D:..Z:) by its INFO_UF2.TXT.
+ *
+ *  Polled every 700 ms while waiting for a board to appear, so all 23 letters are
+ *  tried at once and asynchronously: a card reader with no card, or a disconnected
+ *  network drive, can take seconds to answer, and one of those would otherwise
+ *  stall the whole app on every poll. Lowest letter wins, as before. */
+export async function detectBoard(): Promise<BoardDrive | null> {
+  const letters = Array.from({ length: 23 }, (_, i) => String.fromCharCode('D'.charCodeAt(0) + i))
+  const found = await Promise.all(
+    letters.map(async (letter) => {
+      const drive = `${letter}:\\`
+      // read straight through: a drive that is enumerated but not ready fails here
+      // exactly as a missing one does, and both mean the same thing to us
+      const txt = await readFile(join(drive, 'INFO_UF2.TXT'), 'utf8').catch(() => null)
+      if (txt === null) return null
       const m = /Model:\s*(.+)/i.exec(txt)
       return { drive, model: m ? m[1].trim() : 'RP2 UF2 bootloader' }
-    } catch {
-      // drive enumerated but not ready — skip
-    }
+    })
+  )
+  return found.find((b) => b !== null) ?? null
+}
+
+/** Get the Explorer window Windows opens on the bootloader drive out of the way.
+ *
+ *  A board entering the bootloader mounts as a removable drive, and on most PCs
+ *  Windows answers that by opening a folder window on it — over the app, taking
+ *  the keyboard, in the middle of a flash. There is no way to stop it opening
+ *  from a normal application: AutoPlay can only be cancelled per-device through a
+ *  COM interface that needs a native addon, and the registry switch that would do
+ *  it turns AutoPlay off for every removable drive the user owns. Neither is a
+ *  fair price for a window that lives ten seconds.
+ *
+ *  So it opens, and we move it aside — but only it. Shell.Application enumerates
+ *  the open Explorer windows and we act on the ones whose location is this drive.
+ *  A folder the operator opened themselves anywhere else is untouched.
+ *
+ *  Two actions, because they belong to two different moments. While the drive is
+ *  live the window is only in the way, so it goes to the taskbar, where the
+ *  operator can still reach it — minimising someone's window is a small liberty,
+ *  closing it is a larger one. Once the flash is done the drive is gone with the
+ *  reboot and the window points at nothing, so then it is closed.
+ *
+ *  Never throws: failing to tidy a window is not a reason to fail a flash. */
+export async function dismissDriveWindow(drive: string, action: 'minimize' | 'close'): Promise<void> {
+  if (process.platform !== 'win32') return
+  // the letter comes from our own drive scan, but it ends up inside a shell
+  // command — take only what a drive letter can be and nothing else
+  const letter = /^([A-Za-z]):/.exec(drive)?.[1]
+  if (!letter) return
+
+  // SW_MINIMIZE (6), not SW_HIDE: hidden would take it off the taskbar too, and a
+  // window the operator cannot get back to is not out of the way, it is lost.
+  const act =
+    action === 'close'
+      ? `$w.Quit()`
+      : `[N.W]::ShowWindow([IntPtr][int64]$w.HWND, 6)`
+  const script =
+    `$ErrorActionPreference='SilentlyContinue';` +
+    (action === 'minimize'
+      ? `Add-Type -Name W -Namespace N -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);';`
+      : '') +
+    `$s = New-Object -ComObject Shell.Application;` +
+    `foreach ($w in @($s.Windows())) { if ($w.LocationURL -like 'file:///${letter}:*') { ${act} } }`
+  try {
+    await execFileAsync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command', script],
+      { windowsHide: true, timeout: 15000 }
+    )
+  } catch {
+    /* no Explorer window, COM refused, PowerShell missing — all harmless here */
   }
-  return null
 }
 
 /** Open a file picker for a custom .uf2; returns absolute path or null. */
@@ -152,9 +214,16 @@ const FAMILY_RP2350 = new Set([0xe48bff59, 0xe48bff5a, 0xe48bff5b]) // ARM-S, RI
  *  ignores the rest, so a truncated file half-flashes and an image for the wrong
  *  chip flashes nothing — and both leave a board that boots into something other
  *  than what you chose. Neither says a word at the time. Since the whole file is
- *  read to copy it anyway, checking it first costs nothing worth counting. */
-function verifyUf2(uf2Path: string, drive: string): void {
-  const b = readFileSync(uf2Path)
+ *  read to copy it anyway, checking it first costs nothing worth counting.
+ *
+ *  Read asynchronously: this is the main process, and 875 KB off a slow drive is
+ *  long enough to freeze the window mid-flash — which is exactly when the operator
+ *  is watching it hardest.
+ *
+ *  Returns the image, which the caller then writes: reading it twice for the sake
+ *  of a tidier signature would double the one part of this that is actually slow. */
+async function verifyUf2(uf2Path: string, drive: string): Promise<Buffer> {
+  const b = await readFile(uf2Path)
   if (b.length === 0 || b.length % 512 !== 0)
     throw new Error(`Not a UF2 image: ${b.length} bytes is not a whole number of 512-byte blocks.`)
 
@@ -173,7 +242,7 @@ function verifyUf2(uf2Path: string, drive: string): void {
   // unfamiliar Model string should not stop a flash that would have worked.
   let model = ''
   try {
-    model = readFileSync(join(drive, 'INFO_UF2.TXT'), 'utf8')
+    model = await readFile(join(drive, 'INFO_UF2.TXT'), 'utf8')
   } catch {
     /* drive already gone or unreadable — the copy below will report it */
   }
@@ -184,7 +253,18 @@ function verifyUf2(uf2Path: string, drive: string): void {
         ? 'This image is built for the RP2040; the board is an RP2350. The bootloader would ignore it and the board would come back running the old firmware.'
         : 'This image is not built for the RP2350 on this board. The bootloader would ignore it.'
     )
+  return b
 }
+
+/** How much of the image goes out at a time.
+ *
+ *  The bootloader writes each block into flash as it arrives, which is why a
+ *  875 KB copy takes eight seconds and not the tenth of a second the size
+ *  suggests. Awaiting one 64 KB write at a time (128 UF2 blocks) is what turns
+ *  that wait into something a progress bar can honestly report: the count moves
+ *  only once the drive has actually taken the bytes, not once we have handed them
+ *  to the OS. Smaller chunks would report more smoothly and copy more slowly. */
+const CHUNK = 64 * 1024
 
 /** Copy the .uf2 onto the bootloader drive. The board reboots on completion.
  *
@@ -194,12 +274,32 @@ function verifyUf2(uf2Path: string, drive: string): void {
  *  after a flash and the log could not say which image had been put on it — the
  *  question the whole diagnosis turned on. Three lines, written before the copy
  *  so a failed copy is on record too. */
-export function flashFile(uf2Path: string, drive: string): void {
-  if (!existsSync(uf2Path)) throw new Error(`UF2 not found: ${uf2Path}`)
-  if (!existsSync(drive)) throw new Error(`Bootloader drive not available: ${drive}`)
-  const st = statSync(uf2Path)
+export async function flashFile(
+  uf2Path: string,
+  drive: string,
+  onProgress?: (p: FlashProgress) => void
+): Promise<void> {
+  const st = await stat(uf2Path).catch(() => null)
+  if (!st) throw new Error(`UF2 not found: ${uf2Path}`)
+  await access(drive).catch(() => {
+    throw new Error(`Bootloader drive not available: ${drive}`)
+  })
   log('app', `flashing ${uf2Path} → ${drive} (${Math.round(st.size / 1024)} KB, built ${st.mtime.toISOString()})`)
-  verifyUf2(uf2Path, drive)
-  copyFileSync(uf2Path, join(drive, 'firmware.uf2'))
+
+  onProgress?.({ phase: 'verify', done: 0, total: st.size })
+  const image = await verifyUf2(uf2Path, drive)
+
+  const fh = await open(join(drive, 'firmware.uf2'), 'w')
+  try {
+    for (let at = 0; at < image.length; at += CHUNK) {
+      const n = Math.min(CHUNK, image.length - at)
+      await fh.write(image, at, n)
+      onProgress?.({ phase: 'write', done: at + n, total: image.length })
+    }
+  } finally {
+    // The board reboots the instant the last block lands, so the drive can vanish
+    // under us before close() returns. That is a successful flash, not a failure.
+    await fh.close().catch(() => {})
+  }
   log('app', 'flash written — the board reboots into it now')
 }

@@ -165,6 +165,15 @@ export interface UpdateReady {
  *  there is nothing downloaded to install. */
 export type InstallResult = { ok: true } | { ok: false; reason: 'busy' | 'manual' | 'none' }
 
+/** How far a flash has got. `verify` is the read-and-check pass over the image
+ *  (fast, no byte count worth showing); `write` is the copy onto the bootloader
+ *  drive, which is where the eight seconds go. */
+export interface FlashProgress {
+  phase: 'verify' | 'write'
+  done: number
+  total: number
+}
+
 /** API surface exposed to the renderer via contextBridge (window.recta). */
 export interface RectaApi {
   listPorts(): Promise<SerialPortInfo[]>
@@ -189,6 +198,14 @@ export interface RectaApi {
   detectBoard(): Promise<BoardDrive | null>
   pickFirmware(): Promise<string | null>
   flashFirmware(uf2Path: string, drive: string): Promise<void>
+  /** Move the Explorer window Windows opens on the bootloader drive out of the
+   *  way — minimised while the drive is live (it is the manual drag-and-drop
+   *  fallback), closed once the board has rebooted and taken the drive with it. */
+  dismissDriveWindow(drive: string, action: 'minimize' | 'close'): Promise<void>
+  /** Keep the app above other windows — for the length of a flash, and no longer. */
+  pinWindow(on: boolean): Promise<void>
+  /** Follow a flash as it goes out. Returns an unsubscribe function. */
+  onFlashProgress(cb: (p: FlashProgress) => void): () => void
   /** SD-card file management over FTP. */
   fmList(host: string, dir: string): Promise<FmEntry[]>
   fmUpload(host: string, dir: string): Promise<string[]>

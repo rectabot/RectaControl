@@ -38,6 +38,7 @@ export const sr: Record<string, string> = {
   'ui.settings.cat.errors': 'Greške i alarmi',
   'ui.settings.cat.diagnostics': 'Dijagnostika',
   'ui.settings.cat.theme': 'Tema',
+  'ui.settings.cat.about': 'O aplikaciji',
   'ui.settings.cat.controls': 'Kontrole',
   // Kontrole (tastatura / gamepad)
   'ui.controls.enable': 'Kontrola tastaturom',
@@ -582,6 +583,16 @@ export const sr: Record<string, string> = {
   'ui.fw.noDrive': 'Bootloader drajv se nije pojavio. Probaj ručno: drži BOOT, tapni RUN.',
   'ui.fw.flashing': 'Flešujem… ne diraj pločicu.',
   'ui.fw.flashed': '✓ Flešovano. Pločica se restartuje sa novim firmware-om.',
+  'ui.fwDiag.unknown': 'Ova slika nema build.conf, pa se ne može prikazati šta pokreće.',
+  'ui.fwDiag.singleY': 'jedan Y motor — druga strana se ne pobuđuje',
+  'ui.fwDiag.dualGanged': 'dva Y motora (ganged) — homing im je zajednički',
+  'ui.fwDiag.dualAuto': 'dva Y motora (auto-kvadriranje) — svaki svoj prekidač, portal se kvadrira',
+  'ui.fw.phaseVerify': 'proveravam sliku…',
+  'ui.fw.phaseWrite': 'upisujem na ploču…',
+  'ui.fw.reconnecting': '✓ Flešovano. Čekam da se ploča vrati…',
+  'ui.fw.reconnected': '✓ Flešovano i ponovo povezano preko {kind}.',
+  'ui.fw.reconnectFail':
+    '✓ Flešovano, ali se ploča još nije javila. Sačekaj trenutak pa pritisni Auto-poveži — samo flešovanje je prošlo.',
   'ui.fw.error': '✗ Greška: {msg}',
   'ui.fw.step1': 'Izaberi firmware',
   'ui.fw.custom': 'Custom: {name}',
@@ -596,9 +607,9 @@ export const sr: Record<string, string> = {
   'ui.fw.detectTitle': 'Ako si ručno ušao: drži BOOT, tapni RUN',
   'ui.fw.flashBtnBusy': 'Flešujem…',
   'ui.fw.flashBtn': 'Flešuj',
-  'ui.fw.onBoard': 'Na ploči',
-  'ui.fw.onBoardUnknown': 'ne javlja se — stariji build ili nije RectaBot firmver',
-  'ui.fw.refused': 'Ploča je odbila $UF2 ({err}). Mora biti u stanju Idle da bi ga prihvatila.',
+  'ui.fw.refused': 'Ploča je odbila $UF2 ({err}). Uradi Reset pa probaj ponovo.',
+  'ui.fw.refusedCritical':
+    'Ploča je odbila $UF2 ({err}) — zaključan je kritičan događaj. To rade samo pet stvari: E-stop, hard limit, soft limit, kvar motora, kvar I/O ekspandera. Reset ga ne skida dok je uzrok i dalje prisutan, pa prvo ukloni uzrok, pa Reset. Ukucaj $LEV u konzolu da vidiš koji je signal opalio — ta komanda odgovara i u ovom stanju. (Firmver građen 30.07.2026. ili kasnije prihvata $UF2 i ovde; starije ploče se prvo moraju osloboditi.)',
   'ui.fwAlarm.title': 'Mašina je u alarmu',
   'ui.fwAlarm.body':
     'Mašina u alarmu odbija $UF2 kao i svaku drugu $ komandu, pa ploča ne ulazi u bootloader. Reset to skida i flešovanje može da krene — mašina ne radi i ništa se ne gubi. (Drugi put uvek postoji: drži BOOT, tapni RUN, pa Detektuj.)',
@@ -622,7 +633,7 @@ export const sr: Record<string, string> = {
   'ui.fwFit.confirm': 'Ipak flešuj',
   'ui.fwFit.cancel': 'Izaberi drugi firmver',
   'ui.fw.footer':
-    'Posle flešovanja proveri Vodič za izabranu varijantu (broj osa, limit invert, hard limiti). Manuelni bootloader: drži BOOT (SW2), tapni RUN (SW3).',
+    'Flešovanje radi i sa uključenih 24 V i bez njih — oba su provereno ispravna. Preporuka kad je ploča u ormanu a treba joj samo novi firmver: ugasi 24 V i flešuj preko USB-a, ništa ne otvaraj i ništa ne diraj — tako ništa ne može ni da se pomeri. Na stolu radi kako ti odgovara, bezopasno je. Posle flešovanja proveri Vodič za izabranu varijantu (broj osa, limit invert, hard limiti); BOOT (SW2) + RUN (SW3) samo kad je ploča van ormana.',
 
   // ── Dijagnostika (log + izveštaj o problemu) ───────────────────────────────
   'ui.diag.logTitle': 'Log',

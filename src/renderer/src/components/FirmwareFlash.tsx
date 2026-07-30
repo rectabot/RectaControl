@@ -4,7 +4,8 @@ import { RT } from '@shared/grbl'
 import { fitVariant, readBoardLayout, type Fit } from '@shared/firmware-match'
 import { useStore } from '../store'
 import { useT, type TFunc } from '../i18n'
-import type { BoardDrive, FirmwareVariant } from '@shared/types'
+import { VariantDiagram } from './VariantDiagram'
+import type { BoardDrive, FirmwareVariant, FlashProgress, TransportKind } from '@shared/types'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -34,7 +35,6 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   const alarm = useStore((s) => (s.status?.state ?? '').split(':')[0] === 'Alarm')
   // what the board says it is running, once $I has come back
   const info = useStore((s) => s.info)
-  const firmwareBuild = info.firmwareBuild
   // Survives the disconnect that $UF2 causes — the store only clears info when a
   // *new* connection opens — so the layout is still known at the moment of the
   // flash, which is exactly when it is needed.
@@ -44,14 +44,30 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   const [selected, setSelected] = useState<string>('') // uf2Path
   const [customPath, setCustomPath] = useState<string | null>(null)
   const [board, setBoard] = useState<BoardDrive | null>(null)
-  const [busy, setBusy] = useState<'idle' | 'detecting' | 'waiting' | 'flashing'>('idle')
+  const [busy, setBusy] = useState<'idle' | 'detecting' | 'waiting' | 'flashing' | 'reconnecting'>('idle')
   const [msg, setMsg] = useState<string | null>(null)
+  const [progress, setProgress] = useState<FlashProgress | null>(null)
+
+  // Follow the copy as the main process makes it. Subscribed for the life of the
+  // panel rather than around each flash: the board reboots the moment the last
+  // block lands, and a listener torn down on the way out of `flash()` can miss the
+  // tail of its own transfer.
+  useEffect(() => window.recta.onFlashProgress(setProgress), [])
+
+  // Never leave the app pinned above everything because this panel went away
+  // mid-flow — Settings closed, window reloaded, a crash in the tree. A window
+  // stuck in front of the whole desktop is a worse bug than the one we are hiding
+  // from, and it is the kind that outlives the session that caused it.
+  useEffect(() => () => void window.recta.pinWindow(false), [])
 
   useEffect(() => {
-    window.recta.listFirmware().then((v) => {
-      setVariants(v)
-      if (v.length && !selected && !customPath) setSelected(v[0].uf2Path)
-    })
+    // Nothing is selected until the operator selects it, and Flash stays dead until
+    // then. The list used to arm itself with the first entry, which is `3axis` —
+    // alphabetical order, and the single-Y image. On a dual-Y gantry that is the
+    // one file in the folder that can bend the frame, and it sat pre-selected under
+    // a live button. A default that costs nothing to make explicit should not have
+    // one; picking the firmware is the whole decision this panel exists for.
+    window.recta.listFirmware().then(setVariants)
     detect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -98,8 +114,25 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
     // within milliseconds, and saying so beats a silent fourteen-second wait.
     let refused: string | null = null
     const off = window.recta.onEvent((e) => {
-      if (e.type === 'line' && /^error:/i.test(e.data.trim())) refused = e.data.trim()
+      if (e.type !== 'line') return
+      const line = e.data.trim()
+      if (/^error:/i.test(line)) {
+        refused = line
+        return
+      }
+      // The board announces the bootloader before it goes, and then it is gone —
+      // but nothing closes the socket, so Ethernet carries on believing in it for
+      // the best part of twenty seconds (19 s, measured 30 Jul 2026). For that
+      // whole window the app shows a live connection to a machine that is not
+      // there, and a jog sent into it disappears without a word. Take the board at
+      // its word and drop the link now. Only on the announcement: a $UF2 that came
+      // back as error:79 means the board is staying exactly where it is.
+      if (/Entering UF2 Bootloader/i.test(line)) void window.recta.disconnect()
     })
+    // From here until the drive is dealt with, the app stays in front: the folder
+    // window Windows opens on the bootloader drive would otherwise land on top and
+    // take the keyboard with it.
+    await window.recta.pinWindow(true)
     try {
       await window.recta.send('$UF2')
     } catch {
@@ -114,6 +147,16 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
         setBoard(b)
         setBusy('idle')
         setMsg(null)
+        // Minimised, not closed: while the drive is live that window is the manual
+        // fallback — a .uf2 dragged onto it flashes the board without us. It only
+        // has to be out of the way, and it has to still be there.
+        //
+        // Explorer opens it a moment after the volume mounts, not with it, so one
+        // sweep at detection time is a coin toss. Two, a second apart.
+        await window.recta.dismissDriveWindow(b.drive, 'minimize')
+        await sleep(1200)
+        await window.recta.dismissDriveWindow(b.drive, 'minimize')
+        await window.recta.pinWindow(false)
         return
       }
       // the board answered instead of rebooting — no point waiting out the loop
@@ -121,7 +164,17 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
     }
     off()
     setBusy('idle')
-    setMsg(refused ? t('ui.fw.refused', { err: refused }) : t('ui.fw.noDrive'))
+    await window.recta.pinWindow(false)
+    // error:79 is the one refusal worth spelling out. It means a critical event is
+    // latched, which a Reset does not clear while its cause is still there — so the
+    // operator can press Reset all morning and get the same answer. Boards built
+    // before 30 Jul 2026 refuse $UF2 in that state (the flag was missing from the
+    // command); newer ones do not, but every board already in the field is an old one.
+    setMsg(
+      refused
+        ? t(/^error:79\b/i.test(refused) ? 'ui.fw.refusedCritical' : 'ui.fw.refused', { err: refused })
+        : t('ui.fw.noDrive')
+    )
   }
 
   const pick = async (): Promise<void> => {
@@ -133,6 +186,11 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   }
 
   const uf2Path = selected || customPath || ''
+
+  /** The shipped variant behind the current selection, if it is one of ours. A
+   *  custom .uf2 picked off disk has no build.conf and so no drawing — we would
+   *  be guessing at what it drives, which is the one thing not to guess at. */
+  const selectedVariant = useMemo(() => variants.find((v) => v.uf2Path === selected) ?? null, [variants, selected])
 
   /** How each image relates to the board we last spoke to. Recomputed rather
    *  than stored: `variants` and `layout` are both cheap and both can change
@@ -173,16 +231,64 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
     }
 
     setBusy('flashing')
+    setProgress(null)
     setMsg(t('ui.fw.flashing'))
+    await window.recta.pinWindow(true)
+    const drive = board.drive
     try {
-      await window.recta.flashFirmware(uf2Path, board.drive)
-      setMsg(t('ui.fw.flashed'))
+      await window.recta.flashFirmware(uf2Path, drive)
       setBoard(null) // drive disappears after flashing
+      // now it can go: the drive left with the reboot, so the window points at
+      // nothing and the manual fallback it offered is no longer available anyway
+      await window.recta.dismissDriveWindow(drive, 'close')
+      await reconnect()
     } catch (e) {
       setMsg(t('ui.fw.error', { msg: (e as Error).message }))
-    } finally {
       setBusy('idle')
+    } finally {
+      setProgress(null)
+      await window.recta.pinWindow(false)
     }
+  }
+
+  /** Wait for the board to come back and pick the connection up again.
+   *
+   *  $UF2 drops the link on the way in, so after a flash the operator is left
+   *  looking at a disconnected app and has to go and reconnect by hand — at the
+   *  one moment they most want to see the board answer. Ethernet is tried alone
+   *  for the first stretch, because it is slower to become ready than USB (the
+   *  W5500 has to come up and start listening) and falling back the instant TCP
+   *  refuses would hand back a USB link on a machine that was on the network a
+   *  minute ago. After that, either will do. */
+  const reconnect = async (): Promise<void> => {
+    const ethHost = localStorage.getItem('conn.ethHost') || '192.168.5.1'
+    const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
+    const baud = Number(localStorage.getItem('conn.baud')) || 115200
+
+    setBusy('reconnecting')
+    setMsg(t('ui.fw.reconnecting'))
+    for (let i = 0; i < 14; i++) {
+      await sleep(1500)
+      if (useStore.getState().connected) break // something else got there first
+      try {
+        let kind: TransportKind | null
+        if (i < 5) {
+          await window.recta.connect({ kind: 'ethernet', host: ethHost, port: ethPort })
+          kind = 'ethernet'
+        } else {
+          kind = await window.recta.autoConnect({ ethHost, ethPort, baud })
+        }
+        if (kind) {
+          setBusy('idle')
+          setMsg(t('ui.fw.reconnected', { kind: kind === 'ethernet' ? 'Ethernet' : 'USB' }))
+          return
+        }
+      } catch {
+        /* not up yet — the board is still booting, or this cable is not the one */
+      }
+    }
+    setBusy('idle')
+    setMsg(useStore.getState().connected ? t('ui.fw.flashed') : t('ui.fw.reconnectFail'))
   }
 
   const fileName = customPath ? customPath.split(/[\\/]/).pop() : null
@@ -232,22 +338,16 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
   return (
     <>
       {headerSlot ? createPortal(actions, headerSlot) : null}
-      <div className="flex flex-col gap-4 p-4">
+      {/* min-h-full so the drawing at the bottom has a height to fill: the pane
+          around this scrolls, and inside a scroller flex-1 has nothing to divide
+          unless the column is told to be at least as tall as the view. */}
+      <div className="flex min-h-full flex-col gap-4 p-4">
         {!headerSlot && actions}
 
-        {/* What is on the board right now. Until the firmware started stamping
-            itself into $I there was no way to answer that except by watching how
-            the machine behaved — and "did my flash take?" is the first question
-            after every flash. Blank when disconnected, honest when the board is
-            running something that is not ours. */}
-        {connected && (
-          <div className="flex items-baseline gap-2 rounded-md border border-border bg-panel2 px-3 py-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{t('ui.fw.onBoard')}</span>
-            <span className={`font-mono text-xs ${firmwareBuild ? 'text-ok' : 'text-slate-500'}`}>
-              {firmwareBuild ?? t('ui.fw.onBoardUnknown')}
-            </span>
-          </div>
-        )}
+        {/* What the board is running was printed here as well as marked in the list
+            — the same fact in two places, and the eye has to check both to be sure
+            they agree. The list is where the decision is made, so the mark stays
+            there and the banner goes. */}
 
         {/* choose image */}
         <div>
@@ -311,11 +411,55 @@ export function FirmwareFlash({ headerSlot }: { headerSlot?: HTMLElement | null 
           {layout.variant == null && layout.axes == null && (
             <div className="mt-2 font-mono text-[10px] leading-relaxed text-slate-500">{t('ui.fwFit.noBoard')}</div>
           )}
+
         </div>
 
-        {msg && <div className="font-mono text-xs text-slate-400">{msg}</div>}
+        {/* Every word this panel says, in one block of fixed height directly under
+            the list. Fixed because the drawing below takes what is left: a message
+            that appears mid-flash would otherwise resize the drawing under the
+            operator's eyes, and a diagram that jumps while you are reading it is a
+            diagram you stop trusting. The empty space when there is nothing to say
+            is the price, and it is worth paying. */}
+        <div className="flex h-[112px] shrink-0 flex-col gap-2">
+          {/* The copy takes about eight seconds — the bootloader writes each block
+              into flash as it arrives — and eight seconds of a frozen-looking panel
+              during the one operation nobody dares interrupt is too long to leave
+              unexplained. The bar counts bytes the drive has actually taken. */}
+          <div className="h-[26px] shrink-0">
+            {progress && (
+              <div className="flex flex-col gap-1.5">
+                <div className="h-1.5 overflow-hidden rounded-full bg-panel2">
+                  <div
+                    className="h-full rounded-full bg-brand transition-[width] duration-150 ease-out"
+                    style={{ width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <div className="flex justify-between font-mono text-[10px] text-slate-500">
+                  <span>{t(progress.phase === 'verify' ? 'ui.fw.phaseVerify' : 'ui.fw.phaseWrite')}</span>
+                  <span>
+                    {Math.round(progress.done / 1024)} / {Math.round(progress.total / 1024)} KB
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
-        <div className="font-mono text-[10px] leading-relaxed text-slate-500">{t('ui.fw.footer')}</div>
+          <div className="h-[20px] shrink-0 overflow-hidden font-mono text-xs text-slate-400">{msg}</div>
+
+          <div className="min-h-0 flex-1 overflow-hidden font-mono text-[10px] leading-relaxed text-slate-500">
+            {t('ui.fw.footer')}
+          </div>
+        </div>
+
+        {/* The picture of whatever is selected, given the whole of what is left —
+            and nothing below it, so it is the last thing on the screen and the eye
+            has nowhere else to go. Nothing selected, nothing drawn: a default
+            drawing would imply a default choice, and there isn't one any more. */}
+        {selectedVariant && (
+          <div className="min-h-[200px] flex-1">
+            <VariantDiagram config={selectedVariant.config} />
+          </div>
+        )}
       </div>
     </>
   )

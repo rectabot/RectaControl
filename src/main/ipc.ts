@@ -7,7 +7,7 @@ import { logDir, logEvent, logFromUi } from './logger'
 import { buildReport } from './report'
 import { installUpdate, pendingUpdate, startUpdater } from './updater'
 import { listPorts } from './transport/serial'
-import { detectBoard, flashFile, listVariants, pickUf2 } from './firmware'
+import { detectBoard, dismissDriveWindow, flashFile, listVariants, pickUf2 } from './firmware'
 import {
   fmDelete,
   fmDownload,
@@ -69,8 +69,31 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   ipcMain.handle('firmware:list', () => listVariants())
   ipcMain.handle('firmware:detect', () => detectBoard())
   ipcMain.handle('firmware:pick', () => pickUf2())
-  ipcMain.handle('firmware:flash', (_e, uf2Path: string, drive: string) =>
-    flashFile(uf2Path, drive)
+  ipcMain.handle('firmware:dismissDriveWindow', (_e, drive: string, action: 'minimize' | 'close') =>
+    dismissDriveWindow(drive, action)
+  )
+
+  // Hold the app in front for the length of a flash. Windows hands focus to the
+  // folder window it opens on the bootloader drive, and the operator is then
+  // watching a progress bar that is no longer on screen during the one operation
+  // they must not interrupt. Pinned only between $UF2 and the board coming back —
+  // an app that decides it is always the most important window is its own problem.
+  ipcMain.handle('firmware:pinWindow', (_e, on: boolean) => {
+    const win = getWindow()
+    if (!win || win.isDestroyed()) return
+    win.setAlwaysOnTop(on)
+    if (on) {
+      win.show() // no-op when visible; restores it if Windows minimised it
+      win.focus()
+    }
+  })
+  // Progress goes back to whoever asked for the flash, not to a remembered window:
+  // the sender is the panel showing the bar, and if it has gone away mid-copy there
+  // is nothing to tell.
+  ipcMain.handle('firmware:flash', (e, uf2Path: string, drive: string) =>
+    flashFile(uf2Path, drive, (p) => {
+      if (!e.sender.isDestroyed()) e.sender.send('firmware:progress', p)
+    })
   )
 
   ipcMain.handle('fm:list', (_e, host: string, dir: string) => fmList(host, dir))

@@ -930,6 +930,7 @@ export const en: Record<string, string> = {
   'ui.rescue.note.needUsb': 'The next step needs the USB cable: the bootloader is a USB drive and has no network. Plug it in and run this again.',
   'ui.rescue.note.bootloader': 'Erasing was not enough — putting the board into the bootloader…',
   'ui.rescue.note.pickImage': 'The board is in the bootloader. Pick the firmware for your machine in the panel that just opened, and check the drawing under the list before you flash — it shows what that image drives. When the board comes back, run this recovery again to finish.',
+  'ui.rescue.note.rebooting': 'A few settings only exist once the board has restarted with them — restarting and finishing…',
   'ui.rescue.note.restoring': 'The board is answering again — writing your settings back…',
   'ui.rescue.note.restored': 'Done. {count} settings written back.',
   'ui.rescue.note.restoredPartly': 'The board is back, but {count} settings were refused: {list}. Check those by hand before running a program.',

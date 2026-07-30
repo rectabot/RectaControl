@@ -89,7 +89,22 @@ function same(a: string, b: string): boolean {
  */
 export async function applySettings(
   text: string,
-  onProgress?: (done: number, total: number) => void
+  onProgress?: (done: number, total: number) => void,
+  opts?: {
+    /** Restart the board once, and retry whatever is still missing.
+     *
+     *  Some settings only exist while the thing they belong to is live, and that is
+     *  decided at boot. `$476` (VFD ModBus address) exists only while a VFD is the
+     *  default spindle, which comes from `$395` — read when the board starts. So on
+     *  a board that just came up on factory defaults, writing `$395=1` switches the
+     *  spindle at once but `$476` stays unavailable (error:53, "setting disabled")
+     *  for the rest of that session, and the restore ends one setting short with no
+     *  way to finish. The same is true of `$301` and the other boot-read settings.
+     *
+     *  Confirmed on hardware 30 Jul 2026: refused before a restart, `ok` after. */
+    rebootToFinish?: boolean
+    onReboot?: () => void
+  }
 ): Promise<ApplyResult> {
   const lines = text
     .split(/\r?\n/)
@@ -130,6 +145,18 @@ export async function applySettings(
       missed = await diff(lines)
     }
 
+    // Anything left may simply not exist yet on a board that has not restarted with
+    // these settings in it — see rebootToFinish above. One restart, one more pass.
+    if (missed.length && opts?.rebootToFinish) {
+      opts.onReboot?.()
+      window.recta.send('$REBOOT')
+      if (await waitForBoard()) {
+        await quiet()
+        for (const { line } of missed) await sendSetting(line)
+        missed = await diff(lines)
+      }
+    }
+
     return {
       total: lines.length,
       refused: missed.map((m) => (m.now === null ? `${m.line} → not on this board` : `${m.line} → board says ${m.now}`))
@@ -137,6 +164,19 @@ export async function applySettings(
   } finally {
     useStore.getState().setBulkWriting(false)
   }
+}
+
+/** Wait for the board to come back and answer a line command. The app reconnects on
+ *  its own after a reboot; this only has to wait for it and then check that the
+ *  parser — not merely the link — is up. */
+async function waitForBoard(totalMs = 25000): Promise<boolean> {
+  const until = Date.now() + totalMs
+  await new Promise((r) => setTimeout(r, 2500)) // do not probe into the reset itself
+  while (Date.now() < until) {
+    if (useStore.getState().connected && (await window.recta.rescueProbe(1500))) return true
+    await new Promise((r) => setTimeout(r, 700))
+  }
+  return false
 }
 
 /** Read the board and report every line the file and the board disagree on. */

@@ -216,7 +216,20 @@ export function RescueWizard(): React.JSX.Element | null {
       return
     }
     setProgress(0)
-    const { total, refused } = await applySettings(text, (done, all) => setProgress(done / all))
+    const { total, refused } = await applySettings(
+      text,
+      (done, all) => setProgress(done / all),
+      {
+        // A board that has just been wiped comes up before it knows it has a VFD, so
+        // the settings that belong to one do not exist yet. One restart finishes the
+        // job rather than handing the operator a list to type in by hand.
+        rebootToFinish: true,
+        onReboot: () => {
+          setProgress(null)
+          setNote(t('ui.rescue.note.rebooting'))
+        }
+      }
+    )
     setProgress(null)
     // The machine's own numbers are on the board again, so the dump that confirms
     // them is a real backup and must be filed as one.

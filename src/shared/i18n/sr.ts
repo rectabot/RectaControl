@@ -903,6 +903,7 @@ export const sr: Record<string, string> = {
   'ui.rescue.note.needUsb': 'Sledeći korak traži USB kabl: bootloader je USB disk i nema mrežu. Priključi ga pa pokreni ponovo.',
   'ui.rescue.note.bootloader': 'Brisanje nije bilo dovoljno — ubacujem ploču u bootloader…',
   'ui.rescue.note.pickImage': 'Ploča je u bootloader-u. Izaberi firmver za svoju mašinu u panelu koji se upravo otvorio i pogledaj crtež ispod liste pre flešovanja — on pokazuje šta ta slika pokreće. Kad se ploča vrati, pokreni oporavak ponovo da se završi.',
+  'ui.rescue.note.rebooting': 'Nekoliko podešavanja postoji tek kad se ploča digne sa njima — restartujem i završavam…',
   'ui.rescue.note.restoring': 'Ploča opet odgovara — upisujem tvoja podešavanja…',
   'ui.rescue.note.restored': 'Gotovo. Vraćeno {count} podešavanja.',
   'ui.rescue.note.restoredPartly': 'Ploča je vraćena, ali je {count} podešavanja odbijeno: {list}. Proveri ih ručno pre nego što pustiš program.',

@@ -189,6 +189,21 @@ export interface RectaApi {
    *  is kept as a dated copy but not promoted to `latest.txt` — the file a restore
    *  reaches for has to keep describing the machine, not the firmware. */
   markSettingsFactory(): Promise<void>
+  /** Fire a rescue byte pair at the board: 'wipe' erases settings and reboots,
+   *  'bootsel' reboots into the UF2 bootloader (USB only). Sent down the live
+   *  connection when there is one, else written straight at a serial port — the
+   *  board this exists for may never have answered. Resolves with which route was
+   *  used; rejects only when there is no port at all. Needs firmware from 30 Jul
+   *  2026 or later; older boards ignore the bytes, which is the safe direction. */
+  rescueSend(action: 'wipe' | 'bootsel', portPath?: string): Promise<'connection' | 'serial'>
+  /** Whether the board executes commands, as opposed to merely being alive. `?`
+   *  cannot answer this — realtime bytes keep replying on a board whose line parser
+   *  is suspended — so this asks `$I` and waits for an ordinary line. */
+  rescueProbe(timeoutMs?: number): Promise<boolean>
+  /** Saved `$$` dumps, newest first, `latest.txt` leading. Empty means there is no
+   *  way back — which the recovery has to say before it erases anything. */
+  settingsBackups(): Promise<{ name: string; taken: string }[]>
+  readSettingsBackup(name: string): Promise<string | null>
   send(line: string): Promise<void>
   realtime(byte: number): Promise<void>
   jog(axis: string, distance: number, feed: number): Promise<void>

@@ -6,7 +6,9 @@ import { Controller } from './controller'
 import { logDir, logEvent, logFromUi } from './logger'
 import { buildReport } from './report'
 import { installUpdate, pendingUpdate, startUpdater } from './updater'
-import { listPorts } from './transport/serial'
+import { listPorts, pickBoardPort } from './transport/serial'
+import { type RescueAction, sendBlind } from './rescue'
+import { listBackups, readBackup } from './settingsBackup'
 import { detectBoard, dismissDriveWindow, flashFile, listVariants, pickUf2 } from './firmware'
 import {
   fmDelete,
@@ -48,6 +50,21 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   ipcMain.handle('disconnect', () => controller.disconnect())
 
   ipcMain.handle('settings:markFactory', () => controller.markSettingsFactory())
+
+  // Rescue. Prefer the live connection; fall back to writing straight at a serial
+  // port, because the board this exists for may never have answered at all.
+  ipcMain.handle('rescue:send', async (_e, action: RescueAction, portPath?: string) => {
+    if (controller.sendRescue(action)) return 'connection'
+    const path = portPath ?? (await pickBoardPort())
+    if (!path) throw new Error('no serial port to send the rescue sequence on')
+    await sendBlind(path, action)
+    return 'serial'
+  })
+
+  ipcMain.handle('rescue:probe', (_e, timeoutMs?: number) => controller.probeLine(timeoutMs))
+
+  ipcMain.handle('settings:backups', () => listBackups())
+  ipcMain.handle('settings:readBackup', (_e, name: string) => readBackup(name))
 
   ipcMain.handle('send', (_e, line: string) => controller.sendLine(line))
 

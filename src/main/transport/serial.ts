@@ -9,6 +9,19 @@ export async function listPorts(): Promise<SerialPortInfo[]> {
   return ports.map((p) => ({ path: p.path, manufacturer: p.manufacturer }))
 }
 
+/** The port most likely to be the board: an RP2350 enumerates as a Raspberry Pi /
+ *  Pico CDC device. Falls back to the first port there is, and to null when there
+ *  are none. Used by auto-connect and by the rescue path, which has to reach a
+ *  board that never answered and so cannot be identified by talking to it. */
+export async function pickBoardPort(): Promise<string | null> {
+  const ports = await listPorts()
+  if (!ports.length) return null
+  const pick = ports.find((p) =>
+    /pico|rp2|raspberry|grbl|cdc|usb serial|wch|board/i.test(`${p.manufacturer ?? ''} ${p.path}`)
+  )
+  return (pick ?? ports[0]).path
+}
+
 export class SerialTransport implements Transport {
   private port: SerialPort | null = null
   private dataCb: (chunk: Buffer) => void = () => {}

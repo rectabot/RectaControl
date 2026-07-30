@@ -349,6 +349,11 @@ interface AppState {
   alert: RecoveryAlert | null
   /** Whether the recovery popup is currently shown. */
   recoveryOpen: boolean
+  /** The guided recovery dialog is open. */
+  rescueWizardOpen: boolean
+  /** The board is answering `?` but not commands — offer the recovery. Raised by the
+   *  detector in App.tsx, cleared the moment the parser answers again. */
+  rescueSuggested: boolean
   /** Hold off the automatic reconnect. Set while the operator disconnects on
    *  purpose, and for the length of a flash — the board is *meant* to be gone in
    *  both cases, and a reconnect racing the flash would fight it for the port. */
@@ -535,6 +540,8 @@ interface AppState {
   /** Open/close the recovery popup without dismissing the underlying alert. */
   setRecoveryOpen: (open: boolean) => void
   setNoReconnect: (on: boolean) => void
+  setRescueWizardOpen: (open: boolean) => void
+  setRescueSuggested: (on: boolean) => void
   /** One-tap escape from a limit switch: suspend hard limits, back the axis off by
    *  ESCAPE_MM in the chosen direction, and let the automatic restore re-arm them.
    *  The DIRECTION is the operator's call, never a guess: with MIN and MAX sharing
@@ -633,6 +640,8 @@ export const useStore = create<AppState>((set, get) => ({
   message: null,
   alert: null,
   recoveryOpen: false,
+  rescueWizardOpen: false,
+  rescueSuggested: false,
   noReconnect: false,
   alarmHandled: false,
   recoveryPopup: localStorage.getItem('recoveryPopup') !== '0',
@@ -1019,6 +1028,8 @@ export const useStore = create<AppState>((set, get) => ({
   clearAlert: () => set({ alert: null, message: null, recoveryOpen: false, alarmHandled: true }),
   setRecoveryOpen: (open) => set({ recoveryOpen: open }),
   setNoReconnect: (on) => set({ noReconnect: on }),
+  setRescueWizardOpen: (open) => set({ rescueWizardOpen: open }),
+  setRescueSuggested: (on) => set({ rescueSuggested: on }),
   escapeSwitch: (axis, dir) => {
     const s = get()
     // strictly Idle: a jog is refused in Alarm, and mid-move it would queue up

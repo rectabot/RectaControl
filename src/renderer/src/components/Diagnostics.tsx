@@ -122,6 +122,22 @@ export function Diagnostics(): JSX.Element {
             <p className="text-[10px] leading-snug text-slate-500">{t('ui.diag.privacy')}</p>
           </div>
         )}
+
+        {/* The recovery opens itself when the board stops answering, which is how it is
+            meant to be found. This is the way in when it does not: someone on the phone
+            walking an operator through a board that is misbehaving differently, or a
+            second attempt after the firmware panel finished its half. Kept here rather
+            than given a category of its own — a permanent "Recovery" heading is clutter
+            for everyone who will never need it, and no comfort to whoever does. */}
+        <div className="mt-2 flex flex-col gap-1 border-t border-border pt-4">
+          <button
+            className="btn h-9 w-fit border-warn text-warn"
+            onClick={() => useStore.getState().setRescueWizardOpen(true)}
+          >
+            {t('ui.sys.rescue')}
+          </button>
+          <span className="text-[10px] leading-snug text-slate-500">{t('ui.sys.rescueHint')}</span>
+        </div>
       </div>
     </div>
   )

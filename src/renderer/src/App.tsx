@@ -36,6 +36,7 @@ export default function App(): JSX.Element {
   const sdRunning = useStore((s) => s.sdRunning)
   const parked = useStore((s) => s.parked)
   const connected = useStore((s) => s.connected)
+  const info = useStore((s) => s.info)
   // an unresolved alarm/error, and its event counter. `seq` bumps only on a
   // genuinely new event, which is what the console auto-focus below keys on.
   const alertActive = useStore((s) => s.alert != null)
@@ -124,7 +125,7 @@ export default function App(): JSX.Element {
   // one-time build marker in the terminal, so it's obvious at a glance whether
   // the running app is the freshly-built code (vs a stale `npm start` process)
   useEffect(() => {
-    pushConsole('* RectaControl build 2026-07-26d · the board owns the park position (G30 is non-volatile) and the app adopts it on connect; the DRO "WCS" button opens the offsets table, and the G59 cell now splits in two — left half is plain G59, right half picks .1/.2/.3 and switches straight to it')
+    pushConsole('* RectaControl build 2026-07-30 · the app reconnects on its own after the board reboots; a factory dump can no longer overwrite the newest settings backup; and a board that greets you and then ignores every command now opens a guided recovery (Settings → Diagnostics has the way in when it does not open itself)')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -153,6 +154,32 @@ export default function App(): JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Spot the failure that does not look like one: a board that answers `?` but not
+  // commands. Status reports keep arriving because realtime bytes are handled in the
+  // receive interrupt, while `$I` — sent on every connect — never comes back, because
+  // the line parser is suspended. Nothing else in the app notices; the DRO simply
+  // falls back to three axes and everything looks nearly right.
+  //
+  // `info.version` is the tell: it is set from $I and cleared on every connect. Ten
+  // seconds is far longer than a healthy board needs, and the detector stays out of
+  // the way while a program is streaming, where $I legitimately queues behind buffered
+  // lines and a slow answer means nothing.
+  useEffect(() => {
+    if (!connected || jobRunning || sdRunning) return
+    if (useStore.getState().info.version) {
+      useStore.getState().setRescueSuggested(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      const s = useStore.getState()
+      if (!s.connected || s.info.version || s.job.running || s.sdRunning) return
+      if (!s.status) return // nothing is arriving at all — that is a plain disconnect
+      s.setRescueSuggested(true)
+      s.setRescueWizardOpen(true)
+    }, 10000)
+    return () => clearTimeout(timer)
+  }, [connected, jobRunning, sdRunning, info.version])
 
   // Pick the link back up after the board goes away on its own.
   //

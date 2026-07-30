@@ -15,8 +15,9 @@ import { StringDecoder } from 'node:string_decoder'
 import { StatusParser, RT, stripComment, parseSpindleEntry } from '@shared/grbl'
 import type { ConnectOptions, ControllerEvent, MachineInfo, ResumeMap, TransportKind } from '@shared/types'
 import type { Transport } from './transport'
-import { SerialTransport, listPorts } from './transport/serial'
+import { SerialTransport, pickBoardPort } from './transport/serial'
 import { EthernetTransport } from './transport/ethernet'
+import { RESCUE, type RescueAction } from './rescue'
 import { SettingsBackup } from './settingsBackup'
 import { log } from './logger'
 
@@ -42,6 +43,8 @@ export class Controller {
   private rxBuf = ''
   /** mirrors every $$ dump to disk (see settingsBackup.ts) */
   private backup = new SettingsBackup()
+  /** armed by probeLine(); fired by the first ordinary line that comes back */
+  private probeResolve: (() => void) | null = null
   private pollTimer: ReturnType<typeof setInterval> | null = null
 
   // streaming state
@@ -126,16 +129,11 @@ export class Controller {
       /* board silent on TCP — try the USB cable instead */
     }
 
-    // 2) USB CDC — pick the most likely board port (RP2350 enumerates as a
-    //    Raspberry Pi / Pico CDC device), else the first port available.
+    // 2) USB CDC — pick the most likely board port (see pickBoardPort).
     try {
-      const ports = await listPorts()
-      if (!ports.length) return null
-      const pick =
-        ports.find((p) =>
-          /pico|rp2|raspberry|grbl|cdc|usb serial|wch|board/i.test(`${p.manufacturer ?? ''} ${p.path}`)
-        ) ?? ports[0]
-      await this.connect({ kind: 'usb', port: pick.path, baud: opts.baud })
+      const path = await pickBoardPort()
+      if (!path) return null
+      await this.connect({ kind: 'usb', port: path, baud: opts.baud })
       return 'usb'
     } catch {
       return null
@@ -148,6 +146,40 @@ export class Controller {
    *  it is printed at startup, seconds before anything reconnects to hear it. */
   markSettingsFactory(): void {
     this.backup.markFactory()
+  }
+
+  /** Fire a rescue pair down the live connection. Returns false when there is none
+   *  to fire it down — the caller then falls back to the blind serial path. */
+  sendRescue(action: RescueAction): boolean {
+    if (!this.transport?.isOpen) return false
+    this.transport.write(RESCUE[action])
+    this.emit({ type: 'sent', data: `[rescue:${action}]` })
+    return true
+  }
+
+  /** Does the board execute commands, as opposed to merely being alive?
+   *
+   *  This is the whole question, and `?` cannot answer it: realtime bytes are handled
+   *  in the receive interrupt and keep replying on a board whose line parser is
+   *  suspended. So ask something only the parser can answer and wait for any ordinary
+   *  line to come back. `$I` is the right probe — it is refused in no state, it does
+   *  not move anything, and its reply is the same information the app wants anyway.
+   */
+  probeLine(timeoutMs = 2500): Promise<boolean> {
+    if (!this.transport?.isOpen) return Promise.resolve(false)
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (answered: boolean): void => {
+        if (settled) return
+        settled = true
+        this.probeResolve = null
+        clearTimeout(timer)
+        resolve(answered)
+      }
+      const timer = setTimeout(() => finish(false), timeoutMs)
+      this.probeResolve = () => finish(true)
+      this.sendLine('$I')
+    })
   }
 
   async disconnect(): Promise<void> {
@@ -164,6 +196,7 @@ export class Controller {
     this.stopPoll()
     this.resetJob()
     this.backup.reset() // a dump cut off by the disconnect is not a backup
+    this.probeResolve = null // no line is coming now; let the probe time out as failed
     this.rxBuf = '' // half a line is not worth carrying into the next connection
     this.motionActive = false
     this.transport = null
@@ -348,6 +381,11 @@ export class Controller {
       }
       return
     }
+
+    // Any ordinary line proves the parser is running — which is the one thing the
+    // rescue needs to know and the one thing a status report cannot show. Placed
+    // after the status-report return above, so a `<Idle|…>` never answers for it.
+    this.probeResolve?.()
 
     // A board that has just lost its settings is about to dump factory values, and the
     // app pulls `$$` on every connect — so without this the newest backup silently

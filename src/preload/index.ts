@@ -15,6 +15,11 @@ const api: RectaApi = {
     ipcRenderer.invoke('autoConnect', opts),
   disconnect: () => ipcRenderer.invoke('disconnect'),
   markSettingsFactory: () => ipcRenderer.invoke('settings:markFactory'),
+  rescueSend: (action: 'wipe' | 'bootsel', portPath?: string) =>
+    ipcRenderer.invoke('rescue:send', action, portPath),
+  rescueProbe: (timeoutMs?: number) => ipcRenderer.invoke('rescue:probe', timeoutMs),
+  settingsBackups: () => ipcRenderer.invoke('settings:backups'),
+  readSettingsBackup: (name: string) => ipcRenderer.invoke('settings:readBackup', name),
   send: (line: string) => ipcRenderer.invoke('send', line),
   realtime: (byte: number) => ipcRenderer.invoke('realtime', byte),
   jog: (axis: string, distance: number, feed: number) =>

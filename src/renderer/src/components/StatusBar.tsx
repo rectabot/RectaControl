@@ -3,6 +3,7 @@ import { RT } from '@shared/grbl'
 import { getAlarm, getError } from '@shared/messages'
 import { useLang, useT, useLabel } from '../i18n'
 import { WhatToDo } from './WhatToDo'
+import { RescueWizard } from './RescueWizard'
 import { fmtDuration } from '../format'
 
 // grblHAL Pn: letters → label + accent when triggered.
@@ -117,6 +118,7 @@ export function StatusBar(): JSX.Element {
 
       {/* recovery popup — auto-opens on a new alarm/error, re-openable above */}
       <WhatToDo />
+      <RescueWizard />
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <JobTimer />

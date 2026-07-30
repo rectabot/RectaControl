@@ -19,7 +19,7 @@
  */
 
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const KEEP_DATED = 30 // dated copies to retain; a change a day for a month
@@ -32,6 +32,37 @@ export function settingsDir(): string {
   const dir = process.env.RECTA_SETTINGS_DIR || join(app.getPath('documents'), 'RectaControl', 'settings')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
+}
+
+/** The saved dumps, newest first, `latest.txt` always leading when it exists.
+ *
+ *  The guided recovery shows this before it erases anything: the operator is about
+ *  to lose the machine's numbers, and a promise that they are safe somewhere is
+ *  worth nothing next to the file name and the date they were taken. An empty list
+ *  is itself the answer — it means there is no way back and the recovery has to say
+ *  so before it starts, not after. */
+export function listBackups(): { name: string; taken: string }[] {
+  try {
+    const dir = settingsDir()
+    const rows = readdirSync(dir)
+      .filter((f) => f === 'latest.txt' || f.startsWith('settings_'))
+      .map((name) => ({ name, taken: statSync(join(dir, name)).mtime.toISOString() }))
+    rows.sort((a, b) => (a.name === 'latest.txt' ? -1 : b.name === 'latest.txt' ? 1 : b.taken.localeCompare(a.taken)))
+    return rows
+  } catch {
+    return []
+  }
+}
+
+/** Read one saved dump back. Name-only, resolved inside the backup folder — a path
+ *  from the renderer has no business reaching the rest of the disk. */
+export function readBackup(name: string): string | null {
+  if (name.includes('/') || name.includes('\\') || name.includes('..')) return null
+  try {
+    return readFileSync(join(settingsDir(), name), 'utf8')
+  } catch {
+    return null
+  }
 }
 
 function stamp(): string {

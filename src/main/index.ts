@@ -16,6 +16,15 @@ let moveTimer: ReturnType<typeof setTimeout> | null = null
 
 const clampZoom = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v))
 
+/** Milliseconds since the process started.
+ *
+ *  "It takes a second longer to start than it used to" is a fair complaint and we
+ *  had nothing on record to answer it with — the startup was one opaque block. Three
+ *  marks split it into the parts that have different causes: the Electron runtime and
+ *  our own imports (→ ready), the renderer bundle parsing and running (→ loaded), and
+ *  the first paint (→ shown). Two numbers a launch, in a log we already collect. */
+const bootMs = (): number => Math.round(process.uptime() * 1000)
+
 /** Auto UI scale derived from the monitor the window sits on. workAreaSize is in
  *  DIPs (already divided by the OS scale factor), so basing the zoom on it respects
  *  Windows display-scaling and never double-scales on HiDPI panels. Reference height
@@ -60,10 +69,14 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.maximize()
     mainWindow?.show()
+    log('app', `window shown at ${bootMs()} ms`)
   })
 
   // set the UI scale once the page is loaded (setZoomFactor is reset on navigation)
-  mainWindow.webContents.on('did-finish-load', () => applyZoom())
+  mainWindow.webContents.on('did-finish-load', () => {
+    log('app', `renderer loaded at ${bootMs()} ms`)
+    applyZoom()
+  })
 
   // re-fit when the window is dragged onto another monitor — but only in auto mode;
   // an explicit user choice is respected everywhere. Debounced (moved fires rapidly).
@@ -109,6 +122,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // before anything else can fail: the log is what a fault report is made of
   startLog()
+  log('app', `main ready at ${bootMs()} ms`)
 
   // drop the default application menu: it's hidden anyway (autoHideMenuBar) and its
   // View → Zoom roles bind Ctrl +/−/0, which would fight our own UI-scale handling.

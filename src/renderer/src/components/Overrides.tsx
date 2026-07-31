@@ -34,7 +34,10 @@ export function Overrides(): JSX.Element {
         <Box
           label={L('ui.ov.spindle')}
           value={spindleOv}
-          actual={`${status?.spindle ?? 0} / ${status?.spindleActual ?? 0} rpm`}
+          // no spaces around the slash: at five digits a side, "24000 / 24000 rpm"
+          // is two characters wider than the box, and those two are the ones doing
+          // the least work
+          actual={`${status?.spindle ?? 0}/${status?.spindleActual ?? 0} rpm`}
           disabled={!connected}
           onCommit={(t) => applySteps(spindleOv, t, RT.spindlePlus10, RT.spindleMinus10)}
           onReset={() => rt(RT.spindle100)}

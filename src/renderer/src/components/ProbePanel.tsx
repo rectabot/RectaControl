@@ -27,7 +27,15 @@ export function ProbePanel(): JSX.Element | null {
   const rotationDeg = useStore((s) => s.rotationDeg)
   const setRotationDeg = useStore((s) => s.setRotationDeg)
   const probeVerify = useStore((s) => s.probeVerify)
+  const noPlate = useStore((s) => s.probeNoPlate)
   const openSettingsAt = useStore((s) => s.openSettingsAt)
+
+  /** Touching the conductive workpiece itself: nothing sits between the tool and
+   *  the surface, so there is nothing to subtract. Z reads 0 at the top face, and
+   *  sideways only half the tool remains between the contact and the edge. Done by
+   *  handing the cycles a thickness of zero rather than by branching inside them —
+   *  it is the same measurement, with one term gone. */
+  const pp = noPlate ? { ...p, thickness: 0 } : p
 
   const ready = connected && !jobRunning && !sdRunning && base === 'Idle'
   const triggered = !!pins && pins.includes('P')
@@ -94,7 +102,7 @@ export function ProbePanel(): JSX.Element | null {
     setResult(null)
     setMeasuredAngle(null)
     void (async () => {
-      const r = await runRotation(rotSel.axis, rotSel.dir, rotSpacing, p, setStep)
+      const r = await runRotation(rotSel.axis, rotSel.dir, rotSpacing, pp, setStep)
       setBusy(false)
       setStep('')
       setResult({ ok: r.ok, msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.holeErr', { msg: r.error || '' }) })
@@ -104,13 +112,15 @@ export function ProbePanel(): JSX.Element | null {
 
   const runEdgeOrCorner = (): void => {
     if (!sel) return
-    const plate = edgeTouchPlate ? p.edgePlate : 0
+    // no plate → nothing to add beyond the tool radius, whatever the checkbox says
+    const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
     void guard(() => {
-      if (sel.kind === 'edge') return runEdge(sel.axis, sel.dir, p, action, plate)
+      // a single edge only ever touches one rail — the one for that axis
+      if (sel.kind === 'edge') return runEdge(sel.axis, sel.dir, pp, action, sel.axis === 'X' ? plate.x : plate.y)
       // external corner = full 3-axis (Z + X + Y); internal = X + Y only
       return edgeInternal
-        ? runCorner(sel.xDir, sel.yDir, p, action, plate)
-        : runCornerExternal3(sel.xDir, sel.yDir, p, action, plate, setStep)
+        ? runCorner(sel.xDir, sel.yDir, pp, action, plate)
+        : runCornerExternal3(sel.xDir, sel.yDir, pp, action, plate, setStep)
     })
   }
 
@@ -150,6 +160,14 @@ export function ProbePanel(): JSX.Element | null {
             </span>
           </div>
 
+          {/* Direct-touch is a different measurement, not a preference, so it says
+              so where the measuring happens — not only back in Settings. */}
+          {noPlate && (
+            <div className="rounded-md border border-warn/30 bg-warn/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-warn">
+              {t('ui.probe.noPlateOn')}
+            </div>
+          )}
+
           {/* mode tabs */}
           <div className="grid grid-cols-4 overflow-hidden rounded-md border border-border2">
             {([['z', 'z'], ['edge', 'edge'], ['center', 'hole'], ['rotate', 'rotate']] as const).map(([m, key]) => (
@@ -175,7 +193,7 @@ export function ProbePanel(): JSX.Element | null {
           {/* per-mode body */}
           {tab === 'z' && (
             <ModeCard title={t('ui.probe.mode.z')} hint={t('ui.probe.zHint')}>
-              <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(p, action))} label={`${t('ui.probe.runZ')} ↓`} />
+              <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(pp, action))} label={`${t('ui.probe.runZ')} ↓`} />
             </ModeCard>
           )}
 
@@ -193,11 +211,19 @@ export function ProbePanel(): JSX.Element | null {
                   setSel(null)
                 }}
               />
-              <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-300">
-                <input type="checkbox" checked={edgeTouchPlate} onChange={(e) => setEdgeTouchPlate(e.target.checked)} />
-                {t('ui.probe.useTouchPlate')}
-                {edgeTouchPlate && <span className="font-mono text-slate-500">({p.edgePlate} mm)</span>}
-              </label>
+              {/* With no plate in the setup at all, this checkbox has nothing to
+                  offer and its remembered state would only mislead. */}
+              {!noPlate && (
+                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-300">
+                  <input type="checkbox" checked={edgeTouchPlate} onChange={(e) => setEdgeTouchPlate(e.target.checked)} />
+                  {t('ui.probe.useTouchPlate')}
+                  {edgeTouchPlate && (
+                    <span className="font-mono text-slate-500">
+                      (a {p.edgePlateX} · b {p.edgePlateY} mm)
+                    </span>
+                  )}
+                </label>
+              )}
               <div className="my-3 flex justify-center">
                 <ProbeDiagram internal={edgeInternal} selectedKey={sel?.key ?? null} onSelect={setSel} />
               </div>
@@ -232,7 +258,7 @@ export function ProbePanel(): JSX.Element | null {
                 disabled={!canRun}
                 onClick={() =>
                   void guard(() =>
-                    centerBoss ? runBossCenter(p, action, bossX, bossY, setStep) : runHoleCenter(p, action, setStep)
+                    centerBoss ? runBossCenter(pp, action, bossX, bossY, setStep) : runHoleCenter(pp, action, setStep)
                   )
                 }
                 label={busy ? `${t('ui.probe.holeRunning')} ${step}` : centerBoss ? t('ui.probe.runBoss') : t('ui.probe.runHole')}

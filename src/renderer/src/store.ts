@@ -113,10 +113,16 @@ export interface ProbeParams {
   tipDiameter: number
   /** Touch-plate/fixture thickness (Z touch-off sets Z to this at contact). */
   thickness: number
-  /** Touch-plate thickness used SIDEWAYS for edge/corner probing: the plate is
-   *  held against the workpiece face, so the true edge sits this far BEYOND the
-   *  contact point (added to the tip radius). Different from the Z plate. */
-  edgePlate: number
+  /** Rail widths, per axis — `a` measures X, `b` measures Y, as labelled on the
+   *  drawing in Settings. The true edge sits this far BEYOND the contact point
+   *  (added to the tip radius). Different from the Z plate.
+   *
+   *  Two values even on a plate meant to be square, because these get made and
+   *  come off the machine at whatever they came off at. Which rail is which
+   *  follows from how the plate is turned, and the drawing fixes that: it is the
+   *  FRONT-LEFT corner, the only corner the three-axis zero offers. */
+  edgePlateX: number
+  edgePlateY: number
   /** Fast first-approach feed. */
   searchFeed: number
   /** Slow re-probe feed (accuracy). */
@@ -139,8 +145,12 @@ export interface ProbeParams {
 
 const DEFAULT_PARAMS: ProbeParams = {
   tipDiameter: 6,
-  thickness: 1,
-  edgePlate: 4,
+  // A plate that measures three axes, in its own numbers: the field is 5 mm thick,
+  // and each side rail is 15 mm wide. The material corner seats into the plate's
+  // inside corner, so on square stock those 15 mm are exact, not a guess.
+  thickness: 5,
+  edgePlateX: 15,
+  edgePlateY: 15,
   searchFeed: 200,
   latchFeed: 40,
   probeDistance: 25,
@@ -153,7 +163,15 @@ const DEFAULT_PARAMS: ProbeParams = {
 
 function loadProbeParams(): ProbeParams {
   try {
-    return { ...DEFAULT_PARAMS, ...JSON.parse(localStorage.getItem('probeParams') || '{}') }
+    const saved = JSON.parse(localStorage.getItem('probeParams') || '{}')
+    // `edgePlate` was one number for both rails. Carry a measured value across
+    // rather than silently resetting it to a default — it describes a real plate
+    // somebody put a caliper on, and losing it would move their zero without a word.
+    if (typeof saved.edgePlate === 'number' && saved.edgePlateX === undefined) {
+      saved.edgePlateX = saved.edgePlate
+      saved.edgePlateY = saved.edgePlate
+    }
+    return { ...DEFAULT_PARAMS, ...saved }
   } catch {
     return DEFAULT_PARAMS
   }
@@ -523,6 +541,16 @@ interface AppState {
    *  On by default — great safety for beginners. Experienced users can turn it off
    *  in Settings → Probe (the footer already shows the live Probe pin state). */
   probeVerify: boolean
+  /** No plate: the tool touches the CONDUCTIVE WORKPIECE itself (persisted).
+   *
+   *  A metal block is its own touch plate, and a better one — nothing sits between
+   *  the tool and the surface, so there is nothing to subtract. Z reads zero at the
+   *  top face instead of the plate thickness, and sideways the only thing left
+   *  between the contact and the edge is half the tool.
+   *
+   *  Off by default: it is only correct when the stock conducts AND carries the
+   *  probe ground, and getting that wrong on wood means no trigger at all. */
+  probeNoPlate: boolean
   fromLineOpen: boolean
   firmwareOpen: boolean
   filesOpen: boolean
@@ -608,6 +636,7 @@ interface AppState {
   setProbeOpen: (open: boolean) => void
   setProbeMode: (mode: 'z' | 'edge' | 'center' | 'rotate') => void
   setProbeVerify: (on: boolean) => void
+  setProbeNoPlate: (on: boolean) => void
   setFromLineOpen: (open: boolean) => void
   setFirmwareOpen: (open: boolean) => void
   setFilesOpen: (open: boolean) => void
@@ -702,6 +731,7 @@ export const useStore = create<AppState>((set, get) => ({
   probeOpen: false,
   probeMode: (localStorage.getItem('probeMode') as 'z' | 'edge' | 'center' | 'rotate') || 'z',
   probeVerify: localStorage.getItem('probeVerify') !== '0',
+  probeNoPlate: localStorage.getItem('probeNoPlate') === '1',
   fromLineOpen: false,
   firmwareOpen: false,
   filesOpen: false,
@@ -1211,6 +1241,10 @@ export const useStore = create<AppState>((set, get) => ({
   setProbeVerify: (on) => {
     localStorage.setItem('probeVerify', on ? '1' : '0')
     set({ probeVerify: on })
+  },
+  setProbeNoPlate: (on) => {
+    localStorage.setItem('probeNoPlate', on ? '1' : '0')
+    set({ probeNoPlate: on })
   },
   setFromLineOpen: (fromLineOpen) => set({ fromLineOpen }),
   setFirmwareOpen: (firmwareOpen) => set({ firmwareOpen }),

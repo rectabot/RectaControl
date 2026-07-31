@@ -774,8 +774,9 @@ export const en: Record<string, string> = {
   'ui.probe.bossX': 'Boss X',
   'ui.probe.bossY': 'Boss Y',
   'ui.probe.runBoss': 'Find boss centre',
-  'ui.probe.edgePlate': 'Plate X/Y (side)',
   'ui.probe.useTouchPlate': 'Using a touch plate against the edge',
+  'ui.probe.noPlateOn':
+    'No plate: the tool touches the stock itself. Z zero lands on the top face, and only the tool radius is subtracted sideways. The stock must conduct and be grounded.',
   'ui.probe.runCorner': 'Probe corner',
   'ui.probe.corner3Hint':
     'External corner, all 3 axes: jog the tool ~10–15 mm inside the corner over the top, then Start. It probes Z, moves out past each face, drops below the surface and probes X then Y — setting the corner as X0 Y0 Z0. The workpiece must sit far enough into positive machine space (more than the Approach distance) so the tool can move around it.',
@@ -786,7 +787,7 @@ export const en: Record<string, string> = {
   'ui.probeSet.intro':
     'The probe measuring parameters (tool/plate, speeds, clearances) and how to wire the touch plate. The Probe window opened from the toolpath just picks the measurement type and runs it. The grblHAL probe signal settings are below.',
   'ui.probeSet.step1': 'Clip the probe wire to the tool / spindle.',
-  'ui.probeSet.step2': 'Place the touch plate on the workpiece under the tool.',
+  'ui.probeSet.step2': 'Seat the plate on the corner of the stock — the material corner goes into the plate corner.',
   'ui.probeSet.step3': 'Open Probe from the toolpath, tap the tool on the plate to verify.',
   'ui.probeSet.step4': 'Run Probe Z — the tool descends, touches, and sets Z0.',
   'ui.probeSet.thickness': 'Plate thickness',
@@ -808,11 +809,18 @@ export const en: Record<string, string> = {
   'ui.probeSet.xyClear': 'XY clearance',
   'ui.probeSet.depth': 'Depth',
   'ui.probeSet.plateZ': 'Plate Z (top)',
-  'ui.probeSet.plateXY': 'Plate X/Y (side)',
   'ui.probeSet.approach': 'Approach (corner)',
-  'ui.probeSet.verifyGate': 'Require probe verification before measuring',
-  'ui.probeSet.verifyGateHint':
-    'Before each session you must tap the tool on the plate once (probe triggers) to unlock measuring — proves the wire is connected so the tool can’t drive into an unresponsive plate. Great for beginners. Experienced users can turn this off and just watch the Probe pin in the footer.',
+  'ui.probeSet.plateGroup': 'Plate dimensions',
+  'ui.probeSet.plateA': 'Rail a — measures X',
+  'ui.probeSet.plateB': 'Rail b — measures Y',
+  'ui.probeSet.abNote': 'If a and b differ, enter them exactly as drawn. This is the front-left (FL) corner — on another corner the rails swap roles.',
+  'ui.probeSet.plateAlt': 'An XYZ touch plate: a thin field for Z, two raised rails for X and Y.',
+  'ui.probeSet.edgeAlt': 'Looking down at an edge probe: tool radius and rail width separate the contact from the material edge.',
+  'ui.probeSet.edgeHint': 'The tool stops on the rail, not the material. Tool radius + rail width get subtracted.',
+  'ui.probeSet.noPlate': 'Probing metal blocks',
+  'ui.probeSet.noPlateHint': 'No plate — the tool touches the stock. Z zero on top, sideways only the tool radius. The stock must conduct.',
+  'ui.probeSet.verifyGate': 'Trigger safety',
+  'ui.probeSet.verifyGateHint': 'Tap the tool on the plate once to unlock measuring — proof the wire is connected. Off: watch the Probe pin in the footer.',
   'ui.probeSet.safety':
     'Always tap the tool on the plate first to confirm the probe responds. A disconnected wire means no stop — the tool would drive into the plate.',
   // stock (material block in the 3D view)

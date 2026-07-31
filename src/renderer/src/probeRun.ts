@@ -113,9 +113,26 @@ export async function runZ(p: ProbeParams, action: ProbeAction): Promise<ProbeRe
   }
 }
 
+/** The sideways plate offsets, one per axis.
+ *
+ *  Two numbers, never one, even on a plate meant to be symmetric. These plates get
+ *  MADE, and they come off the machine at whatever they came off at — 10 on one
+ *  rail and 9.5 on the other is a normal outcome. One shared value would put that
+ *  half millimetre straight into the corner zero with nothing to show for it.
+ *
+ *  Which physical rail is `x` and which is `y` follows from how the plate is
+ *  turned, and that follows from the corner. This maps the way the drawing in
+ *  Settings is labelled, which is the FRONT-LEFT corner — the only corner the full
+ *  three-axis zero offers, and the one the CAM origin uses. */
+export interface Plate {
+  x: number
+  y: number
+}
+const NO_PLATE: Plate = { x: 0, y: 0 }
+
 /** Single edge on one axis; that axis zero lands on the material edge. `plate` is
- *  the sideways touch-plate thickness (0 for a direct conductive touch); the edge
- *  sits tipRadius + plate beyond the contact. */
+ *  the sideways touch-plate thickness FOR THAT AXIS (0 for a direct conductive
+ *  touch); the edge sits tipRadius + plate beyond the contact. */
 export async function runEdge(axis: Axis, dir: Dir, p: ProbeParams, action: ProbeAction, plate = 0): Promise<ProbeResult> {
   try {
     const off = p.tipDiameter / 2 + plate
@@ -135,15 +152,14 @@ export async function runCorner(
   yDir: Dir,
   p: ProbeParams,
   action: ProbeAction,
-  plate = 0
+  plate: Plate = NO_PLATE
 ): Promise<ProbeResult> {
   try {
-    const off = p.tipDiameter / 2 + plate
     const lx = await probeAxis('X', xDir, p)
-    apply('X', -xDir * off, action)
+    apply('X', -xDir * (p.tipDiameter / 2 + plate.x), action)
     rel('X', -xDir * p.xyClearance) // clear the X face before probing Y
     const ly = await probeAxis('Y', yDir, p)
-    apply('Y', -yDir * off, action)
+    apply('Y', -yDir * (p.tipDiameter / 2 + plate.y), action)
     rel('Y', -yDir * p.retract)
     return { ok: true, note: `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))}` }
   } catch (e) {
@@ -167,13 +183,14 @@ export async function runCornerExternal3(
   yDir: Dir,
   p: ProbeParams,
   action: ProbeAction,
-  plate = 0,
+  plate: Plate = NO_PLATE,
   onStep?: (s: string) => void
 ): Promise<ProbeResult> {
   const s = startPos()
   if (!s) return { ok: false, error: 'no-pos' }
   const [sx, sy] = s
-  const off = p.tipDiameter / 2 + plate
+  const offX = p.tipDiameter / 2 + plate.x
+  const offY = p.tipDiameter / 2 + plate.y
   // relative Z moves (referenced to the surface contact) so the routine doesn't
   // depend on Z0 being set — works for Measure too, and is robust across WCS.
   const lift = p.retract // clear above the surface to move laterally
@@ -188,7 +205,7 @@ export async function runCornerExternal3(
     rel('X', -xDir * p.approach) // move out past the X face
     rel('Z', -drop) // drop beside the face
     const lx = await probeAxis('X', xDir, p)
-    apply('X', -xDir * off, action)
+    apply('X', -xDir * offX, action)
     rel('Z', drop) // back up
     gotoMachine('X', sx) // back over the material in X
 
@@ -196,7 +213,7 @@ export async function runCornerExternal3(
     rel('Y', -yDir * p.approach)
     rel('Z', -drop)
     const ly = await probeAxis('Y', yDir, p)
-    apply('Y', -yDir * off, action)
+    apply('Y', -yDir * offY, action)
     rel('Z', drop)
     gotoMachine('Y', sy)
 

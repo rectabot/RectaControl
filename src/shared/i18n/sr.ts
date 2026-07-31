@@ -755,8 +755,9 @@ export const sr: Record<string, string> = {
   'ui.probe.bossX': 'Boss X',
   'ui.probe.bossY': 'Boss Y',
   'ui.probe.runBoss': 'Nađi centar bossa',
-  'ui.probe.edgePlate': 'Ploča X/Y (bok)',
   'ui.probe.useTouchPlate': 'Koristim touch plate uz ivicu',
+  'ui.probe.noPlateOn':
+    'Bez pločice: alat dodiruje sam komad. Z nula je na vrhu komada, bočno se oduzima samo poluprečnik alata. Komad mora da provodi i da je na masi.',
   'ui.probe.runCorner': 'Probaj ćošak',
   'ui.probe.corner3Hint':
     'Spoljašnji ćošak, sve 3 ose: dovezi alat ~10–15 mm unutar ćoška iznad vrha, pa Start. Izmeri Z, izađe van svakog lica, spusti se ispod površine i probа X pa Y — postavlja ćošak kao X0 Y0 Z0. Komad mora biti dovoljno u plusu od mašinske nule (više od „Izlaz" razdaljine) da alat može da ga obiđe.',
@@ -767,7 +768,7 @@ export const sr: Record<string, string> = {
   'ui.probeSet.intro':
     'Parametri merenja sondom (alat/pločica, brzine, zazori) i ožičenje touch plate-a. Probe prozor iz toolpath-a samo bira tip merenja i pokreće ga. grblHAL podešavanja probe signala su ispod.',
   'ui.probeSet.step1': 'Zakači žicu sonde na alat / vreteno.',
-  'ui.probeSet.step2': 'Stavi touch plate na obradni komad ispod alata.',
+  'ui.probeSet.step2': 'Nasloni pločicu na ćošak komada — ćošak materijala ulazi u ćošak pločice.',
   'ui.probeSet.step3': 'Otvori Probe iz toolpath-a, pipni alatom pločicu za verifikaciju.',
   'ui.probeSet.step4': 'Pokreni Probe Z — alat se spušta, dodirne i postavi Z0.',
   'ui.probeSet.thickness': 'Debljina pločice',
@@ -788,12 +789,19 @@ export const sr: Record<string, string> = {
   'ui.probeSet.xyClear': 'XY zazor',
   'ui.probeSet.depth': 'Dubina',
   'ui.probeSet.plateZ': 'Ploča Z (vrh)',
-  'ui.probeSet.plateXY': 'Ploča X/Y (bok)',
   'ui.probeSet.approach': 'Izlaz (ćošak)',
+  'ui.probeSet.plateGroup': 'Mere pločice',
+  'ui.probeSet.plateA': 'Rub a — meri X',
+  'ui.probeSet.plateB': 'Rub b — meri Y',
+  'ui.probeSet.abNote': 'Ako a i b nisu jednaki, unesi tačno kao na crtežu. Važi za donji-levi (FL) ćošak — na drugom ćošku rubovi menjaju mesta.',
+  'ui.probeSet.plateAlt': 'XYZ touch plate: tanka površina za Z, dva podignuta ruba za X i Y.',
+  'ui.probeSet.edgeAlt': 'Pogled odozgo na merenje ivice: poluprečnik alata i širina ruba dele dodir od ivice komada.',
+  'ui.probeSet.edgeHint': 'Alat stane na rub pločice, ne na komad. Oduzima se poluprečnik alata + širina ruba.',
+  'ui.probeSet.noPlate': 'Merenje metalnih blokova',
+  'ui.probeSet.noPlateHint': 'Bez pločice — alat dodiruje sam komad. Z nula na vrhu, bočno samo poluprečnik alata. Komad mora da provodi.',
   'ui.probeSet.retractHint': 'Koliko se alat podigne posle uspešnog dodira.',
-  'ui.probeSet.verifyGate': 'Zahtevaj verifikaciju sonde pre merenja',
-  'ui.probeSet.verifyGateHint':
-    'Pre svake sesije moraš jednom pipnuti alat na pločicu (sonda okine) da otključaš merenje — dokaz da je žica spojena, pa alat ne može da zabije u pločicu koja ne reaguje. Odlično za početnike. Iskusni mogu isključiti i samo gledati Probe status u futeru.',
+  'ui.probeSet.verifyGate': 'Sigurnost okidanja',
+  'ui.probeSet.verifyGateHint': 'Pipni alatom pločicu jednom da otključaš merenje — dokaz da je žica spojena. Isključeno: gledaj Probe status u futeru.',
   'ui.probeSet.safety':
     'Uvek prvo pipni alatom pločicu da potvrdiš da sonda reaguje. Nepovezana žica znači bez zaustavljanja — alat bi zabio u pločicu.',
   // stock (blok materijala u 3D prikazu)

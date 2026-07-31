@@ -53,6 +53,12 @@ export function VariantDiagram({ config }: { config: VariantConfig | null }): JS
   if (!config) return <div className="font-mono text-[10px] text-slate-500">{t('ui.fwDiag.unknown')}</div>
 
   const dualY = config.secondMotor.includes('Y')
+  // Auto-square is the only image that needs a switch the machine may not have.
+  // 30 Jul 2026: both auto-square variants sat with Y permanently triggered on a
+  // ganged gantry — an unwired limit input reads as tripped, so the axis that
+  // cannot home is the one that looks broken. Proved to be wiring and not the
+  // image by flashing 3axis-ganged-y onto the same hardware, clean.
+  const needsSecondSwitch = dualY && config.autoSquare
   const rotary = config.axes >= 4
   const tilt = config.axes >= 5
   const letters = ['X', 'Y', 'Z', 'A', 'B'].slice(0, config.axes)
@@ -120,7 +126,7 @@ export function VariantDiagram({ config }: { config: VariantConfig | null }): JS
         {/* Homing switches: one for a ganged pair (they home as one motor), one per
             rail when the firmware squares the gantry against both. */}
         <HomeSwitch x={49} y={32} />
-        {dualY && config.autoSquare && <HomeSwitch x={271} y={32} />}
+        {needsSecondSwitch && <HomeSwitch x={271} y={32} />}
       </svg>
 
       <div className="flex flex-wrap items-center justify-center gap-1.5">

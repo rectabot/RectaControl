@@ -190,5 +190,14 @@ export const RT = {
   spindlePlus10: 0x9a,
   spindleMinus10: 0x9b,
   spindlePlus1: 0x9c,
-  spindleMinus1: 0x9d
+  spindleMinus1: 0x9d,
+  // Coolant toggles. These are the ONLY way to reach coolant while a program is
+  // running: `M7`/`M8`/`M9` are line commands and queue behind everything already
+  // buffered, so coolant a program switched on cannot be switched off by hand.
+  // Accepted in Idle, Run and Hold; ignored in Jog, Alarm and Door.
+  //
+  // They toggle, and the toggle holds until the program's NEXT M7/M8/M9 takes the
+  // output back — which is the right behaviour for a hand override.
+  floodToggle: 0xa0,
+  mistToggle: 0xa1
 } as const

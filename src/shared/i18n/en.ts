@@ -418,6 +418,8 @@ export const en: Record<string, string> = {
 
   // ── Overrides ──────────────────────────────────────────────────────────────
   'ui.ov.feed': 'Feed',
+  'ui.aux.vacBusy':
+    'VAC cannot be switched while a program is running — it has no realtime command, and a hand-written line would enter the stream and upset its counting. Stop, or wait for the end.',
   'ui.ov.spindle': 'Spin',
   'ui.ov.rapid': 'Rapid',
   'ui.ov.resetTitle': 'Reset to 100%',

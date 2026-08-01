@@ -178,12 +178,26 @@ export default function App(): JSX.Element {
   // fault was that it was paused. The backup put it back, but nothing about the
   // sequence should have started. And the parking pause makes Door an everyday
   // state now: pause a job, close the app, reopen it, and this is what you meet.
-  const SUSPENDED = ['Hold', 'Door', 'Sleep', 'Home', 'Tool']
+  // …and while the machine is EXECUTING, for the reason the comment above already
+  // gives: `$I` queues behind buffered lines. `jobRunning`/`sdRunning` only know about
+  // programs this app started, and a board can be running one it was handed earlier —
+  // the leftover buffer of a stream that died with the app is enough, and a park
+  // resumed after a restart runs exactly that.
+  const SUSPENDED = ['Hold', 'Door', 'Sleep', 'Home', 'Tool', 'Run', 'Jog']
   const suspended = SUSPENDED.includes(state)
   useEffect(() => {
     if (!connected || jobRunning || sdRunning || suspended) return
     if (useStore.getState().info.version) {
-      useStore.getState().setRescueSuggested(false)
+      const s = useStore.getState()
+      // The board has answered, so whatever we suspected is over. Take the offer back
+      // DOWN as well — nothing used to, so a wizard the app had opened by itself sat
+      // there afterwards with its destructive first step in front of an operator and
+      // a healthy machine behind it. Only one this app raised: a wizard the operator
+      // opened from Settings → Diagnostics is theirs to close.
+      if (s.rescueSuggested) {
+        s.setRescueSuggested(false)
+        s.setRescueWizardOpen(false)
+      }
       return
     }
     const timer = setTimeout(() => {

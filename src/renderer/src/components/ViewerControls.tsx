@@ -4,7 +4,7 @@ import { useT, useLabel } from '../i18n'
 import { AuxToggles } from './AuxToggles'
 import { fmtDuration } from '../format'
 import { rotateGcode } from '../gcodeRotate'
-import { resumeFromPark, pauseProgram, parkOnPause } from '../controlActions'
+import { resumeFromPark, pauseProgram, parkOnPause, atRest } from '../controlActions'
 import { PcIcon, SdIcon } from './icons'
 
 /** Overlay controls that live inside the toolpath window (like ncSender):
@@ -32,6 +32,7 @@ export function ViewerControls(): JSX.Element {
   const setRotationDeg = useStore((s) => s.setRotationDeg)
   const askConfirm = useStore((s) => s.askConfirm)
   const parked = useStore((s) => s.parked)
+  const settled = useStore((s) => s.settled)
   const limitsSuspended = useStore((s) => s.limitsSuspended != null)
 
   // progress by DISTANCE covered along the path (the Tracker follows the real tool
@@ -60,6 +61,14 @@ export function ViewerControls(): JSX.Element {
   // can't start a job while the machine is locked in Alarm — every streamed line
   // would just error:9. Unlock ($X) / home ($H) first. (Resume while held is fine.)
   const alarmed = base === 'Alarm'
+  // …and a held machine is not necessarily a stopped one. A pause decelerates first,
+  // and a parking pause then lifts the head — seconds of motion during which grblHAL
+  // does NOT act on Cycle Start: the retract phase has no handler for it, so the
+  // press vanishes. Which is what it looked like from the chair, too — Filip pressed
+  // Resume during the lift, nothing happened, and the way out was to press Pause
+  // again (dropped by the board, already in Door) so that Resume could be pressed a
+  // second time. Same rule as the Park button: wait until the machine is at rest.
+  const canResume = held && atRest(state, settled)
   // A program is active (app-streamed, SD-latched, or the machine is executing/
   // paused). Probing must be locked then — starting a G38 cycle mid-job injects
   // into the stream. (MIST/VAC/FLOOD stay live so the operator can override the
@@ -153,7 +162,11 @@ export function ViewerControls(): JSX.Element {
             // unguarded machine, and the suspension ends on its own in seconds
             limitsSuspended ||
             // while parked the button IS Resume — only clickable once back in Idle
-            (parked ? base !== 'Idle' : !held && (alarmed || (!gcode && !sdFile)))
+            (parked
+              ? base !== 'Idle'
+              : held
+                ? !canResume // held, but still moving — see canResume
+                : alarmed || (!gcode && !sdFile))
           }
           title={limitsSuspended ? t('ui.status.limitsOffTitle') : undefined}
           onClick={async () => {

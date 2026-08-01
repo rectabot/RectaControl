@@ -39,10 +39,12 @@ const ECHOED_REALTIME: Record<number, string> = {
   // does now, which splits that question in two.
   [RT.floodToggle]: 'Flood',
   [RT.mistToggle]: 'Mist',
-  // Labelled for what the operator pressed, not for the byte: they pressed Pause and
-  // the machine parks. The board answers with its own `[MSG:Check Door]` right after,
-  // so the door underneath is never hidden from anyone reading the log.
-  [RT.safetyDoor]: 'Park'
+  // Labelled for what the operator pressed, not for the byte they got: they pressed
+  // Pause. Calling it `Park` collided with the Park button, which sends G53 moves and
+  // is a different thing entirely — a log with both in it could not be read. The
+  // board's own `[MSG:Check Door]` follows immediately, so the door command
+  // underneath is never hidden from anyone reading it.
+  [RT.safetyDoor]: 'Pause'
 }
 
 /** One line written to the board and still awaiting its `ok` / `error`. `job` marks

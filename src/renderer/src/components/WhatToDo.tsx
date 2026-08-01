@@ -171,7 +171,15 @@ export function WhatToDo(): JSX.Element | null {
   // rendering a "recovered" screen here only makes it flash for one poll interval
   // (~200 ms) between the last click and that report. The machine state in the top
   // bar is the confirmation; a window that appears just to be dismissed is not.
-  if (finished && base !== 'Alarm') return null
+  //
+  // An EMPTY procedure was never walked, though, and that is a different thing. Most
+  // plain g-code and setting errors carry a cause and a fix and no steps — error:10,
+  // "soft limits need homing", is one — so they arrive here finished on the first
+  // render. Bailing on them made What do I do? do nothing at all: the button lit, the
+  // popup returned null, and the one screen that could explain the error was the one
+  // screen unreachable. The body below already renders `detail.recovery` for exactly
+  // this case; it just never got the chance. Found on the machine, 1 Aug 2026.
+  if (finished && usable.length > 0 && base !== 'Alarm') return null
   const step = finished ? null : usable[cur]
   const isLast = cur === usable.length - 1
   // stepping back is offered only where it can actually take effect (a machine-
@@ -380,10 +388,14 @@ export function WhatToDo(): JSX.Element | null {
               {/* Close, and Home — offered whether or not the machine says it is
                   homed. Hitting a limit switch means steps were probably lost, so
                   the reference is suspect exactly when the machine claims to have
-                  one; the operator decides, and either button ends the dialog. */}
+                  one; the operator decides, and either button ends the dialog.
+                  Only after a real procedure, though: a code that never had steps is
+                  here to be READ, and offering a homing cycle as the answer to, say,
+                  a rejected setting would be a machine-moving button with nothing to
+                  do with what went wrong. */}
               <div className="mt-3 flex shrink-0 gap-2">
                 <ActionBtn tone={NEUTRAL} onClick={() => close()} label={t('ui.errors.close')} />
-                {homingEnabled && (
+                {homingEnabled && usable.length > 0 && (
                   <ActionBtn
                     tone={TONE.home}
                     disabled={!connected || blocked('home')}

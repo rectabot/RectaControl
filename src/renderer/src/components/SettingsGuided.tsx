@@ -268,7 +268,7 @@ function GenericRow({
         {settingDesc(n, lang) && <div className="text-[11px] leading-snug text-slate-500">{settingDesc(n, lang)}</div>}
       </div>
       {RESET_REQUIRED.has(n) && <RebootNote />}
-      <div className="w-[32rem] shrink-0">
+      <div className="w-[32rem] shrink-0 self-center">
         <GenericValue n={n} value={value} axes={axes} write={write} />
       </div>
     </div>
@@ -402,7 +402,7 @@ function FieldRow({
         {desc && <div className="text-[11px] leading-snug text-slate-500">{desc}</div>}
       </div>
       {'setting' in field && RESET_REQUIRED.has(field.setting) && <RebootNote />}
-      <div className="w-[32rem] shrink-0">
+      <div className="w-[32rem] shrink-0 self-center">
         <Control
           field={field}
           axes={axes}

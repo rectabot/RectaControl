@@ -36,9 +36,9 @@ const WINDOW_MM = 30
  *   • the resume preamble (lift → rapid across the work → plunge), which is not in the
  *     file at all. On 1 Aug 2026 a job parked on line 1066 came back with the highlight
  *     on 1088 and stuck there for seconds: the tool was 100 mm away flying home, the
- *     board had already parsed ~20 lines into its planner (so the ack bound allowed
- *     them), and the cursor ratcheted to the end of that window. The machine was cutting
- *     1066, exactly as it should have been — only the display had left.
+ *     board had already parsed ~20 lines into its planner, and the cursor ratcheted to
+ *     the end of that window. The machine was cutting 1066, exactly as it should have
+ *     been — only the display had left.
  *  A tool that is off the path tells us nothing about which line is executing, so the
  *  honest answer is to keep showing the last line we actually saw it on. */
 const ON_PATH_MM = 2
@@ -88,10 +88,6 @@ export interface Step {
   onPath: boolean
 }
 
-/** One tick: match the live tool position against the path from `cursor` forward.
- *
- *  `bound` is the deepest FILE line the controller has acked — nothing past it can be
- *  executing yet. Returns null only when there is no path to match against. */
 export interface StepOpts {
   /** only the test passes this — with the guard opened up it reproduces the rule as it
    *  was on 1 Aug 2026, which is how the test proves it catches the jump it describes */
@@ -115,7 +111,22 @@ export interface StepOpts {
   recover?: boolean
 }
 
-export function stepCursor(model: TrackModel, cursor: number, livePos: number[], bound: number, opts: StepOpts = {}): Step | null {
+/** One tick: match the live tool position against the path from `cursor` forward.
+ *  Returns null only when there is no path to match against.
+ *
+ *  There used to be a second rule here: nothing past the controller's ack frontier was
+ *  eligible, on the reasoning that the machine cannot be executing a line it has not
+ *  answered for. That reasoning is wrong for arcs, and the machine said so on 1 Aug 2026.
+ *  grblHAL answers a G2/G3 only once the whole arc is in the planner, and a 364 mm circle
+ *  takes most of its own cutting time to get there — so the ack for a big arc lands near
+ *  its END, and until then the frontier sits a line BEHIND the cut. arcs_mix.nc stalled
+ *  four times a run, always on the two largest circles, always with the tool measured at
+ *  exactly the NEXT line's radius (104.0 and 116.0 mm from the circles' centre), and
+ *  always with the frontier equal to the line it was stuck on.
+ *
+ *  Nothing is lost by dropping it: the frontier was a guess at where the tool is, and the
+ *  2 mm rule below is a measurement of it. */
+export function stepCursor(model: TrackModel, cursor: number, livePos: number[], opts: StepOpts = {}): Step | null {
   const { segs, len, start, total } = model
   const onPathMm = opts.onPathMm ?? ON_PATH_MM
   if (segs.length === 0) return null
@@ -126,7 +137,6 @@ export function stepCursor(model: TrackModel, cursor: number, livePos: number[],
   let bestD = Infinity
   let walked = 0 // path length scanned BEYOND the current segment
   for (let k = i; k < segs.length; k++) {
-    if (segs[k].idx > bound) break // nothing past the ack bound is eligible yet
     const { d, t } = projectDist(livePos, segs[k])
     if (d < bestD) {
       bestD = d

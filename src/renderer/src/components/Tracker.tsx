@@ -96,7 +96,6 @@ export function Tracker(): null {
 
   useEffect(() => {
     if (!running || !mpos || model.segs.length === 0) return
-    const bound = sentLine >= 0 ? sentLine : Infinity
 
     // match in the same frame the segments were built in: unrolled for rotary
     let livePos = mpos
@@ -111,7 +110,7 @@ export function Tracker(): null {
     // nothing matches anyway, or it got past the window in one gap between reports and
     // the narrow search will never find it again. See StepOpts.recover.
     const stalled = stallSince.current > 0 && Date.now() - stallSince.current > RECOVER_MS
-    const next = stepCursor(model, cursor.current, livePos, bound, { recover: stalled })
+    const next = stepCursor(model, cursor.current, livePos, { recover: stalled })
     if (!next) return
     if (!next.onPath) {
       // The tool is not on the path we drew, so the last line we saw it on still stands.
@@ -131,7 +130,9 @@ export function Tracker(): null {
         // and those want different fixes.
         window.recta.logWrite(
           'ui',
-          `tracker: held on line ${next.line + 1} for ${Math.round((now - stallSince.current) / 1000)} s — tool is ${next.dist.toFixed(1)} mm off the drawn path at machine ${at} (acked to ${bound === Infinity ? '?' : bound + 1})`
+          // the ack frontier does not gate the match any more (see stepCursor), but it
+          // still says how far the controller had got, which is worth having beside it
+          `tracker: held on line ${next.line + 1} for ${Math.round((now - stallSince.current) / 1000)} s — tool is ${next.dist.toFixed(1)} mm off the drawn path at machine ${at} (acked to ${sentLine + 1})`
         )
       }
       return

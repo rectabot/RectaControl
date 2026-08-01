@@ -483,9 +483,13 @@ interface AppState {
   /** Original file line index currently being executed, derived from tool
    *  position (kept in sync with the toolpath arrow). -1 = none. */
   activeLine: number
-  /** Upper bound on progress: the file line the controller has ACKED (consumed
-   *  into its planner). Leads the real cut by the buffer depth, so it's used only
-   *  to bound the position-based highlight — never to drive it directly. -1 = idle. */
+  /** The file line the controller has ACKED (consumed into its planner). -1 = idle.
+   *
+   *  Diagnostic only — it does NOT gate the highlight. It usually leads the cut by the
+   *  buffer depth, but it can also LAG it: grblHAL answers a G2/G3 once the whole arc is
+   *  in the planner, so on a big circle the ack lands near the end of the move. Bounding
+   *  the position-based highlight with it froze that highlight for seconds at a time
+   *  (arcs_mix.nc, 1 Aug 2026). Where the tool is, is measured — see trackPath.ts. */
   sentLine: number
   /** Line index a "start from line" job begins at, so the tracker seeds the
    *  highlight there instead of line 0. -1 = normal start. */

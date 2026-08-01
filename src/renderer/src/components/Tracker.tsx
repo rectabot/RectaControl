@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useStore, rotaryRadius } from '../store'
-import { buildLineSegments, usesRotary, type LineSeg } from '../toolpath'
+import { buildLineSegments, usesRotary } from '../toolpath'
+import { buildTrackModel, seedCursor, stepCursor } from '../trackPath'
 import { rotateGcode } from '../gcodeRotate'
 
-// How far AHEAD along the path (in mm) the cursor may look each tick. Kept small
-// so it can't jump onto a spatially-near but path-distant pass (parallel finishing
-// passes, concentric loops, the star's centre). The CURRENT segment is always
-// evaluated in full regardless of this, so a long rapid is still followed. Must
-// exceed the tool's per-tick travel (~a few mm at 20 Hz) so the cursor never stalls.
-const WINDOW_MM = 30
+/** How long the highlight may stand still before the log is told why. Long enough that
+ *  the ordinary off-path moments — the flight home from a park, the first rapid of a
+ *  run — pass without a word. */
+const STALL_MS = 3000
+/** …and how often to say it again while it goes on. */
+const STALL_REPEAT_MS = 10000
+/** How long the highlight may stand still before the search widens to the whole path
+ *  ahead (StepOpts.recover). Short — a lost cursor never finds its way back on its own —
+ *  but long enough that the ordinary off-path moments never trigger it. */
+const RECOVER_MS = 700
 
 /** Invisible: derives the executing G-code line AND the job progress fraction from
  *  the live tool position, by following the toolpath's ARC-LENGTH forward-only.
@@ -19,7 +24,10 @@ const WINDOW_MM = 30
  *  cumulative path length instead gives a physical, monotone cursor that tracks the
  *  real tool position and can't leap onto a nearby-but-later pass. Progress is then
  *  simply cursor/total — the TRUE machined fraction (fixes the acked-count bar that
- *  raced to 100% while the last long moves were still cutting). */
+ *  raced to 100% while the last long moves were still cutting).
+ *
+ *  The matching itself lives in trackPath.ts, where it can be tested headlessly —
+ *  Park saves the line this produces and Resume plunges at it. */
 export function Tracker(): null {
   const rawGcode = useStore((s) => s.gcode)
   const rotationDeg = useStore((s) => s.rotationDeg)
@@ -57,48 +65,38 @@ export function Tracker(): null {
         }
       : undefined
 
-  // segments + per-segment length and cumulative start-length (so a projection
-  // onto a segment maps directly to an arc-length position along the whole path)
   const model = useMemo(() => {
-    const segs = gcode ? buildLineSegments(gcode, { offsets: wcsOffsets, wcs, rotary }) : []
-    const len: number[] = new Array(segs.length)
-    const start: number[] = new Array(segs.length)
-    let total = 0
-    for (let i = 0; i < segs.length; i++) {
-      start[i] = total
-      const { a, b } = segs[i]
-      len[i] = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
-      total += len[i]
-    }
-    return { segs, len, start, total }
+    return buildTrackModel(gcode ? buildLineSegments(gcode, { offsets: wcsOffsets, wcs, rotary }) : [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gcode, wcsOffsets, wcs, stock])
 
   const cursor = useRef(0) // index of the segment the tool is currently on
+  const stallSince = useRef(0) // when the tool first went off the path (0 = it isn't)
+  const stallLogged = useRef(0) // when it was last reported (0 = not this stall)
 
   // Seed the cursor whenever the program changes or a run (re)starts. For a normal
   // start that's segment 0; for a RESUME (Park / From-Line) it's the first segment
   // at/after `resumeLine`, so the highlight, progress and grey colouring continue
   // from the resume point instead of stalling near the start (the forward window
   // can't leap forward on its own — this is why a 2nd park used to capture line ≈0).
-  // Also seed the progress so the bar/grey pick up at the resume point immediately.
+  // The line is published right away, for both kinds of start: the tool spends the
+  // first moments of a run travelling TO the path (a resume rapids in from the park
+  // spot), and until it arrives there is nothing to match against — see stepCursor.
   useEffect(() => {
     const k = seedCursor(model.segs, resumeLine)
     cursor.current = k
     if (!running) {
       setActiveLine(-1)
       setJobProgress(0)
-    } else if (resumeLine >= 0 && model.total > 0) {
+    } else if (model.total > 0) {
       setActiveLine(model.segs[k]?.idx ?? -1)
       setJobProgress(Math.min(1, model.start[k] / model.total))
     }
   }, [running, model, resumeLine, setActiveLine, setJobProgress])
 
   useEffect(() => {
-    const { segs, len, start, total } = model
-    if (!running || !mpos || segs.length === 0) return
+    if (!running || !mpos || model.segs.length === 0) return
     const bound = sentLine >= 0 ? sentLine : Infinity
-    const i = Math.min(cursor.current, segs.length - 1)
 
     // match in the same frame the segments were built in: unrolled for rotary
     let livePos = mpos
@@ -108,56 +106,43 @@ export function Tracker(): null {
       livePos = rotary.axis === 'X' ? [mpos[0], arc, mpos[2]] : [mpos[1], arc, mpos[2]]
     }
 
-    let bestK = i
-    let bestT = 0
-    let bestD = Infinity
-    let walked = 0 // path length scanned BEYOND the current segment
-    for (let k = i; k < segs.length; k++) {
-      if (segs[k].idx > bound) break // nothing past the ack bound is eligible yet
-      const { d, t } = projectDist(livePos, segs[k])
-      if (d < bestD) {
-        bestD = d
-        bestK = k
-        bestT = t
+    // Once the highlight has stood still for a moment, widen the search to the whole path
+    // ahead: either the tool is genuinely away from the program (a park), in which case
+    // nothing matches anyway, or it got past the window in one gap between reports and
+    // the narrow search will never find it again. See StepOpts.recover.
+    const stalled = stallSince.current > 0 && Date.now() - stallSince.current > RECOVER_MS
+    const next = stepCursor(model, cursor.current, livePos, bound, { recover: stalled })
+    if (!next) return
+    if (!next.onPath) {
+      // The tool is not on the path we drew, so the last line we saw it on still stands.
+      // Standing still is the honest answer, but a highlight that stops looks exactly
+      // like a highlight that is broken — and from outside there is no way to tell the
+      // two apart. So say it once, with the number that decides it: how far off the
+      // drawn path the machine actually is. Millimetres means the guard is too tight;
+      // tens of millimetres means the drawing and the machine disagree, and the
+      // highlight is the messenger.
+      const now = Date.now()
+      if (stallSince.current === 0) stallSince.current = now
+      else if (now - stallSince.current > STALL_MS && now - stallLogged.current > STALL_REPEAT_MS) {
+        stallLogged.current = now
+        const at = livePos.map((v, i) => `${'XYZABC'[i] ?? i}${v.toFixed(3)}`).join(' ')
+        // Repeated while it lasts, not once: a single sample cannot say whether the tool
+        // is drifting away from the path or the whole program is running somewhere else,
+        // and those want different fixes.
+        window.recta.logWrite(
+          'ui',
+          `tracker: held on line ${next.line + 1} for ${Math.round((now - stallSince.current) / 1000)} s — tool is ${next.dist.toFixed(1)} mm off the drawn path at machine ${at} (acked to ${bound === Infinity ? '?' : bound + 1})`
+        )
       }
-      if (k > i) {
-        walked += len[k]
-        if (walked > WINDOW_MM) break // stay within a short forward window of PATH
-      }
+      return
     }
-
-    cursor.current = bestK
-    setActiveLine(segs[bestK].idx)
-    const traveled = start[bestK] + bestT * len[bestK]
-    setJobProgress(total > 0 ? Math.min(1, traveled / total) : 0)
+    stallSince.current = 0
+    stallLogged.current = 0
+    cursor.current = next.cursor
+    setActiveLine(next.line)
+    setJobProgress(next.progress)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mpos, running, sentLine, model, axes, stock, setActiveLine, setJobProgress])
 
   return null
-}
-
-/** First segment index at/after a resume file line (or 0 for a normal start / when
- *  the line isn't found), so a resumed run's cursor starts where cutting continues. */
-function seedCursor(segs: LineSeg[], resumeLine: number): number {
-  if (resumeLine < 0) return 0
-  for (let k = 0; k < segs.length; k++) if (segs[k].idx >= resumeLine) return k
-  return 0
-}
-
-/** Perpendicular distance from p to segment a→b AND the clamped projection param t
- *  (0 at a, 1 at b) — t turns into an arc-length position along the whole path. */
-function projectDist(p: number[], seg: LineSeg): { d: number; t: number } {
-  const { a, b } = seg
-  const abx = b[0] - a[0]
-  const aby = b[1] - a[1]
-  const abz = b[2] - a[2]
-  const apx = p[0] - a[0]
-  const apy = p[1] - a[1]
-  const apz = p[2] - a[2]
-  const len2 = abx * abx + aby * aby + abz * abz
-  const t = len2 > 0 ? Math.max(0, Math.min(1, (apx * abx + apy * aby + apz * abz) / len2)) : 0
-  const dx = apx - abx * t
-  const dy = apy - aby * t
-  const dz = apz - abz * t
-  return { d: Math.sqrt(dx * dx + dy * dy + dz * dz), t }
 }

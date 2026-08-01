@@ -601,6 +601,9 @@ export class Controller {
       arr.push(spEnum)
       arr.sort((a, b) => a.id - b.id)
       this.info.spindles = arr
+      // the backup needs to know which drivers are Modbus to tell a complete dump from
+      // one taken before the board restarted with a VFD selected
+      this.backup.setSpindles(arr)
       changed = true
     }
     if (ver) {

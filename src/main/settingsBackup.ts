@@ -21,6 +21,9 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { vfdAddressMissing } from '@shared/settings-file'
+import type { SpindleInfo } from '@shared/types'
+import { log } from './logger'
 
 const KEEP_DATED = 30 // dated copies to retain; a change a day for a month
 const FLUSH_MS = 800 // quiet time after the last $n= line that ends a dump
@@ -76,6 +79,14 @@ export class SettingsBackup {
   private buf = new Map<number, string>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private factoryUntil = 0
+  /** what `$SPINDLESH` says this firmware registers — decides whether a dump without
+   *  `$476` is complete or one setting short (see vfdAddressMissing) */
+  private spindles: SpindleInfo[] = []
+
+  /** The controller hands over the spindle enumeration as it learns it. */
+  setSpindles(list: SpindleInfo[]): void {
+    this.spindles = list
+  }
 
   /** The board has been reset to defaults — anything it dumps from here describes
    *  the firmware, not this machine.
@@ -138,6 +149,23 @@ export class SettingsBackup {
 
       const latest = join(dir, 'latest.txt')
       const previous = existsSync(latest) ? readFileSync(latest, 'utf8') : ''
+
+      // …and the quieter version of the same danger. A board that has not restarted
+      // since a VFD was selected answers `$$` without `$476` — a complete-looking dump
+      // that is one setting short, and the setting it is short of is the one nobody
+      // notices missing. Letting it overwrite `latest.txt` would trade a good backup
+      // for a lesser one at the moment the operator is changing spindles, which is
+      // exactly when they are most likely to need the good one back.
+      //
+      // Only when there is something to lose: if the file already on disk has no
+      // address either, this dump takes nothing away and is filed normally.
+      const short = vfdAddressMissing(text, this.spindles) !== null && /^\$476=/m.test(previous)
+      if (short) {
+        writeFileSync(join(dir, `partial_${stamp()}.txt`), text, 'utf8')
+        log('app', 'settings backup: dump has no $476 (board has not restarted with the VFD) — kept the previous latest.txt')
+        return
+      }
+
       writeFileSync(latest, text, 'utf8')
       if (previous === text) return // nothing changed → no new dated copy
 

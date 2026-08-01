@@ -10,7 +10,7 @@
  * The files are the real ones from Filip's machine on 1 Aug 2026 — including the 13:21
  * dump that has `$395=1` and no `$476`.
  */
-import { vfdAddressMissing } from '../src/renderer/src/settingsFile'
+import { vfdAddressMissing } from '../src/shared/settings-file'
 import type { SpindleInfo } from '../src/shared/types'
 
 let failures = 0

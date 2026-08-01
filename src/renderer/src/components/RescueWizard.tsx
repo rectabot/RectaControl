@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
-import { vfdAddressMissing } from '../settingsFile'
+import { vfdAddressMissing } from '@shared/settings-file'
 
 /** Guided recovery for a board that has stopped answering commands.
  *

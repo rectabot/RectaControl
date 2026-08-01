@@ -1,9 +1,10 @@
 /**
  * What a saved `$$` dump does and does not say — pure file logic, no store and no React,
- * so test/settings.test.ts can drive it without a machine or a browser.
+ * so both processes use the same rule and test/settings.test.ts can drive it without a
+ * machine or a browser.
  */
 
-import type { SpindleInfo } from '@shared/types'
+import type { SpindleInfo } from './types'
 
 /** grblHAL's SpindleType for a Modbus VFD, as reported in the `$SPINDLESH` type field
  *  (`[SPINDLE:1|-|2|SDVE|Huanyang v1]`). The analog PWM spindle reports 0. */

@@ -1,11 +1,13 @@
 /**
- * Runs the main-process tests. There is no test framework here on purpose — these
- * bundle the real source with esbuild (already present via vite) and run it on
- * plain node, so the suite costs nothing to keep and nothing to install.
+ * Runs every test/*.test.ts. There is no test framework here on purpose — these bundle
+ * the real source with esbuild (already present via vite) and run it on plain node, so
+ * the suite costs nothing to keep and nothing to install.
  *
- * Only the parts of controller.ts that touch the OS are replaced (serial port,
- * disk logging, the settings backup); the protocol code under test is the real
- * file, imported from src/.
+ * What is under test is the code that decides what the machine does with no way to see
+ * it from outside: the streaming flow control (stream.test.ts) and the cursor that maps
+ * tool position to G-code line, which is where Park and Resume get their line number
+ * from (tracker.test.ts). Only the parts that touch the OS are replaced (serial port,
+ * disk logging, the settings backup).
  *
  *   node test/run.mjs                  the working tree
  *   OLD=a1674a0 node test/run.mjs      controller.ts as it was at that commit
@@ -15,7 +17,7 @@
  */
 import { build } from 'esbuild'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -44,9 +46,27 @@ if (process.env.OLD) {
   console.log(`testing controller.ts from ${rev}`)
 }
 
+// Every test/*.test.ts, bundled into one file and run in one process — the suites are
+// small and independent, and a single build keeps the whole thing under a second. Each
+// exports main(), which prints its own results and returns the number of failures.
+const files = readdirSync(TEST)
+  .filter((f) => f.endsWith('.test.ts'))
+  .sort()
+const entry = path.join(work, 'all.ts')
+writeFileSync(
+  entry,
+  [
+    ...files.map((f, i) => `import { main as m${i} } from ${JSON.stringify(path.join(TEST, f).replace(/\\/g, '/'))}`),
+    'let failures = 0',
+    ...files.map((f, i) => `console.log('\\n=== ${f} ===')\nfailures += await m${i}()`),
+    "console.log(failures ? `\\n${failures} check(s) FAILED` : '\\nall suites passed')",
+    'process.exit(failures ? 1 : 0)'
+  ].join('\n')
+)
+
 const out = path.join(work, 'suite.mjs')
 await build({
-  entryPoints: [path.join(TEST, 'stream.test.ts')],
+  entryPoints: [entry],
   outfile: out,
   bundle: true,
   format: 'esm',

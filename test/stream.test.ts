@@ -8,10 +8,9 @@
  * assert the two things a machine cannot show you — how many bytes the app thinks
  * are in that buffer, and whose `ok` each reply was counted against.
  *
- *   npm run test:stream            run against the working tree
- *   OLD=<git-rev> npm run test:stream    run against controller.ts from that rev,
- *                                        to check a test really does catch the bug
- *                                        it claims to (see test/run.mjs)
+ *   npm test                     run against the working tree
+ *   OLD=<git-rev> npm test      run against controller.ts from that rev, to check a
+ *                               test really does catch the bug it claims to (run.mjs)
  */
 import { Controller } from '../src/main/controller'
 import * as fake from './fakes/serial'
@@ -87,7 +86,8 @@ async function rig(): Promise<Rig> {
   }
 }
 
-async function main(): Promise<void> {
+/** Run the suite; returns how many checks failed (test/run.mjs adds them up). */
+export async function main(): Promise<number> {
   console.log('\n1. the program alone stays inside the 127-byte window')
   {
     const r = await rig()
@@ -212,7 +212,5 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n${checks - failures}/${checks} checks passed`)
-  process.exit(failures ? 1 : 0)
+  return failures
 }
-
-void main()

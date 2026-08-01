@@ -10,7 +10,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "test:stream": "node test/run.mjs",
+    "test": "node test/run.mjs",
     "postinstall": "electron-builder install-app-deps",
     "dist": "electron-vite build && electron-builder --win"
   },

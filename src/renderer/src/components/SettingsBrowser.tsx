@@ -102,6 +102,17 @@ export function SettingsBrowser(): JSX.Element | null {
     window.recta.send('$$')
   }
 
+  // A settings list describes a live board, so it does not outlive the connection to
+  // one. Dropping it here is what makes the read below happen again when the board
+  // comes back — and the case that matters is the one this page exists to serve: change
+  // a setting that only takes effect after a restart, restart, and the list was still
+  // the world from before it. `$476` was the proof, on 1 Aug 2026: gone from the board
+  // the moment it rebooted with no VFD selected, still on screen, and the operator
+  // reasonably concluded the app was lying about which settings exist.
+  useEffect(() => {
+    if (!connected) setRows([])
+  }, [connected])
+
   // auto-read when opened while connected — but only once Idle. If Settings is
   // opened mid-job, `busy` holds the read off; when the machine returns to Idle
   // this effect re-fires (base changed) and reads then.

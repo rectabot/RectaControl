@@ -13,6 +13,45 @@ const CONT_DIST = 1000 // mm — hold-jog distance; cancelled on release
 const PARK_SAFE_Z = 5 // mm — safe WORK-Z clearance: retract to here on park, and
 // return via here on resume (buildResume lifts to this absolute Z before rapiding)
 
+/** Pause the program, parking the tool clear of the work when the machine can do it.
+ *
+ *  A plain feed hold stops with the tool still down in the cut and the spindle still
+ *  turning against it. grblHAL can lift it out and put it back by itself — but only
+ *  through the door command, which is the one thing that arms the parking motion. It
+ *  then retracts by $56, powers down, rapids to $58, and Cycle Start walks all of that
+ *  backwards and carries on with the program. Nothing is torn down, so there is no
+ *  rebuilt preamble and no re-entry to get wrong.
+ *
+ *  It falls back to a plain hold unless all of the following hold, because getting
+ *  this wrong gives the operator a pause they cannot undo — or a moving machine:
+ *   • parking must be on ($41 bit 0), and not the "deactivate on init" variant
+ *     (bit 1), which leaves it off until an M56 we cannot see has switched it on.
+ *     Without a parking motion the door command stops the machine and lifts nothing,
+ *     which is the same tool in the same cut plus a door state to get out of;
+ *   • the door input must read closed. grblHAL refuses to leave the door state while
+ *     the signal says ajar (protocol.c), so on a machine whose $14 has that input
+ *     inverted the wrong way — the 30 Jul 2026 fault, and the factory default — Pause
+ *     would stop the job for good. A pause is not the place to discover that;
+ *   • the machine must be homed. The park target ($58) is a MACHINE coordinate, and
+ *     on an unreferenced machine that is measured from wherever it happened to power
+ *     up. The motion only ever travels away from the work, so it cannot plunge — but
+ *     it can drive Z into its top stop, and with no reference there are no soft
+ *     limits to catch it. */
+export function parkOnPause(): boolean {
+  const s = useStore.getState()
+  const enabled = Number(s.settingValues[41])
+  if (!Number.isFinite(enabled) || (enabled & 1) === 0 || (enabled & 2) !== 0) return false
+  return s.homed && !(s.status?.pins ?? '').includes('D')
+}
+
+export function pauseProgram(): void {
+  const s = useStore.getState()
+  const park = parkOnPause()
+  // An SD / external run has no app-side stream to pause — just the realtime byte.
+  if (s.job.running) window.recta.pauseJob(park)
+  else window.recta.realtime(park ? RT.safetyDoor : RT.feedHold)
+}
+
 /** Park for access: remember the current line + machined fraction, then abort the
  *  stream to Idle so the head can be jogged FREELY (grbl only allows jog in Idle — a
  *  live feed-hold won't). Once the abort settles into Idle, lift Z clear of the work
@@ -192,7 +231,7 @@ export function runControlAction(id: string): void {
       window.recta.send('$X')
       break
     case 'hold':
-      window.recta.realtime(RT.feedHold)
+      pauseProgram() // same parking pause the button gives, from the key/pad too
       break
     case 'start':
       if (base === 'Hold' || base === 'Door') window.recta.realtime(RT.resume)

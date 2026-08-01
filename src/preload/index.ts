@@ -27,7 +27,7 @@ const api: RectaApi = {
     ipcRenderer.invoke('jog', axis, distance, feed),
   setZero: (axis: string, value: number) => ipcRenderer.invoke('setZero', axis, value),
   startJob: (gcode: string, resume?: ResumeMap) => ipcRenderer.invoke('job:start', gcode, resume),
-  pauseJob: () => ipcRenderer.invoke('job:pause'),
+  pauseJob: (park?: boolean) => ipcRenderer.invoke('job:pause', park),
   resumeJob: () => ipcRenderer.invoke('job:resume'),
   stopJob: () => ipcRenderer.invoke('job:stop'),
   listFirmware: () => ipcRenderer.invoke('firmware:list'),

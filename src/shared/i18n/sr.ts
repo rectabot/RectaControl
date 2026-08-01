@@ -888,6 +888,10 @@ export const sr: Record<string, string> = {
   'ui.vc.loadTitle': 'Učitaj G-code (PC biblioteka ili SD kartica)',
   'ui.vc.clearTitle': 'Ukloni program i obriši putanju (gasi i prikaz materijala)',
   'ui.vc.fromLineTitle': 'Start od linije',
+  'ui.vc.pauseParkTitle':
+    'Pauza — kontroler izvlači alat iznad komada i zaustavlja vreteno. Resume ga vraća na rez i nastavlja program. Koliko se izvuče i na koju visinu parkira su $56 i $58.',
+  'ui.vc.pauseHoldTitle':
+    'Pauza — mašina staje gde jeste, sa alatom u rezu i vretenom koje se vrti. Može umesto toga da izvuče alat, ali za to treba uključen parking ($41), referencirana mašina i ulaz vrata koji čita zatvoreno.',
   'ui.vc.probeTitle': 'Probe podešavanja',
   'ui.vc.srcPc': 'Učitano sa PC-ja',
   'ui.vc.srcSd': 'Učitano sa SD kartice',

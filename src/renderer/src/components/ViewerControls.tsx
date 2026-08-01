@@ -4,7 +4,7 @@ import { useT, useLabel } from '../i18n'
 import { AuxToggles } from './AuxToggles'
 import { fmtDuration } from '../format'
 import { rotateGcode } from '../gcodeRotate'
-import { resumeFromPark } from '../controlActions'
+import { resumeFromPark, pauseProgram, parkOnPause } from '../controlActions'
 import { PcIcon, SdIcon } from './icons'
 
 /** Overlay controls that live inside the toolpath window (like ncSender):
@@ -194,8 +194,10 @@ export function ViewerControls(): JSX.Element {
         <Pill
           color="warn"
           disabled={!running}
-          onClick={() => (job.running ? window.recta.pauseJob() : window.recta.realtime(RT.feedHold))}
-          title={t('ui.vc.pause')}
+          onClick={pauseProgram}
+          // Read at render, not subscribed: this component already re-renders on every
+          // status report, and the tooltip only has to be right when it is hovered.
+          title={t(parkOnPause() ? 'ui.vc.pauseParkTitle' : 'ui.vc.pauseHoldTitle')}
         >
           ❚❚ {L('ui.vc.pause')}
         </Pill>

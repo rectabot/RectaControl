@@ -199,5 +199,16 @@ export const RT = {
   // They toggle, and the toggle holds until the program's NEXT M7/M8/M9 takes the
   // output back — which is the right behaviour for a hand override.
   floodToggle: 0xa0,
-  mistToggle: 0xa1
+  mistToggle: 0xa1,
+  // CMD_SAFETY_DOOR. Sent by the Pause button when the machine can park itself, and
+  // the reason is that grblHAL's parking motion is armed here and nowhere else —
+  // `sys.flags.is_parking` is set only on this command (system.h). A plain feed hold
+  // stops the machine with the tool sitting in the cut and the spindle turning, and
+  // it cannot be lifted out of there either: motion needs Idle, so a lift means
+  // tearing the stream down and rebuilding it.
+  //
+  // With parking on, this retracts by $56 at $57, powers down, rapids to $58 at $59,
+  // and Cycle Start reverses the whole thing and carries on with the program — with
+  // the stream untouched. The core does it all.
+  safetyDoor: 0x84
 } as const

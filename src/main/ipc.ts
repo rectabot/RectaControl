@@ -82,7 +82,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
   ipcMain.handle('job:start', (_e, gcode: string, resume?: ResumeMap) =>
     controller.startJob(gcode, resume)
   )
-  ipcMain.handle('job:pause', () => controller.pauseJob())
+  ipcMain.handle('job:pause', (_e, park?: boolean) => controller.pauseJob(park))
   ipcMain.handle('job:resume', () => controller.resumeJob())
   ipcMain.handle('job:stop', () => controller.stopJob())
 

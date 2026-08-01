@@ -212,7 +212,9 @@ export interface RectaApi {
   jog(axis: string, distance: number, feed: number): Promise<void>
   setZero(axis: string, value: number): Promise<void>
   startJob(gcode: string, resume?: ResumeMap): Promise<void>
-  pauseJob(): Promise<void>
+  /** `park` sends the door command instead of a feed hold, so grblHAL retracts the
+   *  tool and parks it; Cycle Start reverses that and carries on. See RT.safetyDoor. */
+  pauseJob(park?: boolean): Promise<void>
   resumeJob(): Promise<void>
   stopJob(): Promise<void>
   /** Firmware flashing (RP2350 UF2 bootloader). */

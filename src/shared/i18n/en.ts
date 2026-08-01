@@ -911,6 +911,10 @@ export const en: Record<string, string> = {
   'ui.vc.resume': '▶ Resume',
   'ui.vc.cycle': '▶ Cycle',
   'ui.vc.pause': 'Pause',
+  'ui.vc.pauseParkTitle':
+    'Pause — the controller retracts the tool clear of the work and stops the spindle. Resume puts it back on the cut and carries on with the program. Retract distance and park height are $56 and $58.',
+  'ui.vc.pauseHoldTitle':
+    'Pause — the machine stops where it is, with the tool still in the cut and the spindle turning. It can park the tool clear instead, but that needs parking on ($41), a homed machine, and a safety-door input reading closed.',
   'ui.vc.stop': 'Stop',
   'ui.vc.fromLine': '≡ From Line',
   'ui.vc.fromLineTitle': 'Start from line',

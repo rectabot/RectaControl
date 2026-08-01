@@ -38,7 +38,11 @@ const ECHOED_REALTIME: Record<number, string> = {
   // byte or the board had ignored it — because a realtime byte leaves no trace. It
   // does now, which splits that question in two.
   [RT.floodToggle]: 'Flood',
-  [RT.mistToggle]: 'Mist'
+  [RT.mistToggle]: 'Mist',
+  // Labelled for what the operator pressed, not for the byte: they pressed Pause and
+  // the machine parks. The board answers with its own `[MSG:Check Door]` right after,
+  // so the door underneath is never hidden from anyone reading the log.
+  [RT.safetyDoor]: 'Park'
 }
 
 /** One line written to the board and still awaiting its `ok` / `error`. `job` marks
@@ -335,9 +339,13 @@ export class Controller {
     return src < preambleLines ? fileLine : fileLine + (src - preambleLines)
   }
 
-  pauseJob(): void {
+  /** Pause the stream. `park` swaps the feed hold for the door command, which is the
+   *  only thing that arms grblHAL's parking motion — see RT.safetyDoor. Either way
+   *  the stream stops filling and the position is kept; the renderer decides which,
+   *  because whether parking is safe depends on settings it already tracks. */
+  pauseJob(park = false): void {
     if (this.running && !this.paused) {
-      this.sendRealtime(RT.feedHold)
+      this.sendRealtime(park ? RT.safetyDoor : RT.feedHold)
       this.paused = true
       this.emitJob()
     }

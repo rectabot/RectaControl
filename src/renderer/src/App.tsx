@@ -233,7 +233,16 @@ export default function App(): JSX.Element {
     if (!connected || suspended || info.version) return
     const ask = (): void => {
       const s = useStore.getState()
-      if (s.connected && !s.info.version && !s.job.running && !s.sdRunning) window.recta.send('$I')
+      if (!s.connected || s.info.version || s.job.running || s.sdRunning) return
+      // Only when the parser is demonstrably alive. A board that is answering nothing
+      // is not losing our question, it is queueing it — the one sent on connect is
+      // already in that queue and will come back on its own. Asking again meanwhile
+      // just stacks more: on 1 Aug five retries went out during a 20-second restore
+      // and the board answered all six at once, six full $I dumps into the console.
+      // The case this retry is actually for is the opposite one — a board replying to
+      // everything except the `$I` we happened to send at a bad moment.
+      if (parserSilentFor() > 3000) return
+      window.recta.send('$I')
     }
     const first = setTimeout(ask, 400) // let the machine settle out of the suspend
     const timer = setInterval(ask, 3000)

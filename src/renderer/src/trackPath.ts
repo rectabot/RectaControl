@@ -43,6 +43,32 @@ const WINDOW_MM = 30
  *  honest answer is to keep showing the last line we actually saw it on. */
 const ON_PATH_MM = 2
 
+/** How long the highlight may stand still before the search reaches further ahead.
+ *  Short — a lost cursor never finds its way back on its own — but long enough that the
+ *  ordinary off-path moments never trigger it. */
+const RECOVER_MS = 700
+/** mm of extra reach per second the tool has been missing — roughly twice a rapid, so a
+ *  genuine gap in position reports is always covered and nothing else is. */
+const REACH_MM_S = 120
+/** …and the ceiling. Past a few seconds the machine is not travelling at all (a park, a
+ *  hold, the app blocked), and a stuck highlight beats a confidently wrong one. */
+const REACH_MAX_MM = 300
+
+/** How far ahead the cursor may look for a tool it has lost — see StepOpts.reachMm.
+ *
+ *  `locked` is the part that is easy to leave out and expensive to leave out. Reaching
+ *  further is RECOVERY: it only makes sense for a tool that was being tracked and went
+ *  missing. Before the first match of a run there is nothing to recover — the cursor is
+ *  exactly where it was seeded — and the machine is somewhere else on purpose, flying to
+ *  the start or, after a park, back to the resume point. Letting the reach grow through
+ *  that flight is how a resumed job on arcs_mix.nc captured the line three ahead of the
+ *  one it was about to cut: the tool crossed the resume circle on its way in, 2 mm above
+ *  it, and 300 mm of reach was enough to span both of its arcs. */
+export function reachFor(missingMs: number, locked: boolean): number {
+  if (!locked || missingMs <= RECOVER_MS) return 0
+  return Math.min(REACH_MAX_MM, (missingMs / 1000) * REACH_MM_S)
+}
+
 export interface TrackModel {
   segs: LineSeg[]
   /** length of each segment */

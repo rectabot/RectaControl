@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useStore, rotaryRadius } from '../store'
 import { buildLineSegments, usesRotary } from '../toolpath'
-import { buildTrackModel, seedCursor, stepCursor } from '../trackPath'
+import { buildTrackModel, reachFor, seedCursor, stepCursor } from '../trackPath'
 import { rotateGcode } from '../gcodeRotate'
 
 /** How long the highlight may stand still before the log is told why. Long enough that
@@ -10,16 +10,6 @@ import { rotateGcode } from '../gcodeRotate'
 const STALL_MS = 3000
 /** …and how often to say it again while it goes on. */
 const STALL_REPEAT_MS = 10000
-/** How long the highlight may stand still before the search reaches further ahead
- *  (StepOpts.reachMm). Short — a lost cursor never finds its way back on its own — but
- *  long enough that the ordinary off-path moments never trigger it. */
-const RECOVER_MS = 700
-/** mm of extra reach per second the tool has been missing — roughly twice a rapid, so a
- *  genuine gap in reports is always covered and nothing else is. */
-const REACH_MM_S = 120
-/** …and the ceiling. Past a few seconds the machine is not travelling at all (a park, a
- *  hold, the app blocked), and a stuck highlight beats a confidently wrong one. */
-const REACH_MAX_MM = 300
 
 /** Invisible: derives the executing G-code line AND the job progress fraction from
  *  the live tool position, by following the toolpath's ARC-LENGTH forward-only.
@@ -44,6 +34,7 @@ export function Tracker(): null {
   // position so it lines up across G54–G59.
   const mpos = useStore((s) => s.status?.mpos ?? null)
   const running = useStore((s) => s.job.running)
+  const paused = useStore((s) => s.job.paused)
   const sentLine = useStore((s) => s.sentLine)
   // the file line a resumed run (Park / From-Line) begins at, so the cursor can be
   // seeded there instead of segment 0 — the forward-only arc-length window can't
@@ -79,6 +70,7 @@ export function Tracker(): null {
   const cursor = useRef(0) // index of the segment the tool is currently on
   const stallSince = useRef(0) // when the tool first went off the path (0 = it isn't)
   const stallLogged = useRef(0) // when it was last reported (0 = not this stall)
+  const locked = useRef(false) // has the tool been matched to the path at all this run?
 
   // Seed the cursor whenever the program changes or a run (re)starts. For a normal
   // start that's segment 0; for a RESUME (Park / From-Line) it's the first segment
@@ -91,6 +83,13 @@ export function Tracker(): null {
   useEffect(() => {
     const k = seedCursor(model.segs, resumeLine)
     cursor.current = k
+    // A new run starts having seen nothing: the clock that decides how far to reach for a
+    // lost tool must not carry over from the last one. Left running across a park it read
+    // 13 s at the moment the resume began, which bought the widest reach there is at the
+    // exact moment the tool was furthest from the program.
+    stallSince.current = 0
+    stallLogged.current = 0
+    locked.current = false
     if (!running) {
       setActiveLine(-1)
       setJobProgress(0)
@@ -113,13 +112,10 @@ export function Tracker(): null {
 
     // Once the highlight has stood still for a moment, look further ahead — the tool may
     // have crossed the window in one gap between reports, and the narrow search would
-    // never find it again. How much further is bounded by how long it has been missing:
-    // a machine cannot have cut more path than it had time for, and past that a match is
-    // a coincidence. Capped, because a stall that lasts (a park) is not travel at all.
-    // See StepOpts.reachMm.
+    // never find it again. How far is reachFor()'s decision, and it is only ever more
+    // than nothing for a tool that WAS being tracked (see there).
     const missing = stallSince.current > 0 ? Date.now() - stallSince.current : 0
-    const reachMm = missing > RECOVER_MS ? Math.min(REACH_MAX_MM, (missing / 1000) * REACH_MM_S) : 0
-    const next = stepCursor(model, cursor.current, livePos, { reachMm })
+    const next = stepCursor(model, cursor.current, livePos, { reachMm: reachFor(missing, locked.current) })
     if (!next) return
     if (!next.onPath) {
       // The tool is not on the path we drew, so the last line we saw it on still stands.
@@ -131,7 +127,10 @@ export function Tracker(): null {
       // highlight is the messenger.
       const now = Date.now()
       if (stallSince.current === 0) stallSince.current = now
-      else if (now - stallSince.current > STALL_MS && now - stallLogged.current > STALL_REPEAT_MS) {
+      // …but not while the machine is deliberately parked off the path. A held highlight
+      // is the correct answer to a pause, and saying so every few seconds only buries the
+      // times it isn't.
+      else if (!paused && now - stallSince.current > STALL_MS && now - stallLogged.current > STALL_REPEAT_MS) {
         stallLogged.current = now
         const at = livePos.map((v, i) => `${'XYZABC'[i] ?? i}${v.toFixed(3)}`).join(' ')
         // Repeated while it lasts, not once: a single sample cannot say whether the tool
@@ -148,11 +147,12 @@ export function Tracker(): null {
     }
     stallSince.current = 0
     stallLogged.current = 0
+    locked.current = true // the tool has been seen on the path; recovery is now meaningful
     cursor.current = next.cursor
     setActiveLine(next.line)
     setJobProgress(next.progress)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mpos, running, sentLine, model, axes, stock, setActiveLine, setJobProgress])
+  }, [mpos, running, paused, sentLine, model, axes, stock, setActiveLine, setJobProgress])
 
   return null
 }

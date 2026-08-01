@@ -52,7 +52,7 @@ function RebootNote(): React.JSX.Element {
         if (await askConfirm({ title: t('ui.settings.rebootTitle'), body: t('ui.settings.rebootBody'), confirmLabel: t('ui.settings.rebootNow'), tone: 'warn' }))
           window.recta.send('$REBOOT')
       }}
-      className="ml-3 rounded border border-warn/50 px-1.5 py-px text-[10px] font-medium text-warn transition enabled:hover:bg-warn enabled:hover:text-[#020617] disabled:opacity-40"
+      className="shrink-0 self-center whitespace-nowrap rounded border border-warn/50 px-1.5 py-px text-[10px] font-medium text-warn transition enabled:hover:bg-warn enabled:hover:text-[#020617] disabled:opacity-40"
     >
       {t('ui.settings.resetNote')}
     </button>
@@ -264,10 +264,10 @@ function GenericRow({
         <div className="text-sm text-slate-200">
           <span className="mr-2 font-mono text-xs text-brand">${n}</span>
           {settingName(n, lang)}
-          {RESET_REQUIRED.has(n) && <RebootNote />}
         </div>
         {settingDesc(n, lang) && <div className="text-[11px] leading-snug text-slate-500">{settingDesc(n, lang)}</div>}
       </div>
+      {RESET_REQUIRED.has(n) && <RebootNote />}
       <div className="w-[32rem] shrink-0">
         <GenericValue n={n} value={value} axes={axes} write={write} />
       </div>
@@ -398,10 +398,10 @@ function FieldRow({
         <div className="text-sm text-slate-200">
           {tag && <span className="mr-2 font-mono text-xs text-brand">{tag}</span>}
           {label}
-          {'setting' in field && RESET_REQUIRED.has(field.setting) && <RebootNote />}
         </div>
         {desc && <div className="text-[11px] leading-snug text-slate-500">{desc}</div>}
       </div>
+      {'setting' in field && RESET_REQUIRED.has(field.setting) && <RebootNote />}
       <div className="w-[32rem] shrink-0">
         <Control
           field={field}

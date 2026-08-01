@@ -113,6 +113,16 @@ export const sr: Record<string, string> = {
   'ui.zoom.larger': 'Veće',
   'ui.zoom.hint': 'Prečica: Ctrl i + / − / 0 (0 = auto)',
   'ui.settings.sectionEmpty': 'Ovde nema šta da se podesi (ploča nije prijavila podešavanja za ovu sekciju).',
+  'ui.settings.rebootNowHint':
+    'Restartuj ploču sad da ovo počne da važi',
+  'ui.settings.rebootBusy':
+    'Ploča mora biti povezana i mirna',
+  'ui.settings.rebootTitle':
+    'Restartovati ploču?',
+  'ui.settings.rebootBody':
+    'Ovakva podešavanja ploča čita pri dizanju, pa mora da se restartuje da bi počelo da važi. Reč je o ploči, ne o aplikaciji — restart RectaControl-a ne dira ploču. Veza padne na par sekundi i sama se vrati; mašina gubi referencu i traži ponovno homovanje.',
+  'ui.settings.rebootNow':
+    'Restartuj ploču',
   'ui.settings.resetNote': 'Važi tek posle resetovanja ploče',
   'ui.errors.search': 'Pretraži greške / alarme (kod ili tekst)…',
   'ui.errors.alarmsTitle': 'Alarmi',

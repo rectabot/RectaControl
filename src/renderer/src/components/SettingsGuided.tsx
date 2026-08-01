@@ -24,6 +24,41 @@ for (const sec of SECTIONS) {
  *  writes the underlying `$N=value` via `write`. Reads current values from `vals`
  *  (a num→string map of the last `$$` read). All labels are i18n keys resolved
  *  through `t()`. */
+/** "Takes effect after a board reset" — and the restart that makes it so.
+ *
+ *  A label was not enough, and the reason is a collision of words: the only control
+ *  called Reset does a SOFT reset, which is not a board restart and does not bring a
+ *  boot-read setting into existence. On 1 Aug 2026 that cost half an hour — `$395` was
+ *  changed, the app was restarted (which does nothing to the board), the greeting
+ *  banner appeared and read like a boot, and `$476` was reported missing when it had
+ *  simply never been asked for. The remedy was `$REBOOT`, typed into MDI, which is
+ *  knowledge nobody outside this room has.
+ *
+ *  Idle only, and asked first: this drops the link and the homing reference with it. */
+function RebootNote(): React.JSX.Element {
+  const t = useT()
+  const connected = useStore((s) => s.connected)
+  const askConfirm = useStore((s) => s.askConfirm)
+  const jobRunning = useStore((s) => s.job.running)
+  const sdRunning = useStore((s) => s.sdRunning)
+  const base = useStore((s) => (s.status?.state ?? '').split(':')[0])
+  const can = connected && !jobRunning && !sdRunning && base === 'Idle'
+
+  return (
+    <button
+      disabled={!can}
+      title={can ? t('ui.settings.rebootNowHint') : t('ui.settings.rebootBusy')}
+      onClick={async () => {
+        if (await askConfirm({ title: t('ui.settings.rebootTitle'), body: t('ui.settings.rebootBody'), confirmLabel: t('ui.settings.rebootNow'), tone: 'warn' }))
+          window.recta.send('$REBOOT')
+      }}
+      className="ml-3 rounded border border-warn/50 px-1.5 py-px text-[10px] font-medium text-warn transition enabled:hover:bg-warn enabled:hover:text-[#020617] disabled:opacity-40"
+    >
+      {t('ui.settings.resetNote')}
+    </button>
+  )
+}
+
 export function SettingsGuided({
   vals,
   axes,
@@ -223,16 +258,13 @@ function GenericRow({
   last: boolean
 }): JSX.Element {
   const lang = useLang()
-  const t = useT()
   return (
     <div className={`flex items-start gap-6 px-3 py-2.5 hover:bg-panel2 ${last ? '' : 'border-b border-border/60'}`}>
       <div className="min-w-0 flex-1">
         <div className="text-sm text-slate-200">
           <span className="mr-2 font-mono text-xs text-brand">${n}</span>
           {settingName(n, lang)}
-          {RESET_REQUIRED.has(n) && (
-            <span className="ml-3 text-[10px] font-medium text-warn">{t('ui.settings.resetNote')}</span>
-          )}
+          {RESET_REQUIRED.has(n) && <RebootNote />}
         </div>
         {settingDesc(n, lang) && <div className="text-[11px] leading-snug text-slate-500">{settingDesc(n, lang)}</div>}
       </div>
@@ -366,9 +398,7 @@ function FieldRow({
         <div className="text-sm text-slate-200">
           {tag && <span className="mr-2 font-mono text-xs text-brand">{tag}</span>}
           {label}
-          {'setting' in field && RESET_REQUIRED.has(field.setting) && (
-            <span className="ml-3 text-[10px] font-medium text-warn">{t('ui.settings.resetNote')}</span>
-          )}
+          {'setting' in field && RESET_REQUIRED.has(field.setting) && <RebootNote />}
         </div>
         {desc && <div className="text-[11px] leading-snug text-slate-500">{desc}</div>}
       </div>

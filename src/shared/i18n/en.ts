@@ -115,6 +115,16 @@ export const en: Record<string, string> = {
   'ui.zoom.larger': 'Larger',
   'ui.zoom.hint': 'Shortcut: Ctrl and + / − / 0 (0 = auto)',
   'ui.settings.sectionEmpty': 'Nothing to configure here (the board reported no settings for this section).',
+  'ui.settings.rebootNowHint':
+    'Restart the board now so this takes effect',
+  'ui.settings.rebootBusy':
+    'The board must be connected and idle',
+  'ui.settings.rebootTitle':
+    'Restart the board?',
+  'ui.settings.rebootBody':
+    'Settings like this one are read when the board starts, so the board has to restart before it takes effect. This is the board, not the app — restarting RectaControl does nothing to it. The link drops for a few seconds and comes back on its own; the machine loses its homing reference and will need homing again.',
+  'ui.settings.rebootNow':
+    'Restart the board',
   'ui.settings.resetNote': 'Takes effect after a board reset',
   'ui.errors.search': 'Search errors / alarms (code or text)…',
   'ui.errors.alarmsTitle': 'Alarms',

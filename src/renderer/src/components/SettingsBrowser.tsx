@@ -75,15 +75,28 @@ export function SettingsBrowser(): JSX.Element | null {
     })
   }
 
+  /** Read `$$` into the list.
+   *
+   *  The dump ends when the `$n=` lines STOP, not on the next `ok` — which may belong
+   *  to somebody else. That is not a nicety: the moment this most needs to work is
+   *  right after the board restarts, and that is precisely when the wire is busiest,
+   *  with the app's own `$#`, `$$`, `$G`, `$I` and `$SPINDLESH` all trailing acks of
+   *  their own. Finishing on the first `ok` seen there ended the read before a single
+   *  setting had arrived, and the page sat empty next to a terminal visibly full of
+   *  them. Same hazard, same answer as applySettings.readBack(). */
   const read = (): void => {
     if (!connected || busy) return
     const collected: Record<number, string> = {}
     setReading(true)
     let off: (() => void) | null = null
-    let timer: ReturnType<typeof setTimeout>
+    let quiet: ReturnType<typeof setTimeout> | null = null
+    let cap: ReturnType<typeof setTimeout>
     const finish = (): void => {
-      off?.()
-      clearTimeout(timer)
+      if (!off) return
+      off()
+      off = null
+      if (quiet) clearTimeout(quiet)
+      clearTimeout(cap)
       setReading(false)
       setRows(
         Object.entries(collected)
@@ -92,13 +105,14 @@ export function SettingsBrowser(): JSX.Element | null {
       )
     }
     off = window.recta.onEvent((e) => {
-      if (e.type !== 'line') return
-      const t = e.data.trim()
-      const m = /^\$(\d+)=(.*)$/.exec(t)
-      if (m) collected[Number(m[1])] = m[2]
-      else if (t === 'ok') finish()
+      if (e.type !== 'line' || !off) return
+      const m = /^\$(\d+)=(.*)$/.exec(e.data.trim())
+      if (!m) return
+      collected[Number(m[1])] = m[2]
+      if (quiet) clearTimeout(quiet)
+      quiet = setTimeout(finish, 700)
     })
-    timer = setTimeout(finish, 3000) // safety: stop if no 'ok'
+    cap = setTimeout(finish, 5000) // safety: a board that answers nothing at all
     window.recta.send('$$')
   }
 

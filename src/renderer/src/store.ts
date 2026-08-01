@@ -1352,15 +1352,27 @@ export function hasLimitPin(pins: string | null): boolean {
   return !!pins && /[XYZABC]/.test(pins)
 }
 
+/** How close together two identical lines must be to count as one event. What the
+ *  collapsing is for is a burst — a job that error:9's every buffered line, or an
+ *  ok flood — and a burst arrives in milliseconds. A second later is not a burst. */
+const COLLAPSE_MS = 1000
+
 /** Append a console line, collapsing an identical consecutive repeat into a
- *  "×N" counter (with a refreshed timestamp) instead of flooding — e.g. a job
- *  that error:9's every buffered line. */
+ *  "×N" counter (with a refreshed timestamp) instead of flooding.
+ *
+ *  Only within COLLAPSE_MS of the one before it. Without that window a deliberate
+ *  repeat looked like nothing happened: press MIST, wait twenty seconds, press it
+ *  again, and the terminal did not add a row — it turned the old one into "×2" and
+ *  moved its timestamp. Two identical presses well apart are two events and the
+ *  operator is entitled to see both, which matters most for the realtime toggles,
+ *  where the console echo is the only proof the press was sent at all. */
 function cap(lines: ConsoleLine[], text: string): ConsoleLine[] {
   const last = lines[lines.length - 1]
-  if (last && last.text === text) {
-    return [...lines.slice(0, -1), { text, time: Date.now(), n: last.n + 1 }]
+  const now = Date.now()
+  if (last && last.text === text && now - last.time < COLLAPSE_MS) {
+    return [...lines.slice(0, -1), { text, time: now, n: last.n + 1 }]
   }
-  const next = [...lines, { text, time: Date.now(), n: 1 }]
+  const next = [...lines, { text, time: now, n: 1 }]
   return next.length > MAX_CONSOLE ? next.slice(next.length - MAX_CONSOLE) : next
 }
 

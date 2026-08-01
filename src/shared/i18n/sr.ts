@@ -407,7 +407,7 @@ export const sr: Record<string, string> = {
   // ── Overrides ──────────────────────────────────────────────────────────────
   'ui.ov.feed': 'Feed',
   'ui.aux.vacBusy':
-    'VAC se ne može menjati dok program radi — nema realtime komandu, a ručna linija bi ušla u strim i pomerila mu brojanje. Zaustavi ili sačekaj kraj.',
+    'VAC nema realtime komandu, pa se tokom programa šalje kao linija i čeka svoj red — očekuj trenutak pre nego što se izlaz stvarno prebaci. Magla i tečnost su trenutne.',
   'ui.ov.spindle': 'Spin',
   'ui.ov.rapid': 'Rapid',
   'ui.ov.resetTitle': 'Reset na 100%',

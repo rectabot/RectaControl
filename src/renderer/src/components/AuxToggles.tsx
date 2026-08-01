@@ -53,8 +53,15 @@ export function AuxToggles(): JSX.Element {
       if (mist) window.recta.send('M7') // keep mist on
     } else window.recta.send('M8')
   }
+  // VAC is a generic aux output (M64/M65) and grblHAL has no realtime command for
+  // one, so during a job it can only be reached by writing a line. That is safe now
+  // — sendLine feeds the same character counting the program does, so the line is
+  // metered and its `ok` is not credited to a streamed line — but it is not instant:
+  // it takes its turn behind what is already buffered. The button flips straight
+  // away because there is no status readback to flip it, so on a slow feed it can
+  // lead the real output by a second or two. Mist and flood have realtime bytes and
+  // do not wait.
   const toggleVac = (): void => {
-    if (streaming) return // see the disabled state below
     const on = !vac
     setVac(on)
     window.recta.send(on ? 'M64 P0' : 'M65 P0')
@@ -64,17 +71,13 @@ export function AuxToggles(): JSX.Element {
     <div className="flex gap-2">
       {aux.mist && <Chip label="MIST" on={mist} disabled={!connected} onClick={toggleMist} />}
       {aux.flood && <Chip label="FLOOD" on={flood} disabled={!connected} onClick={toggleFlood} />}
-      {/* VAC is the one output with no realtime command behind it, so during a job
-          it can only be reached by writing a line — and a hand-written line lands
-          in grblHAL's receive buffer without the streamer counting it, and its `ok`
-          gets credited to a streamed line. Off during a job, therefore: a button
-          that quietly endangers the running program is worse than one that says
-          "not now". */}
-      {/* the reason rides on a wrapper, not the button: a disabled button gets no
-          mouse events, so its own `title` never shows the one time it matters */}
+      {/* The tooltip only appears mid-job, where it has something to say: the button
+          works, but the output follows a beat later. It rides on a wrapper because
+          that is where it started, back when the button was disabled here and a
+          disabled button gets no mouse events to show its own title. */}
       {aux.vac && (
         <span title={streaming ? t('ui.aux.vacBusy') : undefined}>
-          <Chip label="VAC" on={vac} disabled={!connected || streaming} onClick={toggleVac} />
+          <Chip label="VAC" on={vac} disabled={!connected} onClick={toggleVac} />
         </span>
       )}
     </div>

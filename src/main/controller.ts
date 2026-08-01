@@ -317,6 +317,11 @@ export class Controller {
     this.running = true
     this.paused = false
     this.repoll() // speed up position sampling for the highlight
+    // Where a resumed run re-enters the file. Without it the log records a Park as a
+    // stop and a start of unrelated size, and the one question anyone asks afterwards —
+    // did it come back on the line it left? — can only be answered by counting the
+    // lines of the file by hand, which is how 1 Aug 2026 had to be answered.
+    if (this.resume) log('job', `resuming at file line ${this.resume.fileLine + 1} (+${this.resume.preambleLines}-line preamble)`)
     this.emit({ type: 'active', data: this.activeFileLine() })
     this.pump()
     this.emitJob()
@@ -369,6 +374,10 @@ export class Controller {
   }
 
   stopJob(): void {
+    // …and where it left off. The job event that follows a teardown reports 0/0 (the
+    // stream is already gone by then), so this is the only record of the line a Stop —
+    // or the abort behind a Park — happened on.
+    if (this.running) log('job', `stopped at file line ${this.activeFileLine() + 1} (${this.acked}/${this.lines.length} acked)`)
     this.sendRealtime(RT.softReset)
     this.resetJob()
     this.repoll() // back to gentle idle polling

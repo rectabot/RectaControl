@@ -90,9 +90,23 @@ export function parkForAccess(): void {
   // position and alarms, and a paused machine is still moving while it decelerates
   // or runs a park retract. See atRest().
   if (!s.connected || !s.job.running || !atRest(s.status?.state, s.settled)) return
-  s.setParkLine(Math.max(0, s.activeLine))
+  const line = Math.max(0, s.activeLine)
+  s.setParkLine(line)
   s.setParkProgress(s.jobProgress) // freeze the grey "already cut" fraction
   s.setParked(true)
+  // Say it before it happens. What the console shows next is `[Reset]` followed by the
+  // board's startup banner, which reads as "the machine just restarted" — and next to a
+  // paused program with a part still clamped down, that is the wrong thing to think. It
+  // is a deliberate abort: grblHAL only accepts a jog from Idle, so getting there is the
+  // whole point of Park, and a soft reset from a standstill keeps position and offsets.
+  s.pushConsole(`* Park: stopping the program at line ${line + 1} so the head can be moved. Position and zeros are kept — Resume returns here and carries on.`)
+  // …and to disk, with the position the line was derived FROM. The line on its own
+  // cannot be checked afterwards: it is what the app believes, and the whole question
+  // about a park is whether that belief was right. The work coordinates can be read
+  // straight against the G-code line they claim to be on, by anyone, days later.
+  const p = s.status?.wpos
+  const at = p ? p.map((v, i) => `${'XYZABC'[i] ?? i}${v.toFixed(3)}`).join(' ') : 'position unknown'
+  window.recta.logWrite('ui', `park: saving line ${line + 1} — tool at work ${at} (${s.status?.state ?? '?'})`)
   window.recta.stopJob() // clean abort from Hold → Idle (position + offsets kept)
   parkOrLiftOnIdle(PARK_SAFE_Z) // once Idle, go to the saved park spot (or just lift)
 }

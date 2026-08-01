@@ -8,6 +8,13 @@ import { rotateGcode } from '../gcodeRotate'
  *  the ordinary off-path moments — the flight home from a park, the first rapid of a
  *  run — pass without a word. */
 const STALL_MS = 3000
+/** …but longer before the tool has ever been seen on the path this run. Every run starts
+ *  with the machine deliberately away from the program — travelling to the start, or home
+ *  from a park across the work — and that is seconds of legitimately held highlight, not a
+ *  fault. A resumed Hilbert job reported one every time. Past this, though, it IS the
+ *  fault worth hearing about: a run that never finds its own path has a drawing and a
+ *  machine that disagree. */
+const STALL_UNLOCKED_MS = 15000
 /** …and how often to say it again while it goes on. */
 const STALL_REPEAT_MS = 10000
 
@@ -130,7 +137,11 @@ export function Tracker(): null {
       // …but not while the machine is deliberately parked off the path. A held highlight
       // is the correct answer to a pause, and saying so every few seconds only buries the
       // times it isn't.
-      else if (!paused && now - stallSince.current > STALL_MS && now - stallLogged.current > STALL_REPEAT_MS) {
+      else if (
+        !paused &&
+        now - stallSince.current > (locked.current ? STALL_MS : STALL_UNLOCKED_MS) &&
+        now - stallLogged.current > STALL_REPEAT_MS
+      ) {
         stallLogged.current = now
         const at = livePos.map((v, i) => `${'XYZABC'[i] ?? i}${v.toFixed(3)}`).join(' ')
         // Repeated while it lasts, not once: a single sample cannot say whether the tool

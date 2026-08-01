@@ -275,6 +275,16 @@ export class Controller {
     // status polls and override nudges stay silent — they would flood.
     const name = ECHOED_REALTIME[byte]
     if (name) this.emit({ type: 'sent', data: `[${name}]` })
+    // A coolant toggle changes something the operator is looking at, and the only
+    // way the app learns it happened is the `A:` field of a status report — the
+    // button follows the machine, it never assumes. Waiting for the next scheduled
+    // poll puts up to a full idle interval (200 ms) between the press and the
+    // button lighting, which reads as a sluggish button. Ask right away instead;
+    // the short delay lets the board act on the toggle first.
+    if (byte === RT.floodToggle || byte === RT.mistToggle)
+      setTimeout(() => {
+        if (this.transport?.isOpen) this.sendRealtime(RT.status)
+      }, 40)
   }
 
   // -------------------------------------------------------------------- jobs

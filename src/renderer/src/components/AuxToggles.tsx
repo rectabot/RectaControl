@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { RT } from '@shared/grbl'
 import { useStore } from '../store'
 import { useT } from '../i18n'
@@ -39,15 +39,26 @@ export function AuxToggles(): JSX.Element {
    *  this app (an SD run begun at the panel, or a resumed job). */
   const streaming = jobRunning || sdRunning || base === 'Run' || base === 'Hold'
 
+  const [mistPending, expectMist] = usePendingToggle(mist)
+  const [floodPending, expectFlood] = usePendingToggle(flood)
+
   const toggleMist = (): void => {
-    if (streaming) return void window.recta.realtime(RT.mistToggle)
+    if (streaming) {
+      if (mistPending) return // one in flight; see usePendingToggle
+      expectMist(!mist)
+      return void window.recta.realtime(RT.mistToggle)
+    }
     if (mist) {
       window.recta.send('M9') // all coolant off
       if (flood) window.recta.send('M8') // keep flood on
     } else window.recta.send('M7')
   }
   const toggleFlood = (): void => {
-    if (streaming) return void window.recta.realtime(RT.floodToggle)
+    if (streaming) {
+      if (floodPending) return
+      expectFlood(!flood)
+      return void window.recta.realtime(RT.floodToggle)
+    }
     if (flood) {
       window.recta.send('M9')
       if (mist) window.recta.send('M7') // keep mist on
@@ -69,8 +80,8 @@ export function AuxToggles(): JSX.Element {
 
   return (
     <div className="flex gap-2">
-      {aux.mist && <Chip label="MIST" on={mist} disabled={!connected} onClick={toggleMist} />}
-      {aux.flood && <Chip label="FLOOD" on={flood} disabled={!connected} onClick={toggleFlood} />}
+      {aux.mist && <Chip label="MIST" on={mist} disabled={!connected || mistPending} onClick={toggleMist} />}
+      {aux.flood && <Chip label="FLOOD" on={flood} disabled={!connected || floodPending} onClick={toggleFlood} />}
       {/* The tooltip only appears mid-job, where it has something to say: the button
           works, but the output follows a beat later. It rides on a wrapper because
           that is where it started, back when the button was disabled here and a
@@ -82,6 +93,32 @@ export function AuxToggles(): JSX.Element {
       )}
     </div>
   )
+}
+
+/** Send one realtime coolant toggle at a time and wait for the machine to confirm it.
+ *
+ *  grblHAL drains the WHOLE coolant override queue in one pass and only then compares
+ *  the result with the current state (protocol.c), so within one pass only the parity
+ *  of a burst survives: ten quick presses flip a local flag ten times and change
+ *  nothing at all. That is not a broken button, but it looks exactly like one — on
+ *  1 Aug it cost an hour of hunting through the firmware before the operator's own log
+ *  gave it away, every burst an even number.
+ *
+ *  So the button holds until the `A:` field comes back carrying the new state, which
+ *  is fast: sending a toggle also asks for a status report straight away. The timeout
+ *  is only there so a byte lost on the wire cannot latch the button off forever. */
+function usePendingToggle(actual: boolean): [boolean, (want: boolean) => void] {
+  const [want, setWant] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (want === null) return
+    if (actual === want) {
+      setWant(null)
+      return
+    }
+    const timer = setTimeout(() => setWant(null), 1500)
+    return () => clearTimeout(timer)
+  }, [want, actual])
+  return [want !== null, setWant]
 }
 
 function Chip({

@@ -112,9 +112,12 @@ export function parkForAccess(): void {
 }
 
 /** After a Park abort, once the machine settles into Idle either:
- *   • go to the SAVED park position — full Z retract (G53 Z0) then G30 (the stored
- *     predefined position) — when one has been set AND the machine is homed (G30 is
- *     in machine coords, so it needs a valid reference); or
+ *   • go to the SAVED park position — full Z retract (G53 Z0), then a G53 rapid to the
+ *     XY the app has stored — when one has been set AND the machine is homed (those are
+ *     machine coordinates, so they need a valid reference). The board's own G30 is never
+ *     commanded: the app keeps its own copy (set from the G30 row in the Offsets table)
+ *     because not every grblHAL build keeps G28/G30 across a power cycle, and a park
+ *     that quietly became 0,0 is a head driven into the corner of the machine; or
  *   • just retract Z straight up to a safe WORK-Z clearance so the head is out of the
  *     material before a MANUAL jog (upward-only: from a Z-20 pocket that's a real
  *     ~25 mm lift; never plunges if already clear).

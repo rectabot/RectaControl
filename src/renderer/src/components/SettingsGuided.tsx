@@ -52,7 +52,7 @@ function RebootNote(): React.JSX.Element {
         if (await askConfirm({ title: t('ui.settings.rebootTitle'), body: t('ui.settings.rebootBody'), confirmLabel: t('ui.settings.rebootNow'), tone: 'warn' }))
           window.recta.send('$REBOOT')
       }}
-      className="shrink-0 self-center whitespace-nowrap rounded border border-warn/50 px-1.5 py-px text-[10px] font-medium text-warn transition enabled:hover:bg-warn enabled:hover:text-[#020617] disabled:opacity-40"
+      className="shrink-0 self-center whitespace-nowrap rounded-md border border-warn/50 px-2 py-1 text-xs font-medium text-warn transition enabled:hover:bg-warn enabled:hover:text-[#020617] disabled:opacity-40"
     >
       {t('ui.settings.resetNote')}
     </button>

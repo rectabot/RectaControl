@@ -10,10 +10,16 @@ import { rotateGcode } from '../gcodeRotate'
 const STALL_MS = 3000
 /** …and how often to say it again while it goes on. */
 const STALL_REPEAT_MS = 10000
-/** How long the highlight may stand still before the search widens to the whole path
- *  ahead (StepOpts.recover). Short — a lost cursor never finds its way back on its own —
- *  but long enough that the ordinary off-path moments never trigger it. */
+/** How long the highlight may stand still before the search reaches further ahead
+ *  (StepOpts.reachMm). Short — a lost cursor never finds its way back on its own — but
+ *  long enough that the ordinary off-path moments never trigger it. */
 const RECOVER_MS = 700
+/** mm of extra reach per second the tool has been missing — roughly twice a rapid, so a
+ *  genuine gap in reports is always covered and nothing else is. */
+const REACH_MM_S = 120
+/** …and the ceiling. Past a few seconds the machine is not travelling at all (a park, a
+ *  hold, the app blocked), and a stuck highlight beats a confidently wrong one. */
+const REACH_MAX_MM = 300
 
 /** Invisible: derives the executing G-code line AND the job progress fraction from
  *  the live tool position, by following the toolpath's ARC-LENGTH forward-only.
@@ -105,12 +111,15 @@ export function Tracker(): null {
       livePos = rotary.axis === 'X' ? [mpos[0], arc, mpos[2]] : [mpos[1], arc, mpos[2]]
     }
 
-    // Once the highlight has stood still for a moment, widen the search to the whole path
-    // ahead: either the tool is genuinely away from the program (a park), in which case
-    // nothing matches anyway, or it got past the window in one gap between reports and
-    // the narrow search will never find it again. See StepOpts.recover.
-    const stalled = stallSince.current > 0 && Date.now() - stallSince.current > RECOVER_MS
-    const next = stepCursor(model, cursor.current, livePos, { recover: stalled })
+    // Once the highlight has stood still for a moment, look further ahead — the tool may
+    // have crossed the window in one gap between reports, and the narrow search would
+    // never find it again. How much further is bounded by how long it has been missing:
+    // a machine cannot have cut more path than it had time for, and past that a match is
+    // a coincidence. Capped, because a stall that lasts (a park) is not travel at all.
+    // See StepOpts.reachMm.
+    const missing = stallSince.current > 0 ? Date.now() - stallSince.current : 0
+    const reachMm = missing > RECOVER_MS ? Math.min(REACH_MAX_MM, (missing / 1000) * REACH_MM_S) : 0
+    const next = stepCursor(model, cursor.current, livePos, { reachMm })
     if (!next) return
     if (!next.onPath) {
       // The tool is not on the path we drew, so the last line we saw it on still stands.

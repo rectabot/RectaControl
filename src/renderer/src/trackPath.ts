@@ -92,23 +92,26 @@ export interface StepOpts {
   /** only the test passes this — with the guard opened up it reproduces the rule as it
    *  was on 1 Aug 2026, which is how the test proves it catches the jump it describes */
   onPathMm?: number
-  /** Search the WHOLE path ahead instead of the short window.
+  /** How far ahead to look, in mm of path, when the cursor has fallen behind.
    *
-   *  The window is what keeps the cursor from stepping onto a spatially-near but
+   *  The 30 mm window is what keeps the cursor from stepping onto a spatially-near but
    *  path-distant pass, and it is the right rule while the cursor is keeping up. It is
-   *  the wrong rule once it has fallen behind: the cursor only moves forward and only
-   *  sees 30 mm, so a tool that got further than that in one gap between position
-   *  reports is gone for good — the highlight freezes while the machine cuts on. That
-   *  is not hypothetical. On 1 Aug 2026 arcs_mix.nc ran at F3500 (58 mm/s), where 30 mm
-   *  is half a second of travel, and the highlight stopped on line 17 and stayed there
-   *  for the rest of the program.
+   *  the wrong rule once it has fallen behind: a tool that got further than that in one
+   *  gap between position reports is gone for good — forward-only, and blind past 30 mm.
+   *  arcs_mix.nc at F3500 (58 mm/s) puts half a second of travel outside the window, and
+   *  the highlight stopped on line 17 for the rest of the program.
    *
-   *  Only the caller knows the cursor has been stuck (it is the one watching the clock),
-   *  and only a sustained stall justifies the wider search — a moment off the path is
-   *  ordinary and must not open it, or a park retract could re-match somewhere else
-   *  entirely. What protects the wide search is the same 2 mm: it accepts nothing the
-   *  tool is not standing on. */
-  recover?: boolean
+   *  The first answer to that was to search the WHOLE path ahead. That is too much, and
+   *  the machine said so within the hour: a resumed job flew home from the park spot
+   *  across a page of concentric circles, at 2 mm above the ones it was crossing, and the
+   *  cursor took the first crossing it found — line 49 became 101, then 149, and the
+   *  viewer greyed the program to the last six lines. Every one of those matches was a
+   *  true 2 mm match. They were just nowhere near where the cut was.
+   *
+   *  So the reach is bounded by how far the tool could plausibly have travelled since it
+   *  was last seen — the caller knows how long that was — rather than by nothing at all.
+   *  A crossing beyond that is a coincidence, not a cut. */
+  reachMm?: number
 }
 
 /** One tick: match the live tool position against the path from `cursor` forward.
@@ -129,6 +132,7 @@ export interface StepOpts {
 export function stepCursor(model: TrackModel, cursor: number, livePos: number[], opts: StepOpts = {}): Step | null {
   const { segs, len, start, total } = model
   const onPathMm = opts.onPathMm ?? ON_PATH_MM
+  const reach = Math.max(WINDOW_MM, opts.reachMm ?? 0)
   if (segs.length === 0) return null
   const i = Math.min(cursor, segs.length - 1)
 
@@ -145,9 +149,7 @@ export function stepCursor(model: TrackModel, cursor: number, livePos: number[],
     }
     if (k > i) {
       walked += len[k]
-      // stay within a short forward window of PATH — unless we are trying to find a
-      // tool the window has already lost, in which case the whole path ahead is fair
-      if (walked > WINDOW_MM && !opts.recover) break
+      if (walked > reach) break // stay within a short forward window of PATH
     }
   }
 

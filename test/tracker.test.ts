@@ -49,7 +49,7 @@ function program(passes: number, perPass: number): string {
   return out.join('\n')
 }
 
-type Cursor = { cursor: number; line: number; stalled: boolean }
+type Cursor = { cursor: number; line: number; missed: number }
 
 /** Fly the tool along a straight move, sampling at the 20 Hz status rate and feeding
  *  every sample to the cursor exactly as the Tracker does. `onPathMm` is only passed
@@ -61,21 +61,24 @@ function fly(
   to: number[],
   mmPerSec: number,
   onPathMm?: number,
-  hz = 20
+  hz = 20,
+  reach?: (missedTicks: number) => number
 ): void {
   const d = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2])
   const ticks = Math.max(1, Math.ceil(d / (mmPerSec / hz)))
   for (let i = 1; i <= ticks; i++) {
     const p = [0, 1, 2].map((ax) => from[ax] + (to[ax] - from[ax]) * (i / ticks))
-    // the component widens the search once the highlight has stood still (RECOVER_MS);
-    // at these rates one missed sample is already longer than that
-    const next = stepCursor(m, state.cursor, p, { onPathMm, recover: state.stalled })
+    // mirrors the component: the reach grows with how long the tool has been missing,
+    // measured in ticks here (see REACH_MM_S / REACH_MAX_MM in Tracker.tsx)
+    const missed = state.missed / hz
+    const reachMm = missed > 0.7 ? (reach ? reach(missed) : Math.min(300, missed * 120)) : 0
+    const next = stepCursor(m, state.cursor, p, { onPathMm, reachMm })
     if (next?.onPath) {
       state.cursor = next.cursor
       state.line = next.line
-      state.stalled = false
+      state.missed = 0
     } else {
-      state.stalled = true
+      state.missed++
     }
   }
 }
@@ -90,7 +93,7 @@ export function main(): number {
 
   console.log('\n1. the cursor rides the tool through the cut')
   {
-    const state: Cursor = { cursor: 0, line: -1, stalled: false }
+    const state: Cursor = { cursor: 0, line: -1, missed: 0 }
     let seen = 0
     let cut = 0
     for (let k = 0; k < 400; k++) {
@@ -112,7 +115,7 @@ export function main(): number {
     // segment underneath the nearest one, so this holds either way — the point of the
     // check is that it stays that way if the parking axis or the geometry changes.
     const seed = stepCursor(model, seedCursor(segs, stop.idx), mid)!
-    const state: Cursor = { cursor: seed.cursor, line: seed.line, stalled: false }
+    const state: Cursor = { cursor: seed.cursor, line: seed.line, missed: 0 }
     const stoppedOn = state.line
 
     fly(model, state, mid, [mid[0], mid[1], mid[2] + 5], 500 / 60)
@@ -130,13 +133,13 @@ export function main(): number {
     const k = seedCursor(segs, parkLine)
     const target = segs[k].a
 
-    const state: Cursor = { cursor: k, line: parkLine, stalled: false }
+    const state: Cursor = { cursor: k, line: parkLine, missed: 0 }
     fly(model, state, [200, 100, 20], [target[0], target[1], 5], 3000 / 60)
     eq(state.line, parkLine, 'the rapid home from the park spot leaves it on the resume line')
     fly(model, state, [target[0], target[1], 5], target, 300 / 60)
     eq(state.line, parkLine, 'and the plunge lands on the line the machine is about to cut')
 
-    const old: Cursor = { cursor: k, line: parkLine, stalled: false }
+    const old: Cursor = { cursor: k, line: parkLine, missed: 0 }
     fly(model, old, [200, 100, 20], [target[0], target[1], 5], 3000 / 60, Infinity)
     ok(
       old.line > parkLine,
@@ -155,7 +158,7 @@ export function main(): number {
     // moves forward and only ever looks 30 mm ahead, nothing brings it back: the
     // highlight stopped on line 17 and stayed there for the remaining two minutes of the
     // program, with the machine cutting and the tool marker riding the path correctly.
-    const state: Cursor = { cursor: 0, line: -1, stalled: false }
+    const state: Cursor = { cursor: 0, line: -1, missed: 0 }
     for (let k = 0; k < 60; k++) fly(model, state, segs[k].a, segs[k].b, 1500 / 60)
     const before = state.line
 
@@ -179,13 +182,42 @@ export function main(): number {
     const asegs = buildLineSegments(arcs)
     const amodel = buildTrackModel(asegs)
     const first = asegs.findIndex((s) => s.idx === 3) // the r=116 half circle
-    const state: Cursor = { cursor: 0, line: -1, stalled: false }
+    const state: Cursor = { cursor: 0, line: -1, missed: 0 }
     for (let k = 0; k < first; k++) fly(amodel, state, asegs[k].a, asegs[k].b, 3500 / 60)
     const beforeArc = state.line
 
     for (let k = first; k < asegs.length; k++) fly(amodel, state, asegs[k].a, asegs[k].b, 3500 / 60)
     ok(state.line > beforeArc, `the arc is tracked, not held at the line before it (${beforeArc + 1} → ${state.line + 1})`)
     eq(state.line, asegs[asegs.length - 1].idx, 'and ends on the last line of the program')
+  }
+
+  console.log('\n6. flying home across the rest of the program does not capture it')
+  {
+    // arcs_mix.nc, 1 Aug 2026, minutes after the reach was first opened up: concentric
+    // circles cut at Z3 with the rapids at Z5 — two millimetres of clearance, the whole
+    // page of them. A job parked on line 49 and resumed flew back from the park spot
+    // across every circle in the file, and the search, which had the whole path to choose
+    // from, took a crossing: 49 → 101 → 149, and the viewer greyed all but six lines.
+    // Each of those was a true 2 mm match. None of them was where the machine was.
+    const circles: string[] = ['G21 G90 G17']
+    for (let r = 20; r <= 116; r += 12) {
+      circles.push(`G0 X${150 + r} Y150 Z5`, `G1 Z3 F3500`, `G3 X${150 - r} Y150 I-${r} J0 F3500`, `G3 X${150 + r} Y150 I${r} J0 F3500`, `G0 Z5`)
+    }
+    const csegs = buildLineSegments(circles.join('\n'))
+    const cmodel = buildTrackModel(csegs)
+    const parkLine = 13 // partway down the page of circles
+    const k = seedCursor(csegs, parkLine)
+    const target = csegs[k].a
+
+    const state: Cursor = { cursor: k, line: parkLine, missed: 0 }
+    fly(cmodel, state, [200, 100, 20], [target[0], target[1], 5], 3500 / 60)
+    fly(cmodel, state, [target[0], target[1], 5], target, 3500 / 60)
+    eq(state.line, parkLine, 'the flight home leaves the highlight on the resume line')
+
+    // …which is exactly what an unbounded reach does not do
+    const old: Cursor = { cursor: k, line: parkLine, missed: 0 }
+    fly(cmodel, old, [200, 100, 20], [target[0], target[1], 5], 3500 / 60, undefined, 20, () => Infinity)
+    ok(old.line > parkLine, `with no bound on the reach a crossing captures it (${parkLine + 1} → ${old.line + 1})`)
   }
 
   console.log(`\n${checks - failures}/${checks} checks passed`)

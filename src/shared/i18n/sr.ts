@@ -939,6 +939,8 @@ export const sr: Record<string, string> = {
   'ui.rescue.note.pickImage': 'Ploča je u bootloader-u. Izaberi firmver za svoju mašinu u panelu koji se upravo otvorio i pogledaj crtež ispod liste pre flešovanja — on pokazuje šta ta slika pokreće. Kad se ploča vrati, pokreni oporavak ponovo da se završi.',
   'ui.rescue.note.rebooting': 'Nekoliko podešavanja postoji tek kad se ploča digne sa njima — restartujem i završavam…',
   'ui.rescue.note.restoring': 'Ploča opet odgovara — upisujem tvoja podešavanja…',
+  'ui.rescue.note.noVfdAddress':
+    'Bekap nije nosio Modbus adresu za {name} — napravljen je pre nego što se ploča digla sa izabranim drajvom, pa je adresa ostala kakva je i bila. Proveri je u Podešavanjima ako drajv nije na adresi 1.',
   'ui.rescue.note.restored': 'Gotovo. Vraćeno {count} podešavanja.',
   'ui.rescue.note.restoredPartly': 'Ploča je vraćena, ali je {count} podešavanja odbijeno: {list}. Proveri ih ručno pre nego što pustiš program.',
   'ui.rescue.note.noBackup': 'Ploča opet odgovara, ali nema sačuvane kopije njenih podešavanja. Radi na fabričkom — unesi korake po milimetru i smer hominga pre hominga ili joga.',

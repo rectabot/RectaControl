@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
+import { vfdAddressMissing } from '../settingsFile'
 
 /** Guided recovery for a board that has stopped answering commands.
  *
@@ -77,6 +78,8 @@ export function RescueWizard(): React.JSX.Element | null {
   const connected = useStore((s) => s.connected)
   const connKind = useStore((s) => s.connKind)
   const jobRunning = useStore((s) => s.job.running)
+  // which drivers this firmware registers — decides whether a missing $476 matters
+  const spindles = useStore((s) => s.info.spindles)
 
   const [state, setState] = useState<Record<StepId, StepState>>({
     wipe: 'todo',
@@ -241,10 +244,23 @@ export function RescueWizard(): React.JSX.Element | null {
     )
     setProgress(null)
     set('restore', refused.length ? 'failed' : 'ok')
+    // Nothing was refused, and something can still be missing: a setting the backup
+    // never held cannot be refused, only absent. `$476` is the one that goes that way —
+    // a dump taken before the board restarted with its VFD carries the drive's name and
+    // not its address — and this is the worst place for it to pass unmentioned. The
+    // machine has just been wiped, the operator is trusting the procedure to put it back
+    // whole, and "restored — 116 settings" is exactly the sentence that ends the matter.
+    const vfd = vfdAddressMissing(text, spindles)
     setNote(
-      refused.length
+      (refused.length
         ? t('ui.rescue.note.restoredPartly', { count: refused.length, list: refused.join(', ') })
-        : t('ui.rescue.note.restored', { count: total })
+        : t('ui.rescue.note.restored', { count: total })) +
+        (vfd === null
+          ? ''
+          : ' ' +
+            t('ui.rescue.note.noVfdAddress', {
+              name: spindles.find((s) => s.id === vfd)?.name ?? `#${vfd}`
+            }))
     )
     setFinished(true)
   }

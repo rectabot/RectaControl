@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
+import { vfdAddressMissing } from '../settingsFile'
 import { SettingsGuided } from './SettingsGuided'
 import { FirmwareFlash } from './FirmwareFlash'
 import { AppUpdate } from './AppUpdate'
@@ -30,6 +31,7 @@ export function SettingsBrowser(): JSX.Element | null {
   const connected = useStore((s) => s.connected)
   const askConfirm = useStore((s) => s.askConfirm)
   const axes = useStore((s) => s.info.axes)
+  const info = useStore((s) => s.info)
   // `$$` is only accepted when the machine is Idle (otherwise grblHAL replies
   // error:8 "only allowed when idle"). Gate the read on the current state so we
   // never spam an error just because Settings was opened mid-job.
@@ -110,8 +112,24 @@ export function SettingsBrowser(): JSX.Element | null {
 
   if (!open) return null
 
-  const exportSettings = (): void => {
+  const exportSettings = async (): Promise<void> => {
     const text = rows.map((r) => `$${r.num}=${r.value}`).join('\n') + '\n'
+    // A backup that names a VFD but carries no address for it is incomplete, and the
+    // only moment anyone can fix that is now — a restart and a second export. Said
+    // before the file is written, because afterwards it is a file that looks finished.
+    const vfd = vfdAddressMissing(text, info.spindles)
+    if (vfd !== null) {
+      const go = await askConfirm({
+        title: t('ui.settings.exportIncompleteTitle'),
+        body: t('ui.settings.exportIncomplete', {
+          name: info.spindles.find((s) => s.id === vfd)?.name ?? `#${vfd}`
+        }),
+        confirmLabel: t('ui.settings.exportAnyway'),
+        cancelLabel: t('ui.settings.exportCancel'),
+        tone: 'warn'
+      })
+      if (!go) return
+    }
     const blob = new Blob([text], { type: 'text/plain' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -129,6 +147,26 @@ export function SettingsBrowser(): JSX.Element | null {
     const f = e.target.files?.[0]
     if (!f || !connected) return
     const text = await f.text()
+
+    // The same gap, seen from the other end: a file that names a VFD and carries no
+    // address for it will restore without complaint and leave the address at whatever
+    // the board already holds. Nothing here can recover it — the number is simply not in
+    // the file — so the only useful thing is to say so before the operator walks away
+    // believing the machine has been put back exactly as it was.
+    const vfd = vfdAddressMissing(text, info.spindles)
+    if (vfd !== null) {
+      const go = await askConfirm({
+        title: t('ui.settings.importIncompleteTitle'),
+        body: t('ui.settings.importIncomplete', {
+          name: info.spindles.find((s) => s.id === vfd)?.name ?? `#${vfd}`
+        }),
+        confirmLabel: t('ui.settings.importAnyway'),
+        cancelLabel: t('ui.settings.exportCancel'),
+        tone: 'warn'
+      })
+      if (!go) return
+    }
+
     const { refused } = await applySettings(text)
     setTimeout(read, 300)
     if (!refused.length) return

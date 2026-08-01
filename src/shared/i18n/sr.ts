@@ -18,6 +18,20 @@ export const sr: Record<string, string> = {
     '{count} podešavanja još nisu mogla da se upišu: {list}. Neka podešavanja postoje tek kad se ploča digne sa onim čemu pripadaju — adresa VFD-a, na primer, traži da je Modbus vreteno izabrano pri dizanju. Restart ploče ih upisuje. Veza padne na par sekundi i sama se vrati.',
   'ui.settings.importRebootNow': 'Restartuj i završi',
   'ui.settings.importRebootLater': 'Ostavi tako',
+  'ui.settings.exportIncompleteTitle':
+    'Ovom bekapu bi nedostajala adresa VFD-a',
+  'ui.settings.exportIncomplete':
+    'Ploča kaže da joj je vreteno {name}, ali ne prijavljuje Modbus adresu ($476) — to podešavanje postoji tek kad se ploča DIGNE sa izabranim VFD-om. Ako sad snimiš, fajl imenuje drajv a ne kaže gde se dobija; kasnije vraćanje ostavi adresu na fabričkoj 1. Restartuj ploču pa izvezi ponovo i fajl je kompletan.',
+  'ui.settings.exportAnyway':
+    'Ipak snimi',
+  'ui.settings.exportCancel':
+    'Odustani',
+  'ui.settings.importIncompleteTitle':
+    'Ovaj fajl ne nosi adresu VFD-a',
+  'ui.settings.importIncomplete':
+    'Bira {name} za vreteno, ali nema Modbus adresu ($476), pa adresa na ploči ostaje kakva jeste — fajl ne može da je vrati. Ako drajv ove mašine nije na adresi 1, podesi je ručno posle (Settings → Vreteno).',
+  'ui.settings.importAnyway':
+    'Ipak vrati',
   'ui.settings.importRefusedOk': 'Razumem',
   'ui.settings.mode.basic': 'Osnovno',
   'ui.settings.mode.all': 'Sve',

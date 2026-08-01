@@ -7,7 +7,6 @@
  */
 
 import { useStore } from './store'
-
 /** Send one `$n=v` and wait for the board's verdict. Resolves null on `ok`, else
  *  the refusal (or 'no answer' when nothing comes back in time). */
 function sendSetting(line: string): Promise<string | null> {

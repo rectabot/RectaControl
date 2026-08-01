@@ -20,6 +20,20 @@ export const en: Record<string, string> = {
     '{count} setting(s) could not be written yet: {list}. Some settings only exist once the board has started with the thing they belong to — the VFD address needs a Modbus spindle chosen at startup, for example. Restarting the board writes them. The connection drops for a few seconds and comes back on its own.',
   'ui.settings.importRebootNow': 'Restart and finish',
   'ui.settings.importRebootLater': 'Leave it',
+  'ui.settings.exportIncompleteTitle':
+    'This backup would be missing the VFD address',
+  'ui.settings.exportIncomplete':
+    'The board says its spindle is {name}, but it is not reporting a Modbus address ($476) — that setting only exists once the board has STARTED with a VFD selected. Save now and the file names the drive without saying where to reach it; restoring it later leaves the address at the factory 1. Restart the board and export again and the file is complete.',
+  'ui.settings.exportAnyway':
+    'Save anyway',
+  'ui.settings.exportCancel':
+    'Cancel',
+  'ui.settings.importIncompleteTitle':
+    'This file does not carry the VFD address',
+  'ui.settings.importIncomplete':
+    'It selects {name} as the spindle but holds no Modbus address ($476), so the address on the board stays as it is — the file cannot restore it. If the drive on this machine is not at address 1, set it by hand afterwards (Settings → Spindle).',
+  'ui.settings.importAnyway':
+    'Restore anyway',
   'ui.settings.importRefusedOk': 'Understood',
   'ui.settings.mode.basic': 'Basic',
   'ui.settings.mode.all': 'All',

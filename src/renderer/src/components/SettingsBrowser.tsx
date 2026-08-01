@@ -167,10 +167,6 @@ export function SettingsBrowser(): JSX.Element | null {
       if (!go) return
     }
 
-    const { refused } = await applySettings(text)
-    setTimeout(read, 300)
-    if (!refused.length) return
-
     // "not on this board" means the setting does not exist YET: some only appear once
     // the board has started with the thing they belong to — `$476` (VFD address) needs
     // a Modbus spindle chosen at boot, `$301` the network mode. A restart writes them.
@@ -180,28 +176,35 @@ export function SettingsBrowser(): JSX.Element | null {
     // moment, and a restart nobody asked for drops the link and the homing reference
     // with it. But leaving the operator with "one setting did not go on" and no way to
     // act on it is worse than either — the remedy was knowledge nobody has.
-    const fixable = refused.some((r) => r.includes('not on this board'))
-    const ok = await askConfirm({
-      title: t('ui.settings.importRefusedTitle'),
-      body: t(fixable ? 'ui.settings.importRefusedReboot' : 'ui.settings.importRefused', {
-        count: refused.length,
-        list: refused.join(', ')
-      }),
-      confirmLabel: t(fixable ? 'ui.settings.importRebootNow' : 'ui.settings.importRefusedOk'),
-      cancelLabel: fixable ? t('ui.settings.importRebootLater') : undefined,
-      tone: 'warn'
+    //
+    // The question is answered from inside the restore, at the point it comes up. It
+    // used to be asked out here, which meant saying yes ran the whole file again from
+    // the top — 116 settings rewritten to reach the one that needed the restart.
+    let announced = false
+    const { refused } = await applySettings(text, undefined, {
+      mayReboot: async (missed) => {
+        const fixable = missed.some((r) => r.includes('not on this board'))
+        const ok = await askConfirm({
+          title: t('ui.settings.importRefusedTitle'),
+          body: t(fixable ? 'ui.settings.importRefusedReboot' : 'ui.settings.importRefused', {
+            count: missed.length,
+            list: missed.join(', ')
+          }),
+          confirmLabel: t(fixable ? 'ui.settings.importRebootNow' : 'ui.settings.importRefusedOk'),
+          cancelLabel: fixable ? t('ui.settings.importRebootLater') : undefined,
+          tone: 'warn'
+        })
+        // said our piece already, unless we are about to go and try
+        announced = !(fixable && ok)
+        return fixable && ok
+      }
     })
-    if (!fixable || !ok) return
-
-    const again = await applySettings(text, undefined, { rebootToFinish: true })
     setTimeout(read, 300)
-    if (again.refused.length)
+    // …and if the restart did not manage it either, that is news, and it is told once.
+    if (refused.length && !announced)
       void askConfirm({
         title: t('ui.settings.importRefusedTitle'),
-        body: t('ui.settings.importRefused', {
-          count: again.refused.length,
-          list: again.refused.join(', ')
-        }),
+        body: t('ui.settings.importRefused', { count: refused.length, list: refused.join(', ') }),
         confirmLabel: t('ui.settings.importRefusedOk'),
         tone: 'warn'
       })

@@ -232,8 +232,10 @@ export function RescueWizard(): React.JSX.Element | null {
       {
         // A board that has just been wiped comes up before it knows it has a VFD, so
         // the settings that belong to one do not exist yet. One restart finishes the
-        // job rather than handing the operator a list to type in by hand.
-        rebootToFinish: true,
+        // job rather than handing the operator a list to type in by hand. No question
+        // here — the machine is already in pieces and being put back together, which
+        // is not a moment to stop and ask whether it may be restarted.
+        mayReboot: () => true,
         onReboot: () => setNote(t('ui.rescue.note.rebooting'))
       }
     )

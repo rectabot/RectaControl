@@ -97,7 +97,7 @@ export async function applySettings(
   /** 0..1 across everything this routine does, not just the writing loop. */
   onProgress?: (frac: number) => void,
   opts?: {
-    /** Restart the board once, and retry whatever is still missing.
+    /** May the board be restarted, to write what could not be written without one?
      *
      *  Some settings only exist while the thing they belong to is live, and that is
      *  decided at boot. `$476` (VFD ModBus address) exists only while a VFD is the
@@ -107,8 +107,15 @@ export async function applySettings(
      *  for the rest of that session, and the restore ends one setting short with no
      *  way to finish. The same is true of `$301` and the other boot-read settings.
      *
-     *  Confirmed on hardware 30 Jul 2026: refused before a restart, `ok` after. */
-    rebootToFinish?: boolean
+     *  Confirmed on hardware 30 Jul 2026: refused before a restart, `ok` after — and
+     *  the whole way through on 1 Aug, from the refusal to the `$476=1` that stuck.
+     *
+     *  Asked HERE, at the moment the answer is known, rather than by the caller after
+     *  the fact: an import used to be run a second time from the top to reach the
+     *  restart, rewriting all 116 settings to get at the one that was missing. The
+     *  refusals are passed in so the question can name them. Returning false (or
+     *  leaving this out) reports them instead. */
+    mayReboot?: (refused: string[]) => boolean | Promise<boolean>
     onReboot?: () => void
   }
 ): Promise<ApplyResult> {
@@ -154,8 +161,9 @@ export async function applySettings(
     onProgress?.(PHASE.retry)
 
     // Anything left may simply not exist yet on a board that has not restarted with
-    // these settings in it — see rebootToFinish above. One restart, one more pass.
-    if (missed.length && opts?.rebootToFinish) {
+    // these settings in it — see mayReboot above. One restart, one more pass, and only
+    // the lines that are actually still missing go out again.
+    if (missed.length && opts?.mayReboot && (await opts.mayReboot(describe(missed)))) {
       opts.onReboot?.()
       window.recta.send('$REBOOT')
       if (await waitForBoard((f) => onProgress?.(PHASE.retry + f * (PHASE.reboot - PHASE.retry)))) {
@@ -166,10 +174,7 @@ export async function applySettings(
     }
     onProgress?.(PHASE.reboot)
 
-    return {
-      total: lines.length,
-      refused: missed.map((m) => (m.now === null ? `${m.line} → not on this board` : `${m.line} → board says ${m.now}`))
-    }
+    return { total: lines.length, refused: describe(missed) }
   } finally {
     useStore.getState().setBulkWriting(false)
     // Writing a whole dump back IS the event that ends the factory window: whatever
@@ -195,6 +200,12 @@ async function waitForBoard(onProgress?: (frac: number) => void, totalMs = 25000
     await new Promise((r) => setTimeout(r, 700))
   }
   return false
+}
+
+/** One line per disagreement, in the words the operator sees. "not on this board" is
+ *  load-bearing: it is what tells the caller a restart could still finish the job. */
+function describe(missed: { line: string; now: string | null }[]): string[] {
+  return missed.map((m) => (m.now === null ? `${m.line} → not on this board` : `${m.line} → board says ${m.now}`))
 }
 
 /** Read the board and report every line the file and the board disagree on. */

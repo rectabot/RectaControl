@@ -34,6 +34,11 @@ const ECHOED_REALTIME: Record<number, string> = {
   [RT.resume]: 'Resume' // '~' — cycle start / resume
 }
 
+/** One line written to the board and still awaiting its `ok` / `error`. `job` marks
+ *  the ones the streamed program owns — only those move progress. Manual lines ride
+ *  the same queue purely so their bytes are counted against the RX buffer. */
+type Slot = { cost: number; job: boolean }
+
 export class Controller {
   private transport: Transport | null = null
   private parser = new StatusParser()
@@ -55,7 +60,11 @@ export class Controller {
   // When set (From Line), translates a source-text index into a real file index.
   private resume: ResumeMap | null = null
   private nextIndex = 0
-  private inflight: number[] = [] // char counts of lines awaiting ok/error
+  private inflight: Slot[] = [] // lines awaiting ok/error, in the order they were written
+  // Operator lines (MDI, jog, a button, an automatic $# / $$) raised while a program
+  // streams. They wait here instead of going straight out, so the same character
+  // counting that meters the program meters them too — see sendLine().
+  private manualQueue: string[] = []
   private acked = 0
   private startTime = 0
   private running = false
@@ -224,11 +233,30 @@ export class Controller {
   }
 
   // ------------------------------------------------------------------ output
-  /** Send a single command line (MDI). Appends newline. */
+  /** Send a single command line (MDI). Appends newline.
+   *
+   *  While a program streams the line does NOT go straight to the port — it joins the
+   *  queue pump() meters. Writing past the stream broke it two ways at once:
+   *   • the bytes landed in grblHAL's RX buffer without the flow control knowing, so
+   *     the next pump could overfill it — the board drops the overflow and what it
+   *     finally parses is a mangled G-code line;
+   *   • the `ok` that came back was indistinguishable from a program line's and was
+   *     counted as one, so progress and the editor highlight ran ahead of the cut and
+   *     the job could be declared finished with lines still unsent.
+   *  Both were live for anything that sends a line during a job — the console has no
+   *  job gate at all, and $# / $$ go out on their own.
+   *
+   *  The echo is emitted here, at the press, not when the line actually leaves: the
+   *  console should show what the operator asked for the moment they ask. */
   sendLine(line: string): void {
     if (!this.transport?.isOpen) return
-    this.transport.write(line + '\n')
     this.emit({ type: 'sent', data: line })
+    if (this.running) {
+      this.manualQueue.push(line)
+      this.pump()
+      return
+    }
+    this.transport.write(line + '\n')
   }
 
   sendRealtime(byte: number): void {
@@ -260,6 +288,7 @@ export class Controller {
     this.resume = resume ?? null
     this.nextIndex = 0
     this.inflight = []
+    this.manualQueue = []
     this.acked = 0
     this.startTime = Date.now()
     this.running = true
@@ -301,6 +330,13 @@ export class Controller {
     if (this.running && this.paused) {
       this.sendRealtime(RT.resume)
       this.paused = false
+      // Restart the stream by hand. grblHAL acks a line when it PARSES it into the
+      // planner, not when it cuts it, so a hold keeps acking until the planner fills
+      // — within a moment there is nothing left in flight, and pump() refuses to send
+      // while paused. With no ok left to arrive, nothing would ever call pump again:
+      // the machine would run out the planner after the resume and then sit there
+      // with the job still showing as running.
+      this.pump()
       this.emitJob()
     }
   }
@@ -335,7 +371,17 @@ export class Controller {
     this.emitJob()
   }
 
-  private resetJob(): void {
+  /** Tear the stream down.
+   *
+   *  `flushManual` decides what happens to an operator line still queued behind the
+   *  program. On a normal finish it is owed — the console already showed it as sent,
+   *  and the only reason it is still here is that the RX buffer was full — so it goes
+   *  out now, unmetered, because there is no longer a stream to meter it against.
+   *  Every other path DROPS it, and that is the whole point: Stop, an alarm and a
+   *  controller restart have just brought the machine to a halt, and firing a stale
+   *  motion command into a machine somebody just stopped is the one outcome nobody
+   *  wants. Dropped lines are logged so the log does not disagree with the console. */
+  private resetJob(flushManual = false): void {
     this.running = false
     this.paused = false
     this.lines = []
@@ -344,18 +390,37 @@ export class Controller {
     this.nextIndex = 0
     this.inflight = []
     this.acked = 0
+    const pending = this.manualQueue
+    this.manualQueue = []
+    if (!pending.length) return
+    if (flushManual && this.transport?.isOpen) for (const l of pending) this.transport.write(l + '\n')
+    else log('job', `dropped ${pending.length} queued manual line(s) on teardown: ${pending.join(' | ')}`)
   }
 
-  /** Send as many queued lines as fit in the RX buffer (character counting). */
+  /** Send as many queued lines as fit in the RX buffer (character counting).
+   *
+   *  Manual lines go out ahead of the program: there are never many, and one is the
+   *  operator asking for something now — the program is the thing that can wait a
+   *  buffer's worth. They are also sent during a feed hold, where the program is not:
+   *  a line raised while holding belongs behind what the planner already has, and
+   *  queueing it there is what lets it run the instant the hold lifts. */
   private pump(): void {
-    if (!this.running || this.paused || !this.transport?.isOpen) return
-    while (this.nextIndex < this.lines.length) {
-      const line = this.lines[this.nextIndex]
+    if (!this.transport?.isOpen) return
+    const write = (line: string, job: boolean): boolean => {
       const cost = line.length + 1 // include the newline
-      const queued = this.inflight.reduce((a, b) => a + b, 0)
-      if (queued + cost >= RX_BUFFER && this.inflight.length > 0) break
-      this.transport.write(line + '\n')
-      this.inflight.push(cost)
+      const queued = this.inflight.reduce((a, s) => a + s.cost, 0)
+      if (queued + cost >= RX_BUFFER && this.inflight.length > 0) return false
+      this.transport!.write(line + '\n')
+      this.inflight.push({ cost, job })
+      return true
+    }
+    while (this.manualQueue.length) {
+      if (!write(this.manualQueue[0], false)) return // buffer full — retry on the next ok
+      this.manualQueue.shift()
+    }
+    if (!this.running || this.paused) return
+    while (this.nextIndex < this.lines.length) {
+      if (!write(this.lines[this.nextIndex], true)) return
       this.nextIndex++
     }
   }
@@ -411,12 +476,12 @@ export class Controller {
     let abortAfter = false
 
     // An alarm ends the job outright. The machine halted mid-motion, so its position
-    // is no longer trustworthy and the rest of the program must not be streamed.
-    // It also stops the operator's recovery from being counted as progress: while a
-    // job is running, every `ok` is read as one streamed line acked (below), so the
-    // ok's from $G / $X / $H would pump the remaining lines out. That is how an
-    // E-stopped job used to resume the moment the machine was unlocked, run to the
-    // end of the file and back — with the program's coordinates, not the operator's.
+    // is no longer trustworthy and the rest of the program must not be streamed. This
+    // is also what stops an E-stopped job from resuming the moment the operator
+    // unlocks the machine, running to the end of the file and back on the program's
+    // coordinates rather than theirs — the ok's from their $X / $H used to be read as
+    // streamed lines acked and pumped the remainder out. Those ok's now answer manual
+    // slots and move nothing (below), but the position argument stands on its own.
     if (this.running && /^ALARM:/i.test(line)) abortAfter = true
 
     // A welcome banner means the controller restarted. grblHAL drops the homed
@@ -431,16 +496,24 @@ export class Controller {
       setTimeout(() => this.sendLine('$G'), 200)
     }
 
-    // job flow control: ok / error are responses to streamed lines
-    if (this.running && (line === 'ok' || /^error:/i.test(line))) {
+    // job flow control: ok / error answer the lines we metered out — the program's
+    // and any operator line queued alongside them. They come back in the order the
+    // lines were written, so the head of `inflight` says whose this one is. Getting
+    // that attribution wrong is what used to run progress ahead of the cut.
+    if (this.inflight.length && (line === 'ok' || /^error:/i.test(line))) {
+      const slot = this.inflight.shift() as Slot
       if (/^error:/i.test(line)) {
-        // a streamed line was rejected — abort the whole job (below) instead of
-        // pushing the rest, which would just error on every remaining line. We
-        // defer the teardown until AFTER emitting the error line, so the renderer
-        // still sees the job as running and auto-opens the recovery popup.
-        abortAfter = true
+        // A rejected PROGRAM line aborts the job (below) instead of pushing the rest,
+        // which would just error on every remaining line. We defer the teardown until
+        // AFTER emitting the error line, so the renderer still sees the job as running
+        // and auto-opens the recovery popup.
+        // A rejected MANUAL line is the operator's own typo in the console — it says
+        // nothing about the program, so report it and keep cutting.
+        if (slot.job) abortAfter = true
+        else this.pump()
+      } else if (!slot.job) {
+        this.pump() // an acked manual line frees buffer space and nothing else
       } else {
-        this.inflight.shift()
         this.acked++
         // advance the editor highlight one confirmed line at a time (this is the
         // precise "where are we" signal — every line acked scrolls the highlight)
@@ -454,7 +527,7 @@ export class Controller {
             type: 'job',
             data: { running: false, paused: false, total, sent: total, elapsedMs: Date.now() - this.startTime, etaMs: 0, done: true }
           })
-          this.resetJob()
+          this.resetJob(true) // the program is done; owed operator lines go out now
           this.repoll() // back to gentle idle polling
           this.emit({ type: 'active', data: -1 })
           this.emitJob()

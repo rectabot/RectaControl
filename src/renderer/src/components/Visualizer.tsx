@@ -6,6 +6,13 @@ import { parseToolpath, usesRotary } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 import { ViewerControls } from './ViewerControls'
 
+/** The 3D background for a theme — the app's recessed surface (bg-base). Also what a
+ *  spent rapid is faded TOWARDS, so "barely visible" means the same thing on a dark
+ *  background and a light one instead of being a fixed grey that only works on one. */
+function bgColor(theme: string): number {
+  return theme === 'light' ? 0xe2e8f0 : theme === 'softlight' ? 0xdde2ea : theme === 'violet' ? 0x100c1c : 0x0a1421
+}
+
 const GRID_CELL = 10 // mm per square
 const LABEL_STEP = 100 // mm between axis dimension labels (100, 200, …)
 const DEFAULT_TRAVEL = 300 // mm fallback until $130/$131 are known
@@ -343,6 +350,10 @@ export function Visualizer(): JSX.Element {
     cumLen: Float32Array | null
     totalLen: number
     baseColors: Float32Array | null
+    /** per-segment G0 flag — a spent rapid is dimmed differently to a spent cut */
+    rapid: Uint8Array | null
+    /** the untouched dash coordinates, so a spent rapid's finer dots can be undone */
+    baseDists: Float32Array | null
     marker: THREE.ArrowHelper
     axes: THREE.AxesHelper
     stock: THREE.Group | null
@@ -451,7 +462,7 @@ export function Visualizer(): JSX.Element {
     )
     group.add(marker)
 
-    three.current = { renderer, scene, camera, controls, group, rotaryGroup, grid, line: null, cumLen: null, totalLen: 0, baseColors: null, marker, axes, stock: null, size: 100 }
+    three.current = { renderer, scene, camera, controls, group, rotaryGroup, grid, line: null, cumLen: null, totalLen: 0, baseColors: null, rapid: null, baseDists: null, marker, axes, stock: null, size: 100 }
 
     let raf = 0
     const animate = (): void => {
@@ -513,6 +524,8 @@ export function Visualizer(): JSX.Element {
     }
     t.cumLen = null
     t.baseColors = null
+    t.rapid = null
+    t.baseDists = null
     t.totalLen = 0
     if (!gcode) {
       framedGcode.current = null // reloading the same file afterwards should re-frame
@@ -561,6 +574,8 @@ export function Visualizer(): JSX.Element {
     t.cumLen = cum
     t.totalLen = total
     t.baseColors = path.colors.slice()
+    t.rapid = path.rapid
+    t.baseDists = path.lineDistances.slice()
 
     // fit camera to bounds — rotary bounds are axis-local, so shift by the work
     // origin (where the rotary group sits) to get the same frame as flat geometry
@@ -706,6 +721,7 @@ export function Visualizer(): JSX.Element {
   // update need touching — repainting all of them 20×/s (and re-uploading the whole
   // colour buffer to the GPU with it) is what made a 4000-line engraving job crawl.
   const dimmedTo = useRef(0)
+  const dimTheme = useRef(theme) // which theme the spent segments were painted for
   useEffect(() => {
     dimmedTo.current = 0 // a new program repaints from scratch
   }, [gcode])
@@ -731,34 +747,77 @@ export function Visualizer(): JSX.Element {
     }
     const boundary = lo
     const prev = dimmedTo.current
-    if (boundary === prev) return // nothing crossed → leave the GPU alone
+    // (the "nothing crossed" early-out lives below, after the theme check)
 
-    // muted slate — reads as "spent" against both dark and light backgrounds
+    // A cut the tool has been over goes muted slate — still legible, because where the
+    // cutting has got to is the thing being shown.
     const DR = 0.32,
       DG = 0.37,
       DB = 0.44
-    if (boundary > prev) {
-      for (let i = prev; i < boundary; i++) {
-        const o = i * 6
+    // A rapid does not. Travel that has already happened carries no information at all,
+    // so it fades almost into the background: the line stays there to be found if you
+    // look for it, and stops competing with the program still to come. Fading TOWARDS
+    // the background (rather than to a fixed grey) is what makes "barely visible" mean
+    // the same thing on the light themes as on the dark ones.
+    const FADE = 0.86 // how far towards the background a spent rapid goes
+    const bg = new THREE.Color(bgColor(theme))
+    const rapid = t.rapid
+    const dists = t.line.geometry.getAttribute('lineDistance') as THREE.BufferAttribute
+    const dv = dists.array as Float32Array
+    const baseDist = t.baseDists
+
+    // …and its dots get finer. A GL line is one pixel wide whatever you ask for, so the
+    // only weight a dashed line has is its dot pattern: multiplying the dash coordinate
+    // packs the same run into shorter, more frequent dots, which reads as a lighter,
+    // thinner line. Uniform per segment, so a run of rapids keeps its pattern continuous.
+    const THIN = 2
+
+    const spend = (i: number): void => {
+      const o = i * 6
+      if (rapid && rapid[i] === 1) {
+        for (let v = 0; v < 2; v++) {
+          const c = o + v * 3
+          cols[c] = base[c] + (bg.r - base[c]) * FADE
+          cols[c + 1] = base[c + 1] + (bg.g - base[c + 1]) * FADE
+          cols[c + 2] = base[c + 2] + (bg.b - base[c + 2]) * FADE
+        }
+        if (baseDist) {
+          dv[i * 2] = baseDist[i * 2] * THIN
+          dv[i * 2 + 1] = baseDist[i * 2 + 1] * THIN
+        }
+      } else {
         cols[o] = cols[o + 3] = DR
         cols[o + 1] = cols[o + 4] = DG
         cols[o + 2] = cols[o + 5] = DB
       }
-    } else {
-      // progress went backwards (new job, reset, park unwinding) → restore colour
-      for (let i = boundary; i < prev; i++) {
-        const o = i * 6
-        cols[o] = base[o]
-        cols[o + 1] = base[o + 1]
-        cols[o + 2] = base[o + 2]
-        cols[o + 3] = base[o + 3]
-        cols[o + 4] = base[o + 4]
-        cols[o + 5] = base[o + 5]
+    }
+    const restore = (i: number): void => {
+      const o = i * 6
+      for (let k = 0; k < 6; k++) cols[o + k] = base[o + k]
+      if (baseDist) {
+        dv[i * 2] = baseDist[i * 2]
+        dv[i * 2 + 1] = baseDist[i * 2 + 1]
       }
     }
+
+    // A theme switch changes what "faded" is, so everything already spent is repainted
+    // in the new one — otherwise the part cut before the switch keeps the old theme's
+    // idea of invisible, which on the opposite background is the most visible thing here.
+    if (dimTheme.current !== theme) {
+      dimTheme.current = theme
+      for (let i = 0; i < prev; i++) spend(i)
+    } else if (boundary === prev) {
+      return // nothing crossed → leave the GPU alone
+    }
+
+    if (boundary > prev) for (let i = prev; i < boundary; i++) spend(i)
+    // progress went backwards (new job, reset, park unwinding) → restore colour
+    else for (let i = boundary; i < prev; i++) restore(i)
+
     dimmedTo.current = boundary
     attr.needsUpdate = true
-  }, [jobProgress, parkProgress, gcode])
+    dists.needsUpdate = true
+  }, [jobProgress, parkProgress, gcode, theme])
 
   // --- rebuild the grid on theme / travel change ---
   useEffect(() => {
@@ -766,8 +825,7 @@ export function Visualizer(): JSX.Element {
     if (!t) return
     const light = theme === 'light' || theme === 'softlight'
     // 3D background matches the active theme's recessed surface (bg-base)
-    const clear =
-      theme === 'light' ? 0xe2e8f0 : theme === 'softlight' ? 0xdde2ea : theme === 'violet' ? 0x100c1c : 0x0a1421
+    const clear = bgColor(theme)
     t.renderer.setClearColor(clear, 1)
     t.scene.remove(t.grid)
     disposeGrid(t.grid)

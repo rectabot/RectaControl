@@ -12,6 +12,11 @@ export interface Toolpath {
    *  falls in the dash-on zone → solid), rapid moves carry a cumulative length so
    *  G0 renders as a dotted travel line. */
   lineDistances: Float32Array
+  /** 1 per SEGMENT (not per vertex): was this a G0 rapid? The viewer dims a rapid to a
+   *  different grey than a cut when the machine has been over it — one grey cannot do
+   *  both, because it lands on the same brightness as the un-run rapid blue and a
+   *  travel line then looks identical before and after the tool has run it. */
+  rapid: Uint8Array
   min: [number, number, number]
   max: [number, number, number]
   hasGeometry: boolean
@@ -65,6 +70,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
   const verts: number[] = []
   const cols: number[] = []
   const dists: number[] = [] // per-vertex line distance (dashing; see Toolpath.lineDistances)
+  const rapids: number[] = [] // per-segment G0 flag (see Toolpath.rapid)
   let dashDist = 0 // running length along rapid moves only, for a continuous dot pattern
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
@@ -79,6 +85,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
   }
   // dash distance for one segment: cut → 0/0 (solid), rapid → cumulative (dotted)
   const dashPair = (len: number, rapid: boolean): void => {
+    rapids.push(rapid ? 1 : 0) // called exactly once per segment, by both emitters
     if (rapid) {
       const d0 = dashDist
       dashDist += len
@@ -175,6 +182,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
     positions: new Float32Array(verts),
     colors: new Float32Array(cols),
     lineDistances: new Float32Array(dists),
+    rapid: Uint8Array.from(rapids),
     min,
     max,
     hasGeometry: verts.length > 0

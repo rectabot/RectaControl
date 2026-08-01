@@ -165,8 +165,23 @@ export default function App(): JSX.Element {
   // seconds is far longer than a healthy board needs, and the detector stays out of
   // the way while a program is streaming, where $I legitimately queues behind buffered
   // lines and a slow answer means nothing.
+  //
+  // …and out of the way of a machine that is SUSPENDED, which is the same silence for
+  // an entirely ordinary reason. grblHAL parks its main loop in the suspend routine
+  // for Hold, Door, Sleep, a homing cycle and a tool change: realtime bytes are still
+  // served from the receive interrupt, so `?` answers, while every line waits. A
+  // paused machine therefore looks exactly like a broken one from here.
+  //
+  // That matters because of what this offer leads to. On 1 Aug 2026 the app met a
+  // board sitting in Door, decided it was broken, and offered the guided recovery —
+  // whose first step erases the settings. Filip took it, on a machine whose only
+  // fault was that it was paused. The backup put it back, but nothing about the
+  // sequence should have started. And the parking pause makes Door an everyday
+  // state now: pause a job, close the app, reopen it, and this is what you meet.
+  const SUSPENDED = ['Hold', 'Door', 'Sleep', 'Home', 'Tool']
+  const suspended = SUSPENDED.includes(state)
   useEffect(() => {
-    if (!connected || jobRunning || sdRunning) return
+    if (!connected || jobRunning || sdRunning || suspended) return
     if (useStore.getState().info.version) {
       useStore.getState().setRescueSuggested(false)
       return
@@ -174,12 +189,29 @@ export default function App(): JSX.Element {
     const timer = setTimeout(() => {
       const s = useStore.getState()
       if (!s.connected || s.info.version || s.job.running || s.sdRunning) return
+      if (SUSPENDED.includes((s.status?.state ?? '').split(':')[0])) return
       if (!s.status) return // nothing is arriving at all — that is a plain disconnect
       s.setRescueSuggested(true)
       s.setRescueWizardOpen(true)
     }, 10000)
     return () => clearTimeout(timer)
-  }, [connected, jobRunning, sdRunning, info.version])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, jobRunning, sdRunning, suspended, info.version])
+
+  // Ask again once the machine wakes up. `$I` goes out on connect and nowhere else,
+  // so connecting to a suspended board means the one question that tells the app how
+  // many axes the machine has is asked at the only moment it cannot be answered — and
+  // the answer never comes, because nothing asks twice. The DRO then sits on its
+  // three-axis fallback for the rest of the session on a four-axis machine, which is
+  // what Filip's screen showed on 1 Aug: Door:0, and X Y Z where X Y Z A belong.
+  useEffect(() => {
+    if (!connected || suspended || info.version) return
+    const timer = setTimeout(() => {
+      const s = useStore.getState()
+      if (s.connected && !s.info.version && !s.job.running && !s.sdRunning) window.recta.send('$I')
+    }, 400) // let the machine settle out of the suspend before asking
+    return () => clearTimeout(timer)
+  }, [connected, suspended, info.version])
 
   // Pick the link back up after the board goes away on its own.
   //

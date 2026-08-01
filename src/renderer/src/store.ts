@@ -754,6 +754,8 @@ export const useStore = create<AppState>((set, get) => ({
     set((s) => {
       switch (e.type) {
         case 'connected':
+          // a new board has proved nothing yet, whatever the last one did
+          parserAliveAt = 0
           return {
             connected: true,
             connKind: e.data.kind,
@@ -949,6 +951,11 @@ export const useStore = create<AppState>((set, get) => ({
           }
         }
         case 'line': {
+          // An `ok` or an `error:` is the line parser answering — the one thing that
+          // proves it is running, and the thing the guided recovery exists to decide
+          // about. Kept out of the store on purpose: during a job these arrive twenty
+          // times a second and nothing renders off them.
+          if (e.data === 'ok' || /^error:/i.test(e.data)) parserAliveAt = Date.now()
           const msg = describe(e.data, s.lang)
           const gc = parseParserState(e.data)
           // any `$n=v` the board reports → the session-wide settings cache
@@ -1379,6 +1386,25 @@ export function hasLimitPin(pins: string | null): boolean {
 const SETTLE_MS = 250
 let lastPosKey = ''
 let lastMoveAt = 0
+
+/** When the board last answered a LINE — an `ok` or an `error:`. */
+let parserAliveAt = 0
+
+/** How long ago the line parser last proved it was running, in ms; Infinity if it
+ *  never has on this connection.
+ *
+ *  The guided recovery hangs off this. Its whole premise is a board that answers `?`
+ *  and nothing else, and it used to test that premise by asking whether one specific
+ *  command — `$I` — had come back. That is a much narrower question, and on 1 Aug it
+ *  answered wrong twice on a perfectly healthy machine: once with the board suspended
+ *  in Door, and once with the board plainly replying (the console had just printed
+ *  eight `[SPINDLE:…]` lines and two `ok`s) while the dialog on top of it offered to
+ *  erase the settings. An operator reading a screen that says "recover the board",
+ *  shows an empty toolpath and has lost an axis will believe the machine was wiped,
+ *  and act on it. That is not a UI problem. */
+export function parserSilentFor(): number {
+  return parserAliveAt ? Date.now() - parserAliveAt : Infinity
+}
 
 /** How close together two identical lines must be to count as one event. What the
  *  collapsing is for is a burst — a job that error:9's every buffered line, or an

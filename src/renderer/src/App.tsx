@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useStore } from './store'
+import { useStore, parserSilentFor } from './store'
 import { readOffsets, applyOffsetsRead } from './offsets'
 import { t as translate } from '@shared/i18n'
 import { TopBar } from './components/TopBar'
@@ -191,6 +191,11 @@ export default function App(): JSX.Element {
       if (!s.connected || s.info.version || s.job.running || s.sdRunning) return
       if (SUSPENDED.includes((s.status?.state ?? '').split(':')[0])) return
       if (!s.status) return // nothing is arriving at all — that is a plain disconnect
+      // …and above all: has the parser answered ANYTHING? A missing `$I` is not the
+      // question — the question is whether lines are being processed, and an `ok` or
+      // an `error:` settles it. Without this the dialog appeared over a console still
+      // printing replies, which is how a healthy machine gets its settings erased.
+      if (parserSilentFor() < 10000) return
       s.setRescueSuggested(true)
       s.setRescueWizardOpen(true)
     }, 10000)
@@ -198,19 +203,30 @@ export default function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, jobRunning, sdRunning, suspended, info.version])
 
-  // Ask again once the machine wakes up. `$I` goes out on connect and nowhere else,
-  // so connecting to a suspended board means the one question that tells the app how
-  // many axes the machine has is asked at the only moment it cannot be answered — and
-  // the answer never comes, because nothing asks twice. The DRO then sits on its
-  // three-axis fallback for the rest of the session on a four-axis machine, which is
-  // what Filip's screen showed on 1 Aug: Door:0, and X Y Z where X Y Z A belong.
+  // Keep asking until the machine says who it is. `$I` used to go out on connect and
+  // nowhere else, so connecting to a suspended board asked the one question that tells
+  // the app how many axes the machine has at the only moment it cannot be answered —
+  // and nothing ever asked again. The DRO then held its three-axis fallback for the
+  // rest of the session, which is what Filip's screen showed on 1 Aug: a four-axis
+  // machine drawn with three.
+  //
+  // That is worth more than a missing row. Beside an empty toolpath and a dialog
+  // headed "recover the board", a machine that has lost an axis reads as a machine
+  // that has been wiped — and an operator who believes that will act on it. So this
+  // retries rather than trying once: a single lost reply must not be able to leave
+  // the app lying about the machine for as long as it stays connected.
   useEffect(() => {
     if (!connected || suspended || info.version) return
-    const timer = setTimeout(() => {
+    const ask = (): void => {
       const s = useStore.getState()
       if (s.connected && !s.info.version && !s.job.running && !s.sdRunning) window.recta.send('$I')
-    }, 400) // let the machine settle out of the suspend before asking
-    return () => clearTimeout(timer)
+    }
+    const first = setTimeout(ask, 400) // let the machine settle out of the suspend
+    const timer = setInterval(ask, 3000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
   }, [connected, suspended, info.version])
 
   // Pick the link back up after the board goes away on its own.

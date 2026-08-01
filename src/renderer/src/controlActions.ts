@@ -54,27 +54,25 @@ export function pauseProgram(): void {
 
 /** Has a paused machine actually come to rest?
  *
- *  The base state does not say. grblHAL puts that answer in the sub-state after the
- *  colon, and it is the difference between a clean abort and an alarm:
+ *  Anything that soft-resets the controller has to know: a reset while the machine
+ *  is moving loses the position, and grblHAL answers with ALARM:3 — an unlock and a
+ *  re-home to get back from, for a button the operator was invited to press.
  *
- *    Hold:1  still decelerating        Hold:0  stopped
- *    Door:2  running the park retract  Door:4  restoring from the park
- *    Door:0 / Door:1  parked and stationary (door closed / ajar)
+ *  Two conditions, and it needs both.
  *
- *  Anything that soft-resets the controller has to wait for this: a reset while the
- *  machine is moving loses the position, and grblHAL answers with ALARM:3 — which
- *  costs the operator an unlock and a re-home to get back from.
+ *  The state says the machine is PAUSED and not, say, mid-program. The sub-state
+ *  after the colon narrows it — `Hold:1` is still decelerating, `Door:2` is running
+ *  the park retract, `Door:4` is restoring from it — so those are out.
  *
- *  Reading only the base name left that window open the whole time the head was
- *  rising, and a parking pause makes it wide: the retract runs at $57, which at
- *  100 mm/min is three seconds for 5 mm, with the fast park still to come. Press
- *  Park in there — and impatience is the normal response to a slow-moving head —
- *  and the abort landed mid-motion. Filip hit it on 1 Aug 2026.
- *
- *  No sub-state at all counts as "still moving". Every grbl reports one for these
- *  two states, so its absence means something unexpected, and the safe reading of
- *  something unexpected is not to fire a reset into it. */
-export function atRest(state: string | undefined | null): boolean {
+ *  But the sub-state alone is not enough, and this is the part worth remembering:
+ *  `Door:0` means "parked, door closed", and grblHAL reports it while the FAST park
+ *  to $58 is still running. Gating on it let the button light up mid-flight, and
+ *  Filip caught ALARM:3 on the machine within minutes — the slow leg was safe, the
+ *  fast leg was not. So the real answer comes from `settled`, which is measured from
+ *  the reported position rather than read off a state machine. Position is the one
+ *  thing that cannot be wrong about whether something moved. */
+export function atRest(state: string | undefined | null, settled: boolean): boolean {
+  if (!settled) return false
   const [base, sub] = (state ?? '').split(':')
   if (base === 'Hold') return sub === '0'
   if (base === 'Door') return sub === '0' || sub === '1'
@@ -91,7 +89,7 @@ export function parkForAccess(): void {
   // require a paused job that has STOPPED MOVING — aborting mid-motion loses the
   // position and alarms, and a paused machine is still moving while it decelerates
   // or runs a park retract. See atRest().
-  if (!s.connected || !s.job.running || !atRest(s.status?.state)) return
+  if (!s.connected || !s.job.running || !atRest(s.status?.state, s.settled)) return
   s.setParkLine(Math.max(0, s.activeLine))
   s.setParkProgress(s.jobProgress) // freeze the grey "already cut" fraction
   s.setParked(true)

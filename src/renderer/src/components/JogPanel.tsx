@@ -305,6 +305,7 @@ function ParkBtn(): JSX.Element {
   const homed = useStore((s) => s.homed)
   const parkPos = useStore((s) => s.parkPos)
   const state = useStore((s) => s.status?.state)
+  const settled = useStore((s) => s.settled)
   const base = (state ?? '').split(':')[0]
   const [holding, setHolding] = useState(false)
 
@@ -313,7 +314,7 @@ function ParkBtn(): JSX.Element {
   // instantly — it decelerates, and with a parking pause it then lifts the head,
   // seconds of motion with the button sitting there inviting a click. So this waits
   // for the sub-state to say the machine has actually come to rest; see atRest().
-  const canPark = connected && jobRunning && atRest(state)
+  const canPark = connected && jobRunning && atRest(state, settled)
   // …and while it is still settling, say so, rather than leaving a dead grey button
   // to be clicked at. The reason rides on a wrapper below: a disabled button gets no
   // mouse events, so its own title never appears.

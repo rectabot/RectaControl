@@ -360,6 +360,14 @@ interface AppState {
    *  not the acked-line count that races ahead of the cut. */
   jobProgress: number
   consoleLines: ConsoleLine[]
+  /** The reported position has held still for SETTLE_MS — the machine has stopped.
+   *
+   *  Measured, not inferred. Anything that soft-resets the controller has to know
+   *  this, because a reset while the machine moves loses the position and alarms,
+   *  and grblHAL's own sub-state does not answer it: on 1 Aug 2026 `Door:0` — parked
+   *  and stationary — was being reported while the fast park to $58 was still under
+   *  way. Position is the one thing that cannot be wrong about whether it moved. */
+  settled: boolean
   /** Last human-readable alarm/error, shown in the status bar. */
   message: string | null
   /** Active alarm/error needing operator action — drives the footer indicator +
@@ -676,6 +684,7 @@ export const useStore = create<AppState>((set, get) => ({
   lastRunMs: null,
   jobProgress: 0,
   consoleLines: [],
+  settled: false,
   message: null,
   alert: null,
   recoveryOpen: false,
@@ -791,6 +800,16 @@ export const useStore = create<AppState>((set, get) => ({
             )
           }
         case 'status': {
+          // Has the machine actually stopped? Measured from the reported position,
+          // not inferred from the state: on 1 Aug the Door sub-state read 0 ("parked,
+          // stationary") while the fast park to $58 was still running, and anything
+          // that soft-resets on that answer alarms. Position cannot lie about it.
+          const posKey = (e.data.mpos ?? e.data.wpos ?? []).join(',')
+          if (posKey !== lastPosKey) {
+            lastPosKey = posKey
+            lastMoveAt = Date.now()
+          }
+          const settled = Date.now() - lastMoveAt >= SETTLE_MS
           // auto-clear a shown error/alarm once the machine leaves the Alarm state
           const prevBase = (s.status?.state ?? '').split(':')[0]
           const newBase = e.data.state.split(':')[0]
@@ -881,6 +900,7 @@ export const useStore = create<AppState>((set, get) => ({
             get().restoreLimits()
           return {
             status: e.data,
+            ...(settled !== s.settled ? { settled } : {}),
             ...(e.data.ov ? { overrides: e.data.ov } : {}),
             // A: only present on change → cache it; absent means "unchanged"
             ...(e.data.accessory != null ? { accessory: e.data.accessory } : {}),
@@ -1351,6 +1371,14 @@ function settingsWritable(state: string | undefined): boolean {
 export function hasLimitPin(pins: string | null): boolean {
   return !!pins && /[XYZABC]/.test(pins)
 }
+
+/** How long the reported position has to hold still before the machine counts as
+ *  stopped. Two poll intervals at the 20 Hz motion rate, so a momentary pause
+ *  between two legs of a parking move — the slow pull-out handing over to the fast
+ *  park — is not mistaken for the end of it. */
+const SETTLE_MS = 250
+let lastPosKey = ''
+let lastMoveAt = 0
 
 /** How close together two identical lines must be to count as one event. What the
  *  collapsing is for is a burst — a job that error:9's every buffered line, or an

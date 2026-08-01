@@ -31,7 +31,14 @@ const RX_BUFFER = 127 // conservative serial RX buffer size for flow control
 const ECHOED_REALTIME: Record<number, string> = {
   [RT.softReset]: 'Reset',
   [RT.feedHold]: 'Hold',
-  [RT.resume]: 'Resume' // '~' — cycle start / resume
+  [RT.resume]: 'Resume', // '~' — cycle start / resume
+  // The coolant toggles are the one case where the operator presses a button and
+  // the only evidence it worked is the machine itself. On 1 Aug a press mid-program
+  // did nothing visible, and there was no way to tell whether the app had sent the
+  // byte or the board had ignored it — because a realtime byte leaves no trace. It
+  // does now, which splits that question in two.
+  [RT.floodToggle]: 'Flood',
+  [RT.mistToggle]: 'Mist'
 }
 
 /** One line written to the board and still awaiting its `ok` / `error`. `job` marks

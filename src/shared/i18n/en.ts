@@ -911,6 +911,8 @@ export const en: Record<string, string> = {
   'ui.vc.resume': '▶ Resume',
   'ui.vc.cycle': '▶ Cycle',
   'ui.vc.pause': 'Pause',
+  'ui.jog.parkSettling':
+    'Wait — the machine is still moving. Park aborts the program to free the head for jogging, and aborting mid-motion loses the position and alarms. It arms itself the moment the head stops.',
   'ui.vc.pauseParkTitle':
     'Pause — the controller retracts the tool clear of the work and stops the spindle. Resume puts it back on the cut and carries on with the program. Retract distance and park height are $56 and $58.',
   'ui.vc.pauseHoldTitle':

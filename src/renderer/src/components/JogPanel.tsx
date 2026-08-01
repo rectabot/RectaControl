@@ -3,7 +3,7 @@ import { useStore } from '../store'
 import { RT } from '@shared/grbl'
 import { fromDisplay, unitLabel } from '../units'
 import { clampContinuousJog } from '../jogLimits'
-import { parkForAccess, resumeFromPark, goToPark } from '../controlActions'
+import { parkForAccess, resumeFromPark, goToPark, atRest } from '../controlActions'
 import { useT, useLabel } from '../i18n'
 import { Panel } from './Panel'
 import { InfoTip } from './InfoTip'
@@ -304,12 +304,20 @@ function ParkBtn(): JSX.Element {
   const parked = useStore((s) => s.parked)
   const homed = useStore((s) => s.homed)
   const parkPos = useStore((s) => s.parkPos)
-  const base = useStore((s) => (s.status?.state ?? '').split(':')[0])
+  const state = useStore((s) => s.status?.state)
+  const base = (state ?? '').split(':')[0]
   const [holding, setHolding] = useState(false)
 
-  // Park from a PAUSED job (Hold/Door): a soft-reset abort while actively moving (Run)
-  // loses position → alarm, so you must Pause first, then Park.
-  const canPark = connected && jobRunning && (base === 'Hold' || base === 'Door')
+  // Park from a PAUSED job: the abort is a soft reset, and a soft reset while the
+  // machine is still moving loses the position and alarms. Pausing does not stop it
+  // instantly — it decelerates, and with a parking pause it then lifts the head,
+  // seconds of motion with the button sitting there inviting a click. So this waits
+  // for the sub-state to say the machine has actually come to rest; see atRest().
+  const canPark = connected && jobRunning && atRest(state)
+  // …and while it is still settling, say so, rather than leaving a dead grey button
+  // to be clicked at. The reason rides on a wrapper below: a disabled button gets no
+  // mouse events, so its own title never appears.
+  const settling = connected && jobRunning && !canPark && (base === 'Hold' || base === 'Door')
   // resume only when actually resumable (parked AND back at Idle) — so a lingering
   // park flag during a fresh run still reads/acts as PARK, never a stray resume
   const resumeMode = connected && parked && base === 'Idle'
@@ -379,10 +387,11 @@ function ParkBtn(): JSX.Element {
     )
 
   return (
+    <span className="flex w-12 shrink-0" title={settling ? t('ui.jog.parkSettling') : undefined}>
     <button
       disabled={!enabled}
       title={t(resumeMode ? 'ui.jog.resumeTitle' : holdMode ? 'ui.jog.goToParkTitle' : 'ui.jog.parkTitle')}
-      className={`relative flex w-12 shrink-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-md border bg-panel2 font-mono text-sm font-bold uppercase leading-tight transition disabled:opacity-40 ${accent}`}
+      className={`relative flex w-full flex-col items-center justify-center gap-1 overflow-hidden rounded-md border bg-panel2 font-mono text-sm font-bold uppercase leading-tight transition disabled:opacity-40 ${accent}`}
       {...handlers}
     >
       {holdMode && (
@@ -408,6 +417,7 @@ function ParkBtn(): JSX.Element {
         ))}
       </span>
     </button>
+    </span>
   )
 }
 

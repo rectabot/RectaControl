@@ -52,6 +52,35 @@ export function pauseProgram(): void {
   else window.recta.realtime(park ? RT.safetyDoor : RT.feedHold)
 }
 
+/** Has a paused machine actually come to rest?
+ *
+ *  The base state does not say. grblHAL puts that answer in the sub-state after the
+ *  colon, and it is the difference between a clean abort and an alarm:
+ *
+ *    Hold:1  still decelerating        Hold:0  stopped
+ *    Door:2  running the park retract  Door:4  restoring from the park
+ *    Door:0 / Door:1  parked and stationary (door closed / ajar)
+ *
+ *  Anything that soft-resets the controller has to wait for this: a reset while the
+ *  machine is moving loses the position, and grblHAL answers with ALARM:3 — which
+ *  costs the operator an unlock and a re-home to get back from.
+ *
+ *  Reading only the base name left that window open the whole time the head was
+ *  rising, and a parking pause makes it wide: the retract runs at $57, which at
+ *  100 mm/min is three seconds for 5 mm, with the fast park still to come. Press
+ *  Park in there — and impatience is the normal response to a slow-moving head —
+ *  and the abort landed mid-motion. Filip hit it on 1 Aug 2026.
+ *
+ *  No sub-state at all counts as "still moving". Every grbl reports one for these
+ *  two states, so its absence means something unexpected, and the safe reading of
+ *  something unexpected is not to fire a reset into it. */
+export function atRest(state: string | undefined | null): boolean {
+  const [base, sub] = (state ?? '').split(':')
+  if (base === 'Hold') return sub === '0'
+  if (base === 'Door') return sub === '0' || sub === '1'
+  return false
+}
+
 /** Park for access: remember the current line + machined fraction, then abort the
  *  stream to Idle so the head can be jogged FREELY (grbl only allows jog in Idle — a
  *  live feed-hold won't). Once the abort settles into Idle, lift Z clear of the work
@@ -59,9 +88,10 @@ export function pauseProgram(): void {
  *  from the parked line (lift → rapid → plunge). */
 export function parkForAccess(): void {
   const s = useStore.getState()
-  const base = (s.status?.state ?? '').split(':')[0]
-  // require a PAUSED job — aborting a live (Run) motion loses position → alarm
-  if (!s.connected || !s.job.running || (base !== 'Hold' && base !== 'Door')) return
+  // require a paused job that has STOPPED MOVING — aborting mid-motion loses the
+  // position and alarms, and a paused machine is still moving while it decelerates
+  // or runs a park retract. See atRest().
+  if (!s.connected || !s.job.running || !atRest(s.status?.state)) return
   s.setParkLine(Math.max(0, s.activeLine))
   s.setParkProgress(s.jobProgress) // freeze the grey "already cut" fraction
   s.setParked(true)

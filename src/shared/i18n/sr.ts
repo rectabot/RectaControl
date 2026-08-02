@@ -426,8 +426,8 @@ export const sr: Record<string, string> = {
   'ui.dro.tempZeroTitle': 'Dugi klik = privremena nula (G92)',
   'ui.dro.zeroTitle': 'Postavi ovu osu na nulu (WCS)',
   'ui.dro.goAxisTitle': 'Brzo ovu osu na njenu radnu nulu',
-  'ui.dro.goToTitle': 'Klikni pa ukucaj cilj, Enter da odeš tom osom tamo',
-  'ui.dro.goToLabel': 'idi',
+  'ui.dro.goToTitle': 'Dupli klik pa ukucaj cilj, Enter da odeš tom osom tamo',
+  'ui.dro.machineTitle': 'Mašinska pozicija',
   'ui.dro.zeroAll': 'Nuluj sve',
   'ui.dro.zeroAllTitle': 'Postavi sve ose na nulu (WCS)',
 

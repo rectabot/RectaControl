@@ -438,8 +438,8 @@ export const en: Record<string, string> = {
   'ui.dro.tempZeroTitle': 'Long-press = temporary zero (G92)',
   'ui.dro.zeroTitle': 'Set this axis to zero (WCS)',
   'ui.dro.goAxisTitle': 'Rapid this axis to its work zero',
-  'ui.dro.goToTitle': 'Click to type a target, Enter to move this axis there',
-  'ui.dro.goToLabel': 'go to',
+  'ui.dro.goToTitle': 'Double-click to type a target, Enter to move this axis there',
+  'ui.dro.machineTitle': 'Machine position',
   'ui.dro.zeroAll': 'Zero all',
   'ui.dro.zeroAllTitle': 'Set all axes to zero (WCS)',
 

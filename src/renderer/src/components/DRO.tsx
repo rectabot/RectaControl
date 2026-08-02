@@ -70,7 +70,7 @@ export function DRO(): JSX.Element {
     if (ready) window.recta.send(`G90 G0 ${axis}${value}`)
   }
 
-  // work position is primary; machine position shown small underneath
+  // work position is primary; machine position shown small beside the axis letter
   const pos = status?.wpos ?? null
   const other = status?.mpos ?? null
 
@@ -163,9 +163,18 @@ export function DRO(): JSX.Element {
   )
 }
 
-/** One DRO axis: a per-axis zero button (same height as the field), then the
- *  position field with the axis letter and value inside it (secondary reading
- *  tucked underneath). Click ⌀0 = zero into the active WCS (G10 L20). */
+/** One DRO axis: a per-axis zero button, the position field, and a go-to-zero button.
+ *  Both buttons carry the axis letter, so the field between them does not — it is
+ *  the machine position small on the left and the work position large on the right,
+ *  and all the width it can spare belongs to the number.
+ *
+ *  The machine position used to sit UNDER the work position, which cost the row a
+ *  second line and pushed the number people actually read off centre. It moved onto
+ *  the same line at the size it already had — it is a reference, not a reading.
+ *
+ *  That label was also the way to type a target, which is why it is not simply gone:
+ *  the number itself takes that job on a double-click. A single click is too easy to
+ *  land on by accident on a control that sends the machine somewhere. */
 function AxisCell({
   axis,
   primary,
@@ -184,7 +193,6 @@ function AxisCell({
   onGoTo: (value: number) => void
 }): JSX.Element {
   const t = useT()
-  const L = useLabel()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const btn =
@@ -208,25 +216,25 @@ function AxisCell({
         {axis}0
       </button>
       <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-base px-2 py-1">
-        {/* axis label = GO TO button: click to type a target position, Enter to move.
-            shrink-0 so the freed space always goes to the number field (keeps a few
-            px of slack, else a full-width value like -1000.000 clips its last digit
-            when the caret moves to the front and the browser nudges the scroll). */}
-        <button
-          className="flex shrink-0 items-baseline gap-1 rounded px-1 py-0.5 transition enabled:hover:bg-panel2 disabled:opacity-40"
-          disabled={!enabled}
-          onClick={startEdit}
-          title={t('ui.dro.goToTitle')}
-        >
-          <span className="font-mono text-lg font-bold text-brand">{axis}</span>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{L('ui.dro.goToLabel')}</span>
-        </button>
-        {/* fixed two-line layout so the box height never changes on edit */}
-        <div className="flex flex-1 flex-col items-end leading-none">
+        {/* The machine position, and nothing else. The axis letter was in here too,
+            which made three places saying X on one row — the ⌀0 button, the go-to
+            button, and this. The buttons that DO something keep the letter; the box
+            gives the space to the number. shrink-0 so the freed width always goes to
+            the number field (keeps a few px of slack, else a full-width value like
+            -1000.000 clips its last digit when the caret moves to the front and the
+            browser nudges the scroll). */}
+        <span className="shrink-0 px-1 font-mono text-xs tabular-nums text-slate-500" title={t('ui.dro.machineTitle')}>
+          {secondary || '—'}
+        </span>
+        {/* Exactly the height the two-line layout came to, so the row is as tall as it
+            ever was and the box does not change size on edit — the work position now
+            sits in the middle of it, level with the axis letter, instead of riding
+            above a second reading. */}
+        <div className="flex h-10 flex-1 items-center justify-end leading-none">
           {editing ? (
             <input
               autoFocus
-              className="h-[1.75rem] w-full bg-transparent p-0 text-right font-mono text-2xl font-bold leading-none tabular-nums text-brand outline-none"
+              className="w-full bg-transparent p-0 text-right font-mono text-2xl font-bold leading-none tabular-nums text-brand outline-none"
               value={draft}
               inputMode="decimal"
               onChange={(e) => setDraft(e.target.value)}
@@ -237,11 +245,14 @@ function AxisCell({
               onBlur={() => setEditing(false)}
             />
           ) : (
-            <span className="flex h-[1.75rem] items-center font-mono text-2xl font-bold tabular-nums text-slate-100">
+            <span
+              className={`select-none font-mono text-2xl font-bold tabular-nums text-slate-100 ${enabled ? 'cursor-pointer' : ''}`}
+              onDoubleClick={startEdit}
+              title={t('ui.dro.goToTitle')}
+            >
               {primary}
             </span>
           )}
-          <span className="mt-0.5 font-mono text-[10px] text-slate-500">{secondary || ' '}</span>
         </div>
       </div>
       {/* send this axis to its work zero (X/Y/Z/A) */}

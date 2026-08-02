@@ -22,10 +22,22 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { vfdAddressMissing } from '@shared/settings-file'
-import type { SpindleInfo } from '@shared/types'
+import type { BackupRow, SpindleInfo } from '@shared/types'
 import { log } from './logger'
 
-const KEEP_DATED = 30 // dated copies to retain; a change a day for a month
+/** Dated copies to retain — of DISTINCT machines, which is the number that means
+ *  something. It was 30, and 30 turned out to be 7: measured on 2 Aug 2026, the
+ *  folder held 30 dated dumps carrying 7 different contents, one of them repeated
+ *  eleven times. The duplicates came from settings that toggle with a reboot (`$476`
+ *  exists only when the board came up with a VFD), so every restart wrote another
+ *  copy of a file already on disk. None of that is history; it is the same fact
+ *  written down eleven times, in a list somebody has to choose from with their
+ *  machine erased. Five distinct states is more real history than thirty was. */
+const KEEP_DATED = 5
+/** Factory and partial dumps are kept for diagnosis — what did the board come up on
+ *  — and are never offered as a restore source, so they cost nothing but disk. They
+ *  were nevertheless unbounded, which is its own kind of bug. */
+const KEEP_ASIDE = 10
 const FLUSH_MS = 800 // quiet time after the last $n= line that ends a dump
 const MIN_LINES = 20 // a real dump is ~100 lines; ignore a stray single setting
 
@@ -51,32 +63,65 @@ export function settingsDir(): string {
  *  — was already known to us and told to the operator only AFTER the restore, when
  *  the board had been erased and the choice could no longer be changed. Knowledge in
  *  the wrong moment is no knowledge at all; it belongs where the picking happens. */
-export function listBackups(spindles: SpindleInfo[] = []): {
-  name: string
-  taken: string
-  /** how many `$n=v` lines the file holds */
-  count: number
-  /** the id of the Modbus VFD this dump names but carries no `$476` for, else null */
-  vfdMissing: number | null
-}[] {
+export function listBackups(spindles: SpindleInfo[] = []): BackupRow[] {
   try {
     const dir = settingsDir()
-    const rows = readdirSync(dir)
-      .filter((f) => f === 'latest.txt' || f.startsWith('settings_'))
+    const rows: BackupRow[] = readdirSync(dir)
+      .filter((f) => f === 'latest.txt' || f.startsWith('settings_') || f.startsWith('baseline_'))
       .map((name) => {
         const text = readBackup(name) ?? ''
         return {
           name,
+          kind: name === 'latest.txt' ? 'latest' : name.startsWith('baseline_') ? 'baseline' : 'history',
+          label: baselineLabel(name),
           taken: statSync(join(dir, name)).mtime.toISOString(),
           count: text.split(/\r?\n/).filter((l) => /^\s*\$\d+=/.test(l)).length,
           vfdMissing: vfdAddressMissing(text, spindles)
         }
       })
-    rows.sort((a, b) => (a.name === 'latest.txt' ? -1 : b.name === 'latest.txt' ? 1 : b.taken.localeCompare(a.taken)))
+    // Baselines first — they are the answer to "which one is the good one" and the
+    // reason the rest of the list can stay short — then the board's current state,
+    // then what it held before that. Within a group, newest first.
+    const rank = { baseline: 0, latest: 1, history: 2 }
+    rows.sort((a, b) => rank[a.kind] - rank[b.kind] || b.taken.localeCompare(a.taken))
     return rows
   } catch {
     return []
   }
+}
+
+/** Save a dump as a BASELINE — the one file a person has looked at and said "this is
+ *  my machine, set up correctly".
+ *
+ *  Everything else in this folder is written by the app, on its own, describing
+ *  whatever the board happened to hold at the time. That is the right way to keep a
+ *  safety net (a backup nobody has to remember to make is the only kind that exists
+ *  when it is needed) and the wrong way to answer "is my machine still the one I
+ *  tuned?" — nothing automatic can know which of thirty dumps was the good one.
+ *
+ *  Baselines are few by nature: one per real change to the machine, a handful a year.
+ *  They are never pruned. The label is the operator's own words — six months on,
+ *  "after the VFD went in" is worth more than a date, and the date is there anyway.
+ */
+export function saveBaseline(text: string, label: string): string {
+  const dir = settingsDir()
+  // The label lands in a filename, so it is stripped to something a filesystem and a
+  // human can both read. Empty is fine and common — then the date is the name.
+  const slug = label
+    .normalize('NFKD')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+  const name = `baseline_${stamp()}${slug ? `_${slug}` : ''}.txt`
+  writeFileSync(join(dir, name), text, 'utf8')
+  log('app', `settings baseline saved: ${name}`)
+  return name
+}
+
+/** The words the operator typed, recovered from the filename. */
+function baselineLabel(name: string): string {
+  const m = /^baseline_\d{4}-\d{2}-\d{2}_\d{4}_(.+)\.txt$/.exec(name)
+  return m ? m[1].replace(/-/g, ' ') : ''
 }
 
 /** Read one saved dump back. Name-only, resolved inside the backup folder — a path
@@ -88,6 +133,20 @@ export function readBackup(name: string): string | null {
   } catch {
     return null
   }
+}
+
+/** Dated automatic copies, oldest first — the names carry the date, so a plain sort
+ *  is a chronological one. */
+function datedFiles(dir: string): string[] {
+  return readdirSync(dir)
+    .filter((f) => f.startsWith('settings_'))
+    .sort()
+}
+
+/** Keep the newest `keep` of `files` (oldest first) and delete the rest. */
+function prune(dir: string, files: string[], keep: number): void {
+  for (const old of files.slice(0, Math.max(0, files.length - keep)))
+    rmSync(join(dir, old), { force: true })
 }
 
 function stamp(): string {
@@ -198,6 +257,13 @@ export class SettingsBackup {
       writeFileSync(latest, text, 'utf8')
       if (previous === text) return // nothing changed → no new dated copy
 
+      // …and the same test against everything already filed, not merely against the
+      // dump before this one. Comparing with the previous alone lets A → B → A store
+      // three files of which two are identical, and a setting that comes and goes with
+      // a reboot makes exactly that pattern all day long. A dated copy earns its place
+      // by holding a state no other copy holds.
+      if (datedFiles(dir).some((f) => readFileSync(join(dir, f), 'utf8') === text)) return
+
       // Development convenience: if the source tree has a sibling `.private`
       // folder (it is gitignored and exists only on the maintainer's machine),
       // mirror the dump there under the name the debugging notes already point
@@ -208,11 +274,11 @@ export class SettingsBackup {
       }
 
       writeFileSync(join(dir, `settings_${stamp()}.txt`), text, 'utf8')
-      const dated = readdirSync(dir)
-        .filter((f) => f.startsWith('settings_'))
-        .sort()
-      for (const old of dated.slice(0, Math.max(0, dated.length - KEEP_DATED)))
-        rmSync(join(dir, old), { force: true })
+      prune(dir, datedFiles(dir), KEEP_DATED)
+      // The diagnostic piles get a ceiling too, in the one place that runs often
+      // enough to keep them at it and rarely enough to cost nothing.
+      for (const kind of ['factory_', 'partial_'])
+        prune(dir, readdirSync(dir).filter((f) => f.startsWith(kind)).sort(), KEEP_ASIDE)
     } catch {
       // a backup is a convenience: never let a full disk or a locked file take
       // the connection down with it

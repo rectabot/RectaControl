@@ -10,6 +10,46 @@ import type { SpindleInfo } from './types'
  *  (`[SPINDLE:1|-|2|SDVE|Huanyang v1]`). The analog PWM spindle reports 0. */
 const SPINDLE_TYPE_VFD = 2
 
+/** A dump as a map of setting number → value, ignoring anything that is not `$n=v`. */
+export function parseDump(text: string): Map<number, string> {
+  const out = new Map<number, string>()
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^\s*\$(\d+)=(.*)$/.exec(line)
+    if (m) out.set(Number(m[1]), m[2].trim())
+  }
+  return out
+}
+
+/** Do two written values mean the same setting?
+ *
+ *  grblHAL prints numbers back in its own format — write `640` and it answers
+ *  `$100=640.000` — so a plain string compare reports a machine as changed every
+ *  time it is asked. Compare as numbers wherever both sides are numeric. */
+export function sameValue(a: string, b: string): boolean {
+  if (a === b) return true
+  const na = Number(a)
+  const nb = Number(b)
+  return Number.isFinite(na) && Number.isFinite(nb) && na === nb
+}
+
+/** Which setting numbers these two dumps disagree on, in order.
+ *
+ *  A setting present in one and absent from the other counts: that is not a detail,
+ *  it is the `$476` case — a spindle address that exists only once the board has
+ *  booted with a VFD selected. "Your machine differs from the baseline in $476" is
+ *  exactly the sentence that would have saved an afternoon on 1 Aug 2026. */
+export function diffDumps(a: string, b: string): number[] {
+  const ma = parseDump(a)
+  const mb = parseDump(b)
+  const out: number[] = []
+  for (const k of new Set([...ma.keys(), ...mb.keys()])) {
+    const va = ma.get(k)
+    const vb = mb.get(k)
+    if (va === undefined || vb === undefined || !sameValue(va, vb)) out.push(k)
+  }
+  return out.sort((x, y) => x - y)
+}
+
 /**
  * Does this `$$` dump name a Modbus VFD as the spindle and yet carry no address for it?
  *

@@ -10,7 +10,7 @@
  * The files are the real ones from Filip's machine on 1 Aug 2026 — including the 13:21
  * dump that has `$395=1` and no `$476`.
  */
-import { vfdAddressMissing } from '../src/shared/settings-file'
+import { diffDumps, vfdAddressMissing } from '../src/shared/settings-file'
 import type { SpindleInfo } from '../src/shared/types'
 
 let failures = 0
@@ -57,6 +57,21 @@ export function main(): number {
     eq(vfdAddressMissing(dump('$395=1', '$476=2'), SPINDLES), null, 'an address that is not the factory 1')
     eq(vfdAddressMissing('$395=1\r\n$476=1\r\n', SPINDLES), null, 'CRLF line endings')
     eq(vfdAddressMissing(dump(' $395=1 ', ' $476=1 '), SPINDLES), null, 'and leading whitespace')
+  }
+
+  console.log('\n4. what a machine has drifted from its baseline in')
+  {
+    const list = (a: string, b: string): string => diffDumps(a, b).join(',')
+    eq(list(dump('$100=640.0', '$110=3500'), dump('$100=640.0', '$110=3500')), '', 'an unchanged machine differs in nothing')
+    eq(list(dump('$110=3500'), dump('$110=4000')), '110', 'a changed value is named')
+    eq(list(dump('$20=1', '$110=3500'), dump('$20=0', '$110=4000')), '20,110', 'several, in numeric order')
+    // the whole reason this is not a string compare: the board answers in its own
+    // format, so a machine nobody has touched would otherwise read as fully changed
+    eq(list(dump('$100=640'), dump('$100=640.000')), '', '640 and 640.000 are the same setting')
+    eq(list(dump('$535='), dump('$535=')), '', 'and an empty value is not a change either')
+    // the $476 case this whole feature grew out of: present on one side only
+    eq(list(dump('$395=1'), dump('$395=1', '$476=1')), '476', 'a setting the baseline never had counts')
+    eq(list(dump('$395=1', '$476=1'), dump('$395=1')), '476', 'and so does one that has gone away')
   }
 
   console.log(`\n${checks - failures}/${checks} checks passed`)

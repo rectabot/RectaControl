@@ -174,6 +174,34 @@ export interface FlashProgress {
   total: number
 }
 
+/** One row of the saved-settings list.
+ *
+ *  Three kinds, because they answer three different questions and mixing them on one
+ *  shelf is what made the list unreadable:
+ *
+ *  - `baseline` — a person looked at this machine, said it was right, and saved it.
+ *    Few, never pruned, and the only one that can answer "is my machine still the one
+ *    I tuned?" Nothing automatic can know which dump was the good one.
+ *  - `latest` — exactly one file, whatever the board holds now. The safety net that
+ *    needs no discipline, and the safest thing to restore right after a wipe.
+ *  - `history` — earlier states, deduplicated by content and capped. For "something
+ *    changed yesterday and I want to see what".
+ *
+ *  `count` and `vfdMissing` describe what the file HOLDS, so the operator chooses by
+ *  substance rather than by timestamp — a dump that is one setting short says so while
+ *  the choice can still be changed, rather than after the board has been erased. */
+export interface BackupRow {
+  name: string
+  kind: 'baseline' | 'latest' | 'history'
+  /** the operator's own words for a baseline, '' for everything else */
+  label: string
+  taken: string
+  /** how many `$n=v` lines the file holds */
+  count: number
+  /** the id of the Modbus VFD this dump names but carries no `$476` for, else null */
+  vfdMissing: number | null
+}
+
 /** API surface exposed to the renderer via contextBridge (window.recta). */
 export interface RectaApi {
   listPorts(): Promise<SerialPortInfo[]>
@@ -203,15 +231,12 @@ export interface RectaApi {
    *  cannot answer this — realtime bytes keep replying on a board whose line parser
    *  is suspended — so this asks `$I` and waits for an ordinary line. */
   rescueProbe(timeoutMs?: number): Promise<boolean>
-  /** Saved `$$` dumps, newest first, `latest.txt` leading. Empty means there is no
-   *  way back — which the recovery has to say before it erases anything.
-   *
-   *  `count` and `vfdMissing` are what the file HOLDS, carried so the operator picks
-   *  by substance and not by timestamp — a row that is one setting short says so
-   *  while the choice can still be changed, rather than after the erase. */
-  settingsBackups(): Promise<
-    { name: string; taken: string; count: number; vfdMissing: number | null }[]
-  >
+  /** Saved `$$` dumps: baselines first, then the board's current state, then history.
+   *  Empty means there is no way back — which the recovery has to say before it
+   *  erases anything. */
+  settingsBackups(): Promise<BackupRow[]>
+  /** File the current settings as a baseline under the operator's own label. */
+  saveBaseline(text: string, label: string): Promise<string>
   readSettingsBackup(name: string): Promise<string | null>
   send(line: string): Promise<void>
   realtime(byte: number): Promise<void>

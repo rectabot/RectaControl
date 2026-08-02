@@ -8,7 +8,7 @@ import { buildReport } from './report'
 import { installUpdate, pendingUpdate, startUpdater } from './updater'
 import { listPorts, pickBoardPort } from './transport/serial'
 import { type RescueAction, sendBlind } from './rescue'
-import { readBackup } from './settingsBackup'
+import { readBackup, saveBaseline } from './settingsBackup'
 import { detectBoard, dismissDriveWindow, flashFile, listVariants, pickUf2 } from './firmware'
 import {
   fmDelete,
@@ -66,6 +66,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
 
   ipcMain.handle('settings:backups', () => controller.listSettingsBackups())
   ipcMain.handle('settings:readBackup', (_e, name: string) => readBackup(name))
+  ipcMain.handle('settings:saveBaseline', (_e, text: string, label: string) => saveBaseline(text, label))
 
   ipcMain.handle('send', (_e, line: string) => controller.sendLine(line))
 

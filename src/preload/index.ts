@@ -21,6 +21,7 @@ const api: RectaApi = {
   rescueProbe: (timeoutMs?: number) => ipcRenderer.invoke('rescue:probe', timeoutMs),
   settingsBackups: () => ipcRenderer.invoke('settings:backups'),
   readSettingsBackup: (name: string) => ipcRenderer.invoke('settings:readBackup', name),
+  saveBaseline: (text: string, label: string) => ipcRenderer.invoke('settings:saveBaseline', text, label),
   send: (line: string) => ipcRenderer.invoke('send', line),
   realtime: (byte: number) => ipcRenderer.invoke('realtime', byte),
   jog: (axis: string, distance: number, feed: number) =>

@@ -4,6 +4,7 @@ import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
 import { vfdAddressMissing } from '@shared/settings-file'
+import type { BackupRow } from '@shared/types'
 
 /** Guided recovery for a board that has stopped answering commands.
  *
@@ -94,9 +95,7 @@ export function RescueWizard(): React.JSX.Element | null {
   const advance = (frac: number): void => setProgress((p) => (p === null ? frac : Math.max(p, frac)))
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
-  const [backups, setBackups] = useState<
-    { name: string; taken: string; count: number; vfdMissing: number | null }[]
-  >([])
+  const [backups, setBackups] = useState<BackupRow[]>([])
   const [pick, setPick] = useState<string | null>(null)
   // The chosen backup's CONTENT, taken before anything is erased. Reading it later
   // is what went wrong on the first working run: the file was re-read after the
@@ -114,7 +113,13 @@ export function RescueWizard(): React.JSX.Element | null {
     cancelled.current = false
     void window.recta.settingsBackups().then((b) => {
       setBackups(b)
-      setPick(b[0]?.name ?? null)
+      // `latest.txt` and not the baseline above it, deliberately. This runs seconds
+      // after the board was erased, and the closest thing to the machine that was
+      // just lost is what it held a moment ago — a baseline can be a month old and
+      // would quietly undo everything tuned since. The baseline earns its keep
+      // earlier, in Settings, by saying the two have drifted apart before anyone
+      // ends up here. It is one row away for whoever wants it.
+      setPick(b.find((r) => r.kind === 'latest')?.name ?? b[0]?.name ?? null)
     })
     return () => {
       cancelled.current = true
@@ -356,8 +361,12 @@ export function RescueWizard(): React.JSX.Element | null {
                         rather than confessed once the board is already wiped. */}
                     {backups.map((b) => (
                       <option key={b.name} value={b.name} className="bg-panel">
-                        {b.name === 'latest.txt' ? `${t('ui.rescue.backupLatest')} · ` : ''}
-                        {new Date(b.taken).toLocaleString()}
+                        {b.kind === 'baseline'
+                          ? `★ ${t('ui.rescue.backupBaseline')} · ${b.label || new Date(b.taken).toLocaleDateString()}`
+                          : b.kind === 'latest'
+                            ? t('ui.rescue.backupLatest')
+                            : new Date(b.taken).toLocaleString()}
+                        {b.kind === 'history' ? '' : ` · ${new Date(b.taken).toLocaleString()}`}
                         {` · ${t('ui.rescue.backupCount', { count: b.count })}`}
                         {b.vfdMissing === null ? '' : ` · ⚠ ${t('ui.rescue.backupNoVfd')}`}
                       </option>

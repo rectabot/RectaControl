@@ -8,6 +8,7 @@
 
 import { useStore } from './store'
 import { RECONNECT_GIVE_UP_MS } from './reconnect'
+import { sameValue } from '@shared/settings-file'
 /** Send one `$n=v` and wait for the board's verdict. Resolves null on `ok`, else
  *  the refusal (or 'no answer' when nothing comes back in time). */
 function sendSetting(line: string): Promise<string | null> {
@@ -74,14 +75,9 @@ export interface ApplyResult {
   rebootLost?: boolean
 }
 
-/** grblHAL prints numbers back in its own format (`$100=640.000` for a written
- *  `640`), so compare as numbers where both sides are numeric. */
-function same(a: string, b: string): boolean {
-  if (a === b) return true
-  const na = Number(a)
-  const nb = Number(b)
-  return Number.isFinite(na) && Number.isFinite(nb) && na === nb
-}
+/** Comparing a written value with what the board answers is the same question the
+ *  baseline comparison asks, so there is one of it — see `sameValue`. */
+const same = sameValue
 
 /** Apply every `$n=v` line in `text`.
  *

@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
 import { vfdAddressMissing } from '@shared/settings-file'
+import { BaselineBanner } from './BaselineBanner'
 import { SettingsGuided } from './SettingsGuided'
 import { FirmwareFlash } from './FirmwareFlash'
 import { AppUpdate } from './AppUpdate'
@@ -458,6 +459,10 @@ export function SettingsBrowser(): JSX.Element | null {
         </nav>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* Above the settings, not below them: the question "is this still the
+              machine I set up?" is the one you want answered before you start
+              reading values, not after. */}
+          {isSettings && <BaselineBanner rows={rows} connected={connected} />}
           {/* the board pinout is a reference screen: it fits itself to the pane,
               so it must NOT get a scrollbar (every other pane still scrolls) */}
           <div className={`min-h-0 flex-1 ${cat === 'board' ? 'overflow-hidden' : 'overflow-y-auto'}`}>{pane}</div>

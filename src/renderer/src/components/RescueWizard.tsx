@@ -140,12 +140,21 @@ export function RescueWizard(): React.JSX.Element | null {
    *
    *  This sentence is the most consequential one the app prints: it is read by
    *  somebody whose settings have just been erased, and it is the only place that
-   *  says whether they came back whole. It lived on screen and nowhere else — closing
-   *  the dialog erased it, and an hour later, on the phone, there was no record of
-   *  what it had said. The console is written to disk, so now there is. */
+   *  says whether they came back whole. It lived on screen and nowhere else —
+   *  closing the dialog erased it, and an hour later, on the phone, there was no
+   *  record of what it had said.
+   *
+   *  Both halves are needed, which is not obvious: the console and the log file are
+   *  not the same stream. Nearly everything the terminal shows arrives there as a
+   *  controller event, and those the main process logs on their way past — but a
+   *  line the RENDERER writes with pushConsole has never touched the main process
+   *  and reaches the screen only. (The startup build banner is the proof: it is in
+   *  the terminal on every run and in no log file we have.) So the console gets it
+   *  for the operator reading now, and logWrite gets it for whoever asks later. */
   const conclude = (text: string): void => {
     setNote(text)
     pushConsole(`* ${text}`)
+    void window.recta.logWrite('ui', `rescue: ${text}`)
     setFinished(true)
   }
 

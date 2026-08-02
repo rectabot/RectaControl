@@ -1026,11 +1026,29 @@ export const useStore = create<AppState>((set, get) => ({
           // vanish after Unlock, with the machine still sitting on the switch).
           // They stay visible in the console and the footer; they just do not take
           // the stage while the alarm still stands.
+          // A refusal inside a bulk settings write is the same kind of thing: not a
+          // fault of the machine but a step of a routine that has its own verdict. A
+          // dump is written in numeric order while `$20` (soft limits) is refused
+          // until `$22` (homing) is on several lines later, so error:10 is the NORMAL
+          // path through a restore, and the second pass fixes it seconds later. Left
+          // to become the alert it put "error:10 — Soft limits need homing" and a
+          // "What do I do?" button in the status bar underneath a recovery dialog
+          // reading "Done. 115 settings written back" — seen on 2 Aug 2026, on a
+          // board whose $20 had been correct for forty seconds by then. That is the
+          // worst possible moment to be told something is wrong: the operator has
+          // just had their settings erased and is trusting the procedure to put them
+          // back. What actually failed is reported by the restore itself, read back
+          // from the board rather than inferred from replies — a better answer than
+          // this one could ever be. The line still prints in the console.
+          //
+          // Alarms are NOT included: an E-stop during a restore is real, is the
+          // operator's business immediately, and has nothing to do with the writing.
           const alarmState = (s.status?.state ?? '').split(':')[0] === 'Alarm'
           const echo =
             parsed?.kind === 'error' &&
             ((s.alert?.kind === 'alarm' && (alarmState || s.resetRequired || critical)) ||
-              (parsed.detail.code === 79 && (s.resetRequired || critical)))
+              (parsed.detail.code === 79 && (s.resetRequired || critical)) ||
+              s.bulkWriting)
           const recover =
             parsed && !echo && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
           const sameAlert =

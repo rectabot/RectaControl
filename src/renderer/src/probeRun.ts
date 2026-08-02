@@ -110,15 +110,46 @@ function probeStep(axis: Axis, dir: Dir, distance: number, feed: number): Promis
   })
 }
 
+/** Wait until the machine has actually stopped moving.
+ *
+ *  Every positioning move in this file is fire-and-forget: `rel()` and `gotoMachine()`
+ *  hand grblHAL a line and return. The board queues them and runs them in order, which
+ *  is right for motion — but it means the app is a whole planner ahead of the machine,
+ *  and ANY question asked about machine state in between is answered about the past.
+ *
+ *  That is not theory. On 2 Aug 2026 the three-axis corner set its Z zero, queued a
+ *  lift, a 22 mm move out and an 11 mm drop — all three sent inside one millisecond —
+ *  and then asked whether the probe was touching. The last status report still showed
+ *  the tool sitting on the plate from the Z latch, so the check refused a cycle that
+ *  was perfectly fine, and the X probe never went out.
+ *
+ *  The initial pause is deliberate: a status report from before the moves were even
+ *  started would otherwise read `Idle` and satisfy this instantly. */
+async function settle(maxMs = 30000): Promise<void> {
+  const start = Date.now()
+  await new Promise((r) => setTimeout(r, 400)) // longer than a poll period
+  while (Date.now() - start < maxMs) {
+    const s = useStore.getState()
+    if (!s.connected) throw new Error('connection lost')
+    const base = (s.status?.state ?? '').split(':')[0]
+    if (base === 'Alarm') throw new Error('machine alarmed')
+    if (base === 'Idle') return
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  throw new Error('machine did not stop')
+}
+
 /** Two-stage probe: search fast, back off, latch slow. Returns the latch trigger.
  *
- *  Refuses to start against a probe that is already touching. grblHAL answers that
- *  with ALARM:4 ("probe not in expected initial state"), which is correct and
- *  unreadable — and it is a latched alarm, so a mistake that costs nothing now costs
- *  a reset. The usual causes are worth naming rather than coding around: the tool is
- *  resting on the plate, or the wire is shorted, or `$6` inverts the probe input the
- *  wrong way and the board thinks it is touching all the time. */
+ *  Refuses to start against a probe that is already touching — but only once the
+ *  machine has settled, so the reading describes now rather than one planner ago.
+ *  grblHAL answers this case with ALARM:4 ("probe not in expected initial state"),
+ *  which is correct, unreadable and latched, so a harmless mistake costs a reset. The
+ *  usual causes are worth naming rather than coding around: the tool is resting on the
+ *  plate, or the wire is shorted, or `$6` inverts the probe input the wrong way and the
+ *  board believes it is touching all the time. */
 async function probeAxis(axis: Axis, dir: Dir, p: ProbeParams): Promise<Prb> {
+  await settle()
   if ((useStore.getState().status?.pins ?? '').includes('P')) throw new Error('probe already touching')
   await probeStep(axis, dir, p.probeDistance, p.searchFeed)
   rel(axis, -dir * p.latchDistance) // back off the surface

@@ -190,6 +190,29 @@ export function SettingsBrowser(): JSX.Element | null {
     if (!picked) return
     const text = picked.text
 
+    // The guided recovery has never offered these, on purpose: a factory dump
+    // describes the firmware, not this machine, and a partial one is a dump taken
+    // before the board restarted with its VFD. On 30 Jul 2026 a factory copy did get
+    // restored onto a tuned gantry — 250 steps/mm, reported as success — which is why
+    // they are filed under their own names and kept out of that list.
+    //
+    // A file dialog cannot hide them, so this says the same thing the list says by
+    // omitting them. Asked rather than refused: they are legitimately useful to
+    // somebody comparing what the board came up on against what it should hold.
+    const aside = /^(factory|partial)_/.exec(picked.name)
+    if (aside) {
+      const go = await askConfirm({
+        title: t('ui.settings.importAsideTitle'),
+        body: t(aside[1] === 'factory' ? 'ui.settings.importFactory' : 'ui.settings.importPartial', {
+          name: picked.name
+        }),
+        confirmLabel: t('ui.settings.importAnyway'),
+        cancelLabel: t('ui.settings.exportCancel'),
+        tone: 'danger'
+      })
+      if (!go) return
+    }
+
     // The same gap, seen from the other end: a file that names a VFD and carries no
     // address for it will restore without complaint and leave the address at whatever
     // the board already holds. Nothing here can recover it — the number is simply not in

@@ -982,6 +982,11 @@ export const en: Record<string, string> = {
   'ui.settings.exportName': 'Something you will recognise later, or leave it empty for the date.',
   'ui.settings.exportNamePlaceholder': 'e.g. after the VFD went in',
   'ui.settings.exportDone': 'Settings exported to {name} (Documents\\RectaControl\\settings).',
+  'ui.settings.importAsideTitle': 'That file does not describe your machine',
+  'ui.settings.importFactory':
+    '{name} is a dump the board produced on factory defaults — after a settings wipe or a firmware flash. It describes the firmware, not this machine: steps/mm, homing direction, travel and spindle are whatever the build ships with. Restoring it onto a tuned machine has happened before, and the machine reported it as a success. The guided recovery never offers these files for this reason.',
+  'ui.settings.importPartial':
+    '{name} was taken before the board had restarted with its VFD selected, so it is one setting short — the drive is named and its Modbus address is missing. Everything else in it is real. The guided recovery does not offer these files.',
   'ui.rescue.backupCount': '{count} settings',
   'ui.rescue.backupNoVfd': 'no VFD address',
   'ui.rescue.jobRunning': 'A program is running. Stop it first — this restarts the board.',

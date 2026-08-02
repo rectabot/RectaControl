@@ -955,6 +955,11 @@ export const sr: Record<string, string> = {
   'ui.settings.exportName': 'Nešto po čemu ćeš ga kasnije prepoznati, ili ostavi prazno pa ostaje datum.',
   'ui.settings.exportNamePlaceholder': 'npr. posle puštanja VFD-a',
   'ui.settings.exportDone': 'Podešavanja izvezena u {name} (Documents\\RectaControl\\settings).',
+  'ui.settings.importAsideTitle': 'Taj fajl ne opisuje tvoju mašinu',
+  'ui.settings.importFactory':
+    '{name} je dump koji je ploča dala na fabričkim vrednostima — posle brisanja podešavanja ili flešovanja. On opisuje firmver, ne ovu mašinu: koraci po milimetru, smer hominga, hod i vreteno su onakvi kakvi dolaze uz build. Vraćanje takvog fajla na naštelovanu mašinu se već desilo, i mašina je to prijavila kao uspeh. Zato ga vođeni oporavak nikad ne nudi.',
+  'ui.settings.importPartial':
+    '{name} je snimljen pre nego što se ploča digla sa izabranim VFD-om, pa mu fali jedno podešavanje — drajv je imenovan, a Modbus adresa nedostaje. Sve ostalo u njemu je ispravno. Vođeni oporavak ne nudi ove fajlove.',
   'ui.rescue.backupCount': '{count} podešavanja',
   'ui.rescue.backupNoVfd': 'bez adrese VFD-a',
   'ui.rescue.jobRunning': 'Posao je u toku. Prvo ga zaustavi — ovo restartuje ploču.',

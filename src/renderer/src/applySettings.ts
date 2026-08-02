@@ -7,6 +7,7 @@
  */
 
 import { useStore } from './store'
+import { RECONNECT_GIVE_UP_MS } from './reconnect'
 /** Send one `$n=v` and wait for the board's verdict. Resolves null on `ok`, else
  *  the refusal (or 'no answer' when nothing comes back in time). */
 function sendSetting(line: string): Promise<string | null> {
@@ -65,6 +66,12 @@ export interface ApplyResult {
   /** `$n=v` for every setting that is NOT on the board afterwards, with what the
    *  board says instead — read back, not inferred from the replies. */
   refused: string[]
+  /** The restart was agreed to and sent, and the board never came back within the
+   *  wait. Then `refused` is not a verdict — those settings were never put to a
+   *  board at all, and saying they were refused blames a machine that was not
+   *  asked. The remedy is different too: reconnect and import again, rather than
+   *  go looking for why a setting will not take. */
+  rebootLost?: boolean
 }
 
 /** grblHAL prints numbers back in its own format (`$100=640.000` for a written
@@ -163,6 +170,7 @@ export async function applySettings(
     // Anything left may simply not exist yet on a board that has not restarted with
     // these settings in it — see mayReboot above. One restart, one more pass, and only
     // the lines that are actually still missing go out again.
+    let rebootLost = false
     if (missed.length && opts?.mayReboot && (await opts.mayReboot(describe(missed)))) {
       opts.onReboot?.()
       window.recta.send('$REBOOT')
@@ -170,11 +178,11 @@ export async function applySettings(
         await quiet()
         for (const { line } of missed) await sendSetting(line)
         missed = await diff(lines)
-      }
+      } else rebootLost = true
     }
     onProgress?.(PHASE.reboot)
 
-    return { total: lines.length, refused: describe(missed) }
+    return { total: lines.length, refused: describe(missed), rebootLost }
   } finally {
     useStore.getState().setBulkWriting(false)
     // Writing a whole dump back IS the event that ends the factory window: whatever
@@ -190,8 +198,17 @@ export async function applySettings(
 
 /** Wait for the board to come back and answer a line command. The app reconnects on
  *  its own after a reboot; this only has to wait for it and then check that the
- *  parser — not merely the link — is up. */
-async function waitForBoard(onProgress?: (frac: number) => void, totalMs = 25000): Promise<boolean> {
+ *  parser — not merely the link — is up.
+ *
+ *  The ceiling is the app's own give-up point, derived rather than guessed — see
+ *  `reconnect.ts` for why the two must not be chosen separately. Waiting this long
+ *  costs nothing while the board is quick (the poll below returns the moment the
+ *  parser answers); the price is paid only when the board is truly not coming back,
+ *  which is a thing worth being sure about before saying it. */
+async function waitForBoard(
+  onProgress?: (frac: number) => void,
+  totalMs = RECONNECT_GIVE_UP_MS
+): Promise<boolean> {
   const start = Date.now()
   await new Promise((r) => setTimeout(r, 2500)) // do not probe into the reset itself
   while (Date.now() - start < totalMs) {

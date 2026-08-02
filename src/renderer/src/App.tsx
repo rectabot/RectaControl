@@ -21,6 +21,7 @@ import { useKeyboardControls } from './useKeyboardControls'
 import { useGamepadControls } from './useGamepadControls'
 import { useCloseGuard } from './useCloseGuard'
 import { useZoom } from './zoom'
+import { RECONNECT_TRIES, RECONNECT_GAP_MS } from './reconnect'
 
 export default function App(): JSX.Element {
   const apply = useStore((s) => s.apply)
@@ -265,11 +266,23 @@ export default function App(): JSX.Element {
   // TCP refuses would hand back a serial link to a machine that was on the network a
   // moment ago. `noReconnect` covers the two cases where the board is *meant* to be gone —
   // the operator disconnecting, and a flash in progress.
+  //
+  // That head start is only worth paying for when the board WAS on the network. A machine
+  // reached over USB has nothing on the other end of those five tries, and each one costs a
+  // full TCP timeout: on 2 Aug 2026 a $REBOOT during a settings import took 33 s to come
+  // back on a USB-only rig, the restore's own 25 s patience ran out first, and it reported
+  // a setting refused on a board that was perfectly healthy. So remember the link the board
+  // left on, and skip the Ethernet phase when it was the serial one.
   const prevConnected = useRef(false)
+  const lastKind = useRef<'usb' | 'ethernet' | null>(null)
   useEffect(() => {
     const wasConnected = prevConnected.current
     prevConnected.current = connected
-    if (connected || !wasConnected) return
+    if (connected) {
+      lastKind.current = useStore.getState().connKind
+      return
+    }
+    if (!wasConnected) return
     if (useStore.getState().noReconnect) return
 
     let cancelled = false
@@ -279,15 +292,16 @@ export default function App(): JSX.Element {
       const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
       const baud = Number(localStorage.getItem('conn.baud')) || 115200
       pushConsole(`* ${translate('ui.app.reconnecting', lang)}`)
-      for (let i = 0; i < 14; i++) {
-        await new Promise((r) => setTimeout(r, 1500))
+      const ethFirst = lastKind.current !== 'usb'
+      for (let i = 0; i < RECONNECT_TRIES; i++) {
+        await new Promise((r) => setTimeout(r, RECONNECT_GAP_MS))
         // bail out if the operator reconnected by hand, unplugged on purpose, or
         // started a flash while we were waiting
         if (cancelled) return
         const s = useStore.getState()
         if (s.connected || s.noReconnect) return
         try {
-          if (i < 5) {
+          if (ethFirst && i < 5) {
             await window.recta.connect({ kind: 'ethernet', host: ethHost, port: ethPort })
             return
           }

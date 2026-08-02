@@ -331,7 +331,10 @@ export default function App(): JSX.Element {
     }
     if (parkSynced.current || state !== 'Idle' || jobRunning || sdRunning) return
     parkSynced.current = true
-    void readOffsets().then(applyOffsetsRead)
+    // The visualizer asks for the same thing a fraction of a second earlier, on the
+    // same connect — close enough that nothing can have moved an offset in between,
+    // and far enough apart that sharing an in-flight read does not catch it.
+    void readOffsets({ maxAgeMs: 1500 }).then(applyOffsetsRead)
   }, [connected, state, jobRunning, sdRunning])
 
   useEffect(() => {

@@ -944,7 +944,7 @@ export function Visualizer(): JSX.Element {
     // this component takes them from — so the only thing worth owning is that they
     // happen. Asking separately put a second `$$` (116 lines) and a second `$#` (15)
     // on the wire on every connect.
-    void readOffsets()
+    void readOffsets({ maxAgeMs: 1500 })
     void readDump({ quiet: true })
   }, [connected, busy, setSuppressLog])
 

@@ -19,6 +19,7 @@ export type OffsetMap = Record<string, number[]>
 const ROW_RE = /^\[([A-Z0-9.]+):([-\d.,]+)(?::\d+)?\]$/
 
 let inFlight: Promise<OffsetMap> | null = null
+let last: { at: number; map: OffsetMap } | null = null
 
 /**
  * Read every coordinate system with `$#`. grblHAL only answers it when Idle (else
@@ -27,9 +28,20 @@ let inFlight: Promise<OffsetMap> | null = null
  *
  * Concurrent callers share one read: two overlapping `$#` bursts would interleave
  * their replies and fight over the suppress-log flag.
+ *
+ * `maxAgeMs` covers the case sharing does not: two callers close together rather than
+ * overlapping. On a connect the visualizer asks and, about 200 ms later, App asks
+ * again when the first status shows Idle — and over Ethernet `$#` answers in 10 ms,
+ * so the first read is long finished and nothing is in flight to share. Offsets do
+ * not change on their own, and nothing can have moved them inside a window this
+ * short, so the answer already in hand is the same answer. Only for housekeeping
+ * reads: an operator pressing Read in the Offsets table asks for the board's word
+ * right now, and gets it.
  */
-export function readOffsets(): Promise<OffsetMap> {
+export function readOffsets(opts?: { maxAgeMs?: number }): Promise<OffsetMap> {
   if (inFlight) return inFlight
+  const maxAge = opts?.maxAgeMs ?? 0
+  if (maxAge && last && Date.now() - last.at < maxAge) return Promise.resolve(last.map)
   inFlight = new Promise<OffsetMap>((resolve) => {
     const collected: OffsetMap = {}
     let off: (() => void) | null = null
@@ -39,6 +51,7 @@ export function readOffsets(): Promise<OffsetMap> {
       clearTimeout(timer)
       useStore.getState().quietConsole(false)
       inFlight = null
+      last = { at: Date.now(), map: collected }
       resolve(collected)
     }
     useStore.getState().quietConsole(true)

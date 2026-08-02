@@ -175,6 +175,12 @@ export class Controller {
     this.backup.clearFactory()
   }
 
+  /** See RectaApi.settingsBackups. Routed through the backup so each row can be
+   *  judged against the spindles this firmware registers. */
+  listSettingsBackups(): ReturnType<SettingsBackup['list']> {
+    return this.backup.list()
+  }
+
   /** Fire a rescue pair down the live connection. Returns false when there is none
    *  to fire it down — the caller then falls back to the blind serial path. */
   sendRescue(action: RescueAction): boolean {

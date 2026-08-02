@@ -8,7 +8,7 @@ import { buildReport } from './report'
 import { installUpdate, pendingUpdate, startUpdater } from './updater'
 import { listPorts, pickBoardPort } from './transport/serial'
 import { type RescueAction, sendBlind } from './rescue'
-import { listBackups, readBackup } from './settingsBackup'
+import { readBackup } from './settingsBackup'
 import { detectBoard, dismissDriveWindow, flashFile, listVariants, pickUf2 } from './firmware'
 import {
   fmDelete,
@@ -64,7 +64,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
 
   ipcMain.handle('rescue:probe', (_e, timeoutMs?: number) => controller.probeLine(timeoutMs))
 
-  ipcMain.handle('settings:backups', () => listBackups())
+  ipcMain.handle('settings:backups', () => controller.listSettingsBackups())
   ipcMain.handle('settings:readBackup', (_e, name: string) => readBackup(name))
 
   ipcMain.handle('send', (_e, line: string) => controller.sendLine(line))

@@ -73,6 +73,8 @@ export function RescueWizard(): React.JSX.Element | null {
   // broken. It now says what was detected only when something was.
   const suggested = useStore((s) => s.rescueSuggested)
   const setOpen = useStore((s) => s.setRescueWizardOpen)
+  const setRescueRunning = useStore((s) => s.setRescueRunning)
+  const pushConsole = useStore((s) => s.pushConsole)
   const setNoReconnect = useStore((s) => s.setNoReconnect)
   const setFirmwareOpen = useStore((s) => s.setFirmwareOpen)
   const connected = useStore((s) => s.connected)
@@ -92,7 +94,9 @@ export function RescueWizard(): React.JSX.Element | null {
   const advance = (frac: number): void => setProgress((p) => (p === null ? frac : Math.max(p, frac)))
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
-  const [backups, setBackups] = useState<{ name: string; taken: string }[]>([])
+  const [backups, setBackups] = useState<
+    { name: string; taken: string; count: number; vfdMissing: number | null }[]
+  >([])
   const [pick, setPick] = useState<string | null>(null)
   // The chosen backup's CONTENT, taken before anything is erased. Reading it later
   // is what went wrong on the first working run: the file was re-read after the
@@ -132,8 +136,22 @@ export function RescueWizard(): React.JSX.Element | null {
 
   const set = (id: StepId, s: StepState): void => setState((prev) => ({ ...prev, [id]: s }))
 
+  /** The last thing this procedure says, put where it will still be readable later.
+   *
+   *  This sentence is the most consequential one the app prints: it is read by
+   *  somebody whose settings have just been erased, and it is the only place that
+   *  says whether they came back whole. It lived on screen and nowhere else — closing
+   *  the dialog erased it, and an hour later, on the phone, there was no record of
+   *  what it had said. The console is written to disk, so now there is. */
+  const conclude = (text: string): void => {
+    setNote(text)
+    pushConsole(`* ${text}`)
+    setFinished(true)
+  }
+
   const run = async (): Promise<void> => {
     setRunning(true)
+    setRescueRunning(true)
     setFinished(false)
     // Whatever the board dumps after this describes the firmware, not the machine.
     await window.recta.markSettingsFactory()
@@ -171,8 +189,7 @@ export function RescueWizard(): React.JSX.Element | null {
       // the safeguard, and it only works if somebody looks at it.
       if (connKind !== 'usb' && !(await hasUsb())) {
         set('reflash', 'failed')
-        setNote(t('ui.rescue.note.needUsb'))
-        setFinished(true)
+        conclude(t('ui.rescue.note.needUsb'))
         return
       }
       set('reflash', 'busy')
@@ -198,15 +215,17 @@ export function RescueWizard(): React.JSX.Element | null {
         break
       }
       await window.recta.pinWindow(false)
-      setNote(t('ui.rescue.note.pickImage'))
       setFirmwareOpen(true)
-      setFinished(true) // the operator continues in the firmware panel from here
+      conclude(t('ui.rescue.note.pickImage')) // the operator continues in the firmware panel
     } catch (e) {
-      setNote(t('ui.rescue.note.error', { msg: (e as Error).message }))
-      setFinished(true)
+      conclude(t('ui.rescue.note.error', { msg: (e as Error).message }))
     } finally {
       setProgress(null)
       setRunning(false)
+      // Released last, and only here: every path out of this procedure passes
+      // through, including the throw. A flag left standing would go on swallowing
+      // the machine's own errors long after the recovery ended.
+      setRescueRunning(false)
       setNoReconnect(false)
     }
   }
@@ -215,8 +234,7 @@ export function RescueWizard(): React.JSX.Element | null {
   const restore = async (): Promise<void> => {
     if (!pick) {
       set('restore', 'failed')
-      setNote(t('ui.rescue.note.noBackup'))
-      setFinished(true)
+      conclude(t('ui.rescue.note.noBackup'))
       return
     }
     set('restore', 'busy')
@@ -224,8 +242,7 @@ export function RescueWizard(): React.JSX.Element | null {
     const text = held.current
     if (!text) {
       set('restore', 'failed')
-      setNote(t('ui.rescue.note.noBackup'))
-      setFinished(true)
+      conclude(t('ui.rescue.note.noBackup'))
       return
     }
     advance(SPAN.wipeEnd)
@@ -251,7 +268,7 @@ export function RescueWizard(): React.JSX.Element | null {
     // machine has just been wiped, the operator is trusting the procedure to put it back
     // whole, and "restored — 116 settings" is exactly the sentence that ends the matter.
     const vfd = vfdAddressMissing(text, spindles)
-    setNote(
+    conclude(
       (refused.length
         ? t('ui.rescue.note.restoredPartly', { count: refused.length, list: refused.join(', ') })
         : t('ui.rescue.note.restored', { count: total })) +
@@ -262,7 +279,6 @@ export function RescueWizard(): React.JSX.Element | null {
               name: spindles.find((s) => s.id === vfd)?.name ?? `#${vfd}`
             }))
     )
-    setFinished(true)
   }
 
   const label: Record<StepId, string> = {
@@ -321,12 +337,20 @@ export function RescueWizard(): React.JSX.Element | null {
                     onChange={(e) => setPick(e.target.value)}
                   >
                     {/* Filenames are ours, not the operator's. What they pick by is when
-                        the settings were taken, so that is what the row says — with the
-                        newest one named rather than dated twice. */}
+                        the settings were taken, so that is what the row leads with — with
+                        the newest one named rather than dated twice.
+                        …and then what is IN it. Sixty rows of bare timestamps are sixty
+                        identical rows, and the file about to be written over an erased
+                        board is not a thing to choose by guessing at the hour. The count
+                        separates a full machine from a half-read one at a glance, and the
+                        short VFD dump is marked HERE — while it can still be passed over —
+                        rather than confessed once the board is already wiped. */}
                     {backups.map((b) => (
                       <option key={b.name} value={b.name} className="bg-panel">
                         {b.name === 'latest.txt' ? `${t('ui.rescue.backupLatest')} · ` : ''}
                         {new Date(b.taken).toLocaleString()}
+                        {` · ${t('ui.rescue.backupCount', { count: b.count })}`}
+                        {b.vfdMissing === null ? '' : ` · ⚠ ${t('ui.rescue.backupNoVfd')}`}
                       </option>
                     ))}
                   </select>

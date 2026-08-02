@@ -969,6 +969,8 @@ export const en: Record<string, string> = {
   'ui.rescue.restoreFrom': 'Settings will be restored from',
   'ui.rescue.noBackupWarn': 'There is no saved copy of this machine’s settings. It can still be recovered, but it will come back on factory values — do not home or jog until the steps/mm and homing direction have been entered.',
   'ui.rescue.backupLatest': 'Most recent',
+  'ui.rescue.backupCount': '{count} settings',
+  'ui.rescue.backupNoVfd': 'no VFD address',
   'ui.rescue.jobRunning': 'A program is running. Stop it first — this restarts the board.',
   'ui.rescue.start': 'Start',
   'ui.rescue.cancel': 'Cancel',

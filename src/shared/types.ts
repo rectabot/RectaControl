@@ -204,8 +204,14 @@ export interface RectaApi {
    *  is suspended — so this asks `$I` and waits for an ordinary line. */
   rescueProbe(timeoutMs?: number): Promise<boolean>
   /** Saved `$$` dumps, newest first, `latest.txt` leading. Empty means there is no
-   *  way back — which the recovery has to say before it erases anything. */
-  settingsBackups(): Promise<{ name: string; taken: string }[]>
+   *  way back — which the recovery has to say before it erases anything.
+   *
+   *  `count` and `vfdMissing` are what the file HOLDS, carried so the operator picks
+   *  by substance and not by timestamp — a row that is one setting short says so
+   *  while the choice can still be changed, rather than after the erase. */
+  settingsBackups(): Promise<
+    { name: string; taken: string; count: number; vfdMissing: number | null }[]
+  >
   readSettingsBackup(name: string): Promise<string | null>
   send(line: string): Promise<void>
   realtime(byte: number): Promise<void>

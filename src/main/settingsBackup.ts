@@ -43,13 +43,35 @@ export function settingsDir(): string {
  *  to lose the machine's numbers, and a promise that they are safe somewhere is
  *  worth nothing next to the file name and the date they were taken. An empty list
  *  is itself the answer — it means there is no way back and the recovery has to say
- *  so before it starts, not after. */
-export function listBackups(): { name: string; taken: string }[] {
+ *  so before it starts, not after.
+ *
+ *  Each row also carries what is IN the file, because a date alone is not enough to
+ *  choose by. Sixty rows of timestamps look identical, and the one thing that
+ *  distinguishes them — how many settings, and whether the VFD address is among them
+ *  — was already known to us and told to the operator only AFTER the restore, when
+ *  the board had been erased and the choice could no longer be changed. Knowledge in
+ *  the wrong moment is no knowledge at all; it belongs where the picking happens. */
+export function listBackups(spindles: SpindleInfo[] = []): {
+  name: string
+  taken: string
+  /** how many `$n=v` lines the file holds */
+  count: number
+  /** the id of the Modbus VFD this dump names but carries no `$476` for, else null */
+  vfdMissing: number | null
+}[] {
   try {
     const dir = settingsDir()
     const rows = readdirSync(dir)
       .filter((f) => f === 'latest.txt' || f.startsWith('settings_'))
-      .map((name) => ({ name, taken: statSync(join(dir, name)).mtime.toISOString() }))
+      .map((name) => {
+        const text = readBackup(name) ?? ''
+        return {
+          name,
+          taken: statSync(join(dir, name)).mtime.toISOString(),
+          count: text.split(/\r?\n/).filter((l) => /^\s*\$\d+=/.test(l)).length,
+          vfdMissing: vfdAddressMissing(text, spindles)
+        }
+      })
     rows.sort((a, b) => (a.name === 'latest.txt' ? -1 : b.name === 'latest.txt' ? 1 : b.taken.localeCompare(a.taken)))
     return rows
   } catch {
@@ -86,6 +108,13 @@ export class SettingsBackup {
   /** The controller hands over the spindle enumeration as it learns it. */
   setSpindles(list: SpindleInfo[]): void {
     this.spindles = list
+  }
+
+  /** The saved dumps, described against what this firmware actually registers —
+   *  which is the only way to tell a complete PWM backup from a VFD one that is
+   *  missing its address. Goes through here because that knowledge lives here. */
+  list(): ReturnType<typeof listBackups> {
+    return listBackups(this.spindles)
   }
 
   /** The board has been reset to defaults — anything it dumps from here describes

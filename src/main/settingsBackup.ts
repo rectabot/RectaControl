@@ -18,9 +18,9 @@
  *  rather than one file per connect.
  */
 
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { vfdAddressMissing } from '@shared/settings-file'
 import type { BackupRow, SpindleInfo } from '@shared/types'
 import { log } from './logger'
@@ -72,22 +72,22 @@ export function listBackups(spindles: SpindleInfo[] = []): BackupRow[] {
     // comes back is what is actually on disk.
     const kept = tidy(dir)
     const rows: BackupRow[] = readdirSync(dir)
-      .filter((f) => f === 'latest.txt' || f.startsWith('settings_') || f.startsWith('baseline_'))
+      .filter((f) => f === 'latest.txt' || f.startsWith('settings_') || isExport(f))
       .map((name) => {
         const text = kept.get(name) ?? readBackup(name) ?? ''
         return {
           name,
-          kind: name === 'latest.txt' ? 'latest' : name.startsWith('baseline_') ? 'baseline' : 'history',
-          label: baselineLabel(name),
+          kind: name === 'latest.txt' ? 'latest' : isExport(name) ? 'export' : 'history',
+          label: exportLabel(name),
           taken: statSync(join(dir, name)).mtime.toISOString(),
           count: text.split(/\r?\n/).filter((l) => /^\s*\$\d+=/.test(l)).length,
           vfdMissing: vfdAddressMissing(text, spindles)
         }
       })
-    // Baselines first — they are the answer to "which one is the good one" and the
+    // Exports first — they are the answer to "which one is the good one" and the
     // reason the rest of the list can stay short — then the board's current state,
     // then what it held before that. Within a group, newest first.
-    const rank = { baseline: 0, latest: 1, history: 2 }
+    const rank = { export: 0, latest: 1, history: 2 }
     rows.sort((a, b) => rank[a.kind] - rank[b.kind] || b.taken.localeCompare(a.taken))
     return rows
   } catch {
@@ -95,20 +95,20 @@ export function listBackups(spindles: SpindleInfo[] = []): BackupRow[] {
   }
 }
 
-/** Save a dump as a BASELINE — the one file a person has looked at and said "this is
- *  my machine, set up correctly".
+/** Save a dump the operator asked to keep — what the Export button does.
  *
  *  Everything else in this folder is written by the app, on its own, describing
  *  whatever the board happened to hold at the time. That is the right way to keep a
  *  safety net (a backup nobody has to remember to make is the only kind that exists
- *  when it is needed) and the wrong way to answer "is my machine still the one I
- *  tuned?" — nothing automatic can know which of thirty dumps was the good one.
+ *  when it is needed) and the wrong way to answer "is my machine still the one I set
+ *  up?" — nothing automatic can know which of thirty dumps was the good one. Somebody
+ *  pressing Export does know: they press it when the machine is where they want it.
  *
- *  Baselines are few by nature: one per real change to the machine, a handful a year.
- *  They are never pruned. The label is the operator's own words — six months on,
- *  "after the VFD went in" is worth more than a date, and the date is there anyway.
+ *  Exports are few by nature and are never pruned. The label is the operator's own
+ *  words — six months on, "after the VFD went in" is worth more than a date, and the
+ *  date is there anyway.
  */
-export function saveBaseline(text: string, label: string): string {
+export function saveExport(text: string, label: string): string {
   const dir = settingsDir()
   // The label lands in a filename, so it is stripped to something a filesystem and a
   // human can both read. Empty is fine and common — then the date is the name.
@@ -117,16 +117,46 @@ export function saveBaseline(text: string, label: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40)
-  const name = `baseline_${stamp()}${slug ? `_${slug}` : ''}.txt`
+  const name = `export_${stamp()}${slug ? `_${slug}` : ''}.txt`
   writeFileSync(join(dir, name), text, 'utf8')
-  log('app', `settings baseline saved: ${name}`)
+  log('app', `settings exported: ${name}`)
   return name
 }
 
+/** `baseline_` was this file's name for the few hours between building the idea and
+ *  Filip pointing out that Export already meant it. Recognised so the one that exists
+ *  is not orphaned; nothing writes it any more. */
+const EXPORT_RE = /^(?:export|baseline)_(\d{4}-\d{2}-\d{2}_\d{4})(?:_(.+))?\.txt$/
+
+const isExport = (name: string): boolean => EXPORT_RE.test(name)
+
 /** The words the operator typed, recovered from the filename. */
-function baselineLabel(name: string): string {
-  const m = /^baseline_\d{4}-\d{2}-\d{2}_\d{4}_(.+)\.txt$/.exec(name)
-  return m ? m[1].replace(/-/g, ' ') : ''
+function exportLabel(name: string): string {
+  const m = EXPORT_RE.exec(name)
+  return m?.[2] ? m[2].replace(/-/g, ' ') : ''
+}
+
+/** Choose a settings file to restore from, starting IN the folder they all live in.
+ *
+ *  The import used a plain file input, which opens wherever the OS last left off —
+ *  usually Downloads, never here. Since every saved dump now lands in one place, the
+ *  picker should open standing in it: the file you want is the one under the cursor.
+ *  Anywhere else on disk is still reachable, because a file mailed by somebody else
+ *  is a real thing to import. */
+export async function pickSettingsFile(): Promise<{ name: string; text: string } | null> {
+  const res = await dialog.showOpenDialog({
+    title: 'Choose a settings file',
+    defaultPath: settingsDir(),
+    filters: [{ name: 'Settings', extensions: ['txt'] }],
+    properties: ['openFile']
+  })
+  if (res.canceled || !res.filePaths.length) return null
+  try {
+    const path = res.filePaths[0]
+    return { name: basename(path), text: readFileSync(path, 'utf8') }
+  } catch {
+    return null
+  }
 }
 
 /** Read one saved dump back. Name-only, resolved inside the backup folder — a path

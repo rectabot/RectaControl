@@ -4,7 +4,7 @@ import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
 import { readDump } from '../readDump'
 import { vfdAddressMissing } from '@shared/settings-file'
-import { BaselineBanner } from './BaselineBanner'
+import { SettingsCompare } from './SettingsCompare'
 import { SettingsGuided } from './SettingsGuided'
 import { FirmwareFlash } from './FirmwareFlash'
 import { AppUpdate } from './AppUpdate'
@@ -32,6 +32,8 @@ export function SettingsBrowser(): JSX.Element | null {
   const clearSettingsSection = useStore((s) => s.clearSettingsSection)
   const connected = useStore((s) => s.connected)
   const askConfirm = useStore((s) => s.askConfirm)
+  const askText = useStore((s) => s.askText)
+  const pushConsole = useStore((s) => s.pushConsole)
   const axes = useStore((s) => s.info.axes)
   const info = useStore((s) => s.info)
   // `$$` is only accepted when the machine is Idle (otherwise grblHAL replies
@@ -51,7 +53,6 @@ export function SettingsBrowser(): JSX.Element | null {
   // other hooks, above the `if (!open) return null` further down: a hook after an
   // early return changes the hook count between renders and React throws.
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   // honour a deep-link (e.g. the Probe window's "params in Settings" link) by
   // jumping to that category on open, then clear it so it doesn't re-fire
@@ -154,12 +155,25 @@ export function SettingsBrowser(): JSX.Element | null {
       })
       if (!go) return
     }
-    const blob = new Blob([text], { type: 'text/plain' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = 'rectabot-settings.txt'
-    a.click()
-    URL.revokeObjectURL(a.href)
+    // Into the settings folder, not the browser's download path. Everything else that
+    // saves settings already lives there, Import now opens standing in it, and the
+    // guided recovery restores from it — a copy in Downloads was a fourth place to
+    // look for the same file. There used to be a second button for this ("save as
+    // baseline"); Filip pointed out that Export already meant it, and he was right —
+    // two buttons that both mean "keep my settings" is one button and a puzzle.
+    // First time round it says what the file is FOR, because on a new machine with a
+    // new app the folder is empty and nothing has explained why anyone would press
+    // this. After that it is just a name box, and mostly you press Enter.
+    const first = !(await window.recta.settingsBackups()).some((r) => r.kind === 'export')
+    const label = await askText({
+      title: t(first ? 'ui.settings.exportFirstTitle' : 'ui.settings.exportNameTitle'),
+      body: t(first ? 'ui.settings.exportFirst' : 'ui.settings.exportName'),
+      placeholder: t('ui.settings.exportNamePlaceholder'),
+      confirmLabel: t('ui.settings.export')
+    })
+    if (label === null) return // cancelled; '' is a real answer (use the date)
+    const name = await window.recta.saveExport(text, label)
+    pushConsole(`* ${t('ui.settings.exportDone', { name })}`)
   }
 
   /** Send one `$n=v` and wait for the controller's verdict. Returns null when it
@@ -167,10 +181,14 @@ export function SettingsBrowser(): JSX.Element | null {
   /** Restore a saved `$$` dump. The applying itself lives in applySettings.ts, so
    *  the guided recovery finishes with exactly the same code path — including the
    *  retry pass that keeps a refused `$20` from silently leaving soft limits off. */
-  const importSettings = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const f = e.target.files?.[0]
-    if (!f || !connected) return
-    const text = await f.text()
+  const importSettings = async (): Promise<void> => {
+    if (!connected) return
+    // Opens standing in the settings folder, where every saved dump now is — the file
+    // you want is under the cursor rather than several folders away. A plain file
+    // input could not do that: it opens wherever the OS last left off.
+    const picked = await window.recta.pickSettingsFile()
+    if (!picked) return
+    const text = picked.text
 
     // The same gap, seen from the other end: a file that names a VFD and carries no
     // address for it will restore without complaint and leave the address at whatever
@@ -414,11 +432,10 @@ export function SettingsBrowser(): JSX.Element | null {
                 <button
                   className="btn w-[95px] shrink-0 px-0 py-1.5 text-sm"
                   disabled={!connected}
-                  onClick={() => fileRef.current?.click()}
+                  onClick={() => void importSettings()}
                 >
                   {t('ui.settings.import')}
                 </button>
-                <input ref={fileRef} type="file" accept=".txt,.nc" className="hidden" onChange={importSettings} />
               </>
             )}
             <LanguageSelect className="min-w-0 flex-1" />
@@ -461,7 +478,7 @@ export function SettingsBrowser(): JSX.Element | null {
           {/* Above the settings, not below them: the question "is this still the
               machine I set up?" is the one you want answered before you start
               reading values, not after. */}
-          {isSettings && <BaselineBanner rows={rows} connected={connected} />}
+          {isSettings && <SettingsCompare rows={rows} connected={connected} />}
           {/* the board pinout is a reference screen: it fits itself to the pane,
               so it must NOT get a scrollbar (every other pane still scrolls) */}
           <div className={`min-h-0 flex-1 ${cat === 'board' ? 'overflow-hidden' : 'overflow-y-auto'}`}>{pane}</div>

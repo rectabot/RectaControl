@@ -76,7 +76,7 @@ export interface ApplyResult {
 }
 
 /** Comparing a written value with what the board answers is the same question the
- *  baseline comparison asks, so there is one of it — see `sameValue`. */
+ *  export comparison asks, so there is one of it — see `sameValue`. */
 const same = sameValue
 
 /** Apply every `$n=v` line in `text`.

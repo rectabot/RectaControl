@@ -321,14 +321,18 @@ export interface ConfirmOpts {
   body: string
   confirmLabel: string
   cancelLabel?: string
-  /** Colour of the confirm button — danger (destructive) or warn. Default danger. */
-  tone?: 'danger' | 'warn'
+  /** Colour of the confirm button — danger (destructive) or warn. Default danger.
+   *  `ask` is neither: a question that destroys nothing should not be dressed as a
+   *  warning, or the warnings stop meaning anything. */
+  tone?: 'danger' | 'warn' | 'ask'
+  /** Show a single-line text field and hand back what was typed — see askText. */
+  prompt?: { placeholder?: string }
 }
 
 /** The Promise resolver for the open confirm dialog, kept out of the store so
  *  resolving doesn't force an extra render. `askConfirm` sets it; the dialog's
  *  buttons call `resolveConfirm`. */
-let confirmResolve: ((ok: boolean) => void) | null = null
+let confirmResolve: ((r: { ok: boolean; text: string }) => void) | null = null
 /** How many housekeeping reads currently want the console quiet — see quietConsole. */
 let quietDepth = 0
 
@@ -687,8 +691,11 @@ interface AppState {
   setUpdate: (u: UpdateReady | null) => void
   /** Show a confirmation dialog and resolve true (confirmed) / false (cancelled). */
   askConfirm: (opts: ConfirmOpts) => Promise<boolean>
+  /** Same dialog with a text field: resolves what was typed, or null if cancelled.
+   *  An empty string is an answer, not a cancellation. */
+  askText: (opts: Omit<ConfirmOpts, 'prompt'> & { placeholder?: string }) => Promise<string | null>
   /** Resolve the open confirm dialog (wired to its buttons). */
-  resolveConfirm: (ok: boolean) => void
+  resolveConfirm: (ok: boolean, text?: string) => void
   setActiveLine: (n: number) => void
   setJobProgress: (v: number) => void
   setResumeLine: (n: number) => void
@@ -1384,15 +1391,23 @@ export const useStore = create<AppState>((set, get) => ({
   askConfirm: (opts) =>
     new Promise<boolean>((resolve) => {
       // if one is already open, cancel it first so its promise never dangles
-      confirmResolve?.(false)
-      confirmResolve = resolve
+      confirmResolve?.({ ok: false, text: '' })
+      confirmResolve = (r) => resolve(r.ok)
       set({ confirm: opts })
     }),
-  resolveConfirm: (ok) => {
+  askText: (opts) =>
+    new Promise<string | null>((resolve) => {
+      confirmResolve?.({ ok: false, text: '' })
+      // null for cancelled, the string for confirmed — INCLUDING the empty one, which
+      // is a real answer ("no name, the date will do") and not a refusal
+      confirmResolve = (r) => resolve(r.ok ? r.text : null)
+      set({ confirm: { tone: 'ask', ...opts, prompt: { placeholder: opts.placeholder } } })
+    }),
+  resolveConfirm: (ok, text = '') => {
     const r = confirmResolve
     confirmResolve = null
     set({ confirm: null })
-    r?.(ok)
+    r?.({ ok, text })
   },
   setActiveLine: (n) => set((s) => (s.activeLine === n ? {} : { activeLine: n })),
   setJobProgress: (v) => set((s) => (s.jobProgress === v ? {} : { jobProgress: v })),

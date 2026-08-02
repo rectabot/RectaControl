@@ -113,12 +113,12 @@ export function RescueWizard(): React.JSX.Element | null {
     cancelled.current = false
     void window.recta.settingsBackups().then((b) => {
       setBackups(b)
-      // `latest.txt` and not the baseline above it, deliberately. This runs seconds
+      // `latest.txt` and not the export above it, deliberately. This runs seconds
       // after the board was erased, and the closest thing to the machine that was
-      // just lost is what it held a moment ago — a baseline can be a month old and
-      // would quietly undo everything tuned since. The baseline earns its keep
-      // earlier, in Settings, by saying the two have drifted apart before anyone
-      // ends up here. It is one row away for whoever wants it.
+      // just lost is what it held a moment ago — an export can be a month old and
+      // would quietly undo everything tuned since. The export earns its keep earlier,
+      // in Settings, by saying the two have drifted apart before anyone ends up here.
+      // It is one row away for whoever wants it.
       setPick(b.find((r) => r.kind === 'latest')?.name ?? b[0]?.name ?? null)
     })
     return () => {
@@ -361,8 +361,8 @@ export function RescueWizard(): React.JSX.Element | null {
                         rather than confessed once the board is already wiped. */}
                     {backups.map((b) => (
                       <option key={b.name} value={b.name} className="bg-panel">
-                        {b.kind === 'baseline'
-                          ? `★ ${t('ui.rescue.backupBaseline')} · ${b.label || new Date(b.taken).toLocaleDateString()}`
+                        {b.kind === 'export'
+                          ? `★ ${t('ui.rescue.backupExport')}${b.label ? ` · ${b.label}` : ''}`
                           : b.kind === 'latest'
                             ? t('ui.rescue.backupLatest')
                             : new Date(b.taken).toLocaleString()}

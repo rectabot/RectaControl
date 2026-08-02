@@ -179,9 +179,9 @@ export interface FlashProgress {
  *  Three kinds, because they answer three different questions and mixing them on one
  *  shelf is what made the list unreadable:
  *
- *  - `baseline` — a person looked at this machine, said it was right, and saved it.
- *    Few, never pruned, and the only one that can answer "is my machine still the one
- *    I tuned?" Nothing automatic can know which dump was the good one.
+ *  - `export` — a person pressed Export, which they do when the machine is where they
+ *    want it. Few, never pruned, and the only one that can answer "is my machine still
+ *    the one I set up?" Nothing automatic can know which dump was the good one.
  *  - `latest` — exactly one file, whatever the board holds now. The safety net that
  *    needs no discipline, and the safest thing to restore right after a wipe.
  *  - `history` — earlier states, deduplicated by content and capped. For "something
@@ -192,8 +192,8 @@ export interface FlashProgress {
  *  the choice can still be changed, rather than after the board has been erased. */
 export interface BackupRow {
   name: string
-  kind: 'baseline' | 'latest' | 'history'
-  /** the operator's own words for a baseline, '' for everything else */
+  kind: 'export' | 'latest' | 'history'
+  /** the operator's own words for an export, '' for everything else */
   label: string
   taken: string
   /** how many `$n=v` lines the file holds */
@@ -235,8 +235,12 @@ export interface RectaApi {
    *  Empty means there is no way back — which the recovery has to say before it
    *  erases anything. */
   settingsBackups(): Promise<BackupRow[]>
-  /** File the current settings as a baseline under the operator's own label. */
-  saveBaseline(text: string, label: string): Promise<string>
+  /** Write the current settings into the settings folder under the operator's own
+   *  label — what Export does. Returns the filename it wrote. */
+  saveExport(text: string, label: string): Promise<string>
+  /** Choose a settings file to restore from, with the dialog opening in the folder
+   *  they all live in. Null when the operator cancels. */
+  pickSettingsFile(): Promise<{ name: string; text: string } | null>
   readSettingsBackup(name: string): Promise<string | null>
   send(line: string): Promise<void>
   realtime(byte: number): Promise<void>

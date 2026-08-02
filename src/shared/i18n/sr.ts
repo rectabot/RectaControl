@@ -709,40 +709,52 @@ export const sr: Record<string, string> = {
   'ui.upd.gone': 'Preuzeto ažuriranje više nije dostupno. Biće ponovo preuzeto pri sledećoj proveri.',
 
   // ── Probing ────────────────────────────────────────────────────────────────
-  'ui.probe.title': 'Probe',
-  'ui.probe.thickness': 'Debljina',
-  'ui.probe.tip': 'Vrh ⌀',
-  'ui.probe.note': 'Probe radi sa ugašenim vretenom. Rezultat [PRB:…] vidiš u konzoli.',
-  // probe run dijalog (bezbednosna provera → merenje)
-  'ui.probe.verifyTitle': 'Bezbednosna provera — verifikuj sondu',
-  'ui.probe.verifyHint':
-    'Ručno prisloni glodalo na pločicu. Kad sonda okine, merenje se otključava — time potvrđuješ da je sonda ožičena i da reaguje.',
-  'ui.probe.verified': 'Sonda potvrđena — bezbedno za merenje',
+  'ui.probe.verified': 'Potvrđeno',
   'ui.probe.pinState': 'Sonda',
   'ui.probe.pinTriggered': 'OKINULA',
   'ui.probe.pinOpen': 'otvorena',
-  'ui.probe.runTitle': 'Izmeri visinu alata (Z)',
-  'ui.probe.runZ': 'Probe Z',
-  'ui.probe.notReady': 'Mašina mora biti u Idle (ne radi / nije u alarmu) za probu.',
   'ui.probe.verifyShort': 'Pipni alat na pločicu da otključaš',
   'ui.probe.verifyOff': 'Verifikacija isključena',
   'ui.probe.paramsLink': 'Parametri → Podešavanja · Probe',
-  'ui.probe.editSettings': 'Promeni vrednosti u Podešavanja → Probe',
-  // probe režimi (faza 2: ivica / ugao / centar rupe)
+  'ui.probe.notReady': 'Za merenje mašina mora da miruje — sada je {state}.',
+  // režimi
   'ui.probe.mode.z': 'Alat Z',
   'ui.probe.mode.edge': 'Ivica',
-  'ui.probe.mode.corner': 'Ugao',
-  'ui.probe.mode.hole': 'Rupa ⊙',
-  'ui.probe.mode.rotate': 'Ugao ∠',
-  'ui.probe.rotateHint':
-    'Koliko je komad zakošen. Isti start kao trosni ćošak: dovezi alat unutar prednjeg-levog ćoška, iznad vrha. Probа vrh, pa X lice, pa Y lice — taj ćošak postaje nula — pa se pomeri za „Razmak" duž prednje ivice i pipne je još jednom. Ta dva Y dodira daju ugao. Primeni ga na G-kod pa se putanja zaokrene da prati ukošen komad, ili broj iskoristi da kucneš komad da stane pravo. Samo provodan komad.',
+  'ui.probe.mode.rotate': 'Zakošenost ∠',
+  'ui.probe.zHint': 'Postavlja Z0 na gornju površinu. Dovezi alat par mm iznad pločice.',
+  'ui.probe.hint.x': 'Postavlja X0 na levo lice. Dovezi alat pored njega, niže od gornje površine.',
+  'ui.probe.hint.y': 'Postavlja Y0 na prednje lice. Dovezi alat ispred njega, niže od gornje površine.',
+  'ui.probe.hint.xy': 'Postavlja X0 i Y0 na ćošak, Z ostaje kakav jeste. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
+  'ui.probe.hint.xyz': 'Postavlja X0 Y0 Z0 na ćošak. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
+  'ui.probe.rotateHint': 'Meri koliko je komad zakošen, i usput postavi nulu na ćošak. Isti start kao ćošak.',
+  // ⓘ iza naslova režima — dug odgovor, za onoga ko ga zatraži
+  'ui.probe.info.z1':
+    'Alat se spušta dok ne dodirne, odmakne se i dodirne ponovo, polako. Tamo gde stane Z čita debljinu pločice, pa Z0 pada na vrh komada.',
+  'ui.probe.info.zNote': 'Brzine i razdaljine: Podešavanja → Probe.',
+  'ui.probe.info.edgeTitle': 'Ivica i ćošak',
+  'ui.probe.info.edge1':
+    'Ivica postavlja jednu osu. Alat probа bočno u lice, a nula ide pola prečnika alata iza dodira — plus rub pločice, ako je koristiš — da padne na sam materijal.',
+  'ui.probe.info.edge2':
+    'Ćošak ide iz jednog starta iznad gornje površine: probа vrh, pa izađe van svakog lica, spusti se ispod površine i probа X pa Y.',
+  'ui.probe.info.edge3':
+    'XY0 pravi potpuno iste pokrete kao XYZ0 — mora da dodirne vrh da bi znao koliko da se spusti pored svakog lica — samo ne upisuje Z nulu. Biraš ga kad je Z već postavljen i hoćeš da ga sačuvaš.',
+  'ui.probe.info.edgeNote':
+    'Nude se samo levo lice, prednje lice i ćošak između njih: CAM tamo stavlja ishodište, a nulovanje sa suprotne strane ne izgleda pogrešno — pomeri rez za dimenziju komada, u sto pored komada. Za ćošak komad mora i da stoji dublje u plusu mašinskog hoda od „Izlaz" razdaljine, da alat ima kuda da ga obiđe.',
+  'ui.probe.info.skew1':
+    'Prvo odradi ćošak — vrh, X lice, Y lice — pa je ćošak tvoja nula u svakom slučaju. Onda se pomeri za „Razmak" duž prednje ivice i pipne isto lice još jednom.',
+  'ui.probe.info.skew2':
+    'Dva dodira na poznatom rastojanju daju ugao. Primeni ga na G-kod pa se ceo program zaokrene oko X0 Y0 da prati ukošen komad, ili broj iskoristi da kucneš komad da stane pravo pa izmeri ponovo.',
+  'ui.probe.info.skewNote':
+    'Preko oko 10° ciklus javi da nema dodira: toliko van, komad nije zakošen nego pogrešno stegnut. Primenjena rotacija važi samo za poslove sa PC-ja.',
   'ui.probe.spacing': 'Razmak',
-  'ui.probe.runRotate': 'Izmeri ugao',
+  'ui.probe.runZ': 'Probe Z',
+  'ui.probe.runEdge': 'Probaj ivicu',
+  'ui.probe.runCorner': 'Probaj ćošak',
+  'ui.probe.runRotate': 'Izmeri zakošenost',
   // softverska rotacija komada (primeni izmereni ugao na G-kod)
   'ui.rot.apply': 'Primeni na G-kod',
   'ui.rot.applyInv': 'Pogrešan smer? Primeni suprotan znak',
-  'ui.rot.applyHint':
-    'Rotira ceo program oko radne nule (X0 Y0) da putanja prati ukošen komad — bez ponovnog stezanja. Proveri da se 3D pregled poklapa, pa reži. Samo poslovi sa PC-ja.',
+  'ui.rot.applyHint': 'Zaokrene ceo program oko X0 Y0 da prati komad. Proveri 3D pregled, pa reži.',
   'ui.rot.active': 'Rotacija aktivna: {deg}°',
   'ui.rot.clear': 'Poništi',
   'ui.rot.badgeTitle': 'Softverska rotacija komada je primenjena na program',
@@ -750,63 +762,36 @@ export const sr: Record<string, string> = {
   'ui.rot.sdBody':
     'Postavljena je rotacija komada {deg}°, ali SD programi se izvršavaju na kontroleru i ne mogu se rotirati u letu — ovaj posao bi rezao BEZ rotacije. Pokreni ga sa PC-ja da bi se rotacija primenila. Ipak pokrenuti SD posao?',
   'ui.rot.sdConfirm': 'Pokreni SD posao bez rotacije',
-  'ui.probe.zHint': 'Alat dodirne pločicu na komadu; postavlja Z0 na površinu (uračunata debljina pločice).',
-  'ui.probe.edgeHint':
-    'Spusti alat pored ivice na dubini reza, pa probaj ka materijalu. Nula te ose pada na ivicu (uračunat poluprečnik alata). Potreban provodan komad sa žicom na njemu.',
-  'ui.probe.cornerHint':
-    'Nalaženje spoljašnjeg ugla: probaj X ivicu, premesti, probaj Y ivicu. Zajedno postave ugao na X0Y0. Samo provodan komad.',
-  'ui.probe.holeHint':
-    'Postavi alat otprilike u sredinu rupe, na bezbednu dubinu unutar nje. Proba ±X i ±Y i postavlja X0Y0 u pravi centar. Samo provodan komad.',
   'ui.probe.tipDia': 'Alat ⌀ (mm)',
-  'ui.probe.axis': 'Osa',
-  'ui.probe.dir': 'Ka',
-  'ui.probe.runEdge': 'Probaj ivicu',
-  'ui.probe.probeX': 'Nađi X ivicu',
-  'ui.probe.probeY': 'Nađi Y ivicu',
-  'ui.probe.cornerDone': 'Ugao postavljen na X0 Y0',
-  'ui.probe.runHole': 'Nađi centar rupe',
-  'ui.probe.holeRunning': 'Proba…',
-  'ui.probe.holeOk': 'Centar postavljen — X0 Y0',
-  'ui.probe.holeErr': 'Proba nije uspela: {msg}',
-  // pun probe pano (faza 2 redizajn)
-  'ui.probe.external': 'Spolja',
-  'ui.probe.internal': 'Unutra',
-  'ui.probe.hole': 'Rupa',
-  'ui.probe.boss': 'Boss',
-  'ui.probe.pickHint': 'Klikni ivicu ili ugao gore da izabereš šta se probа.',
-  'ui.probe.pickHintFL':
-    'Klikni ivicu, ili prednji-levi ćošak za sve tri ose odjednom. Samo taj ćošak se nudi: CAM tamo stavlja ishodište, a nulovanje drugog pomeri ceo rez za dimenziju komada.',
-  'ui.probe.placeDot': 'Dovezi sondu iznad zelene tačke, pa Start.',
-  'ui.probe.actionLabel': 'Rezultat',
-  'ui.probe.action.wcs': 'Postavi WCS',
-  'ui.probe.action.g92': 'G92',
-  'ui.probe.action.measure': 'Izmeri',
-  'ui.probe.bossHint': 'Postavi alat iznad centra bossa, blizu njegovog vrha. Obiđe sve četiri strane i postavi X0Y0 u centar. Unesi približnu veličinu bossa.',
-  'ui.probe.bossX': 'Boss X',
-  'ui.probe.bossY': 'Boss Y',
-  'ui.probe.runBoss': 'Nađi centar bossa',
-  'ui.probe.useTouchPlate': 'Koristim touch plate uz ivicu',
+  // pun probe pano
+  'ui.probe.placeDot': 'Dovezi alat na zelenu tačku, pa Start.',
   'ui.probe.noPlateOn':
-    'Bez pločice: alat dodiruje sam komad. Z nula je na vrhu komada, bočno se oduzima samo poluprečnik alata. Komad mora da provodi i da je na masi.',
-  'ui.probe.runCorner': 'Probaj ćošak',
-  'ui.probe.corner3Hint':
-    'Spoljašnji ćošak, sve 3 ose: dovezi alat ~10–15 mm unutar ćoška iznad vrha, pa Start. Izmeri Z, izađe van svakog lica, spusti se ispod površine i probа X pa Y — postavlja ćošak kao X0 Y0 Z0. Komad mora biti dovoljno u plusu od mašinske nule (više od „Izlaz" razdaljine) da alat može da ga obiđe.',
+    'Bez pločice: alat dodiruje sam komad. Z0 pada na gornju površinu, a bočno se skida samo poluprečnik alata. Komad mora da provodi i da je na masi.',
+  // tok merenja / rezultat
+  'ui.probe.runningAt': 'Merim {what}…',
+  'ui.probe.step.z': 'vrh',
+  'ui.probe.step.x': 'X lice',
+  'ui.probe.step.y': 'Y lice',
+  'ui.probe.step.far': 'drugu tačku',
   'ui.probe.done': 'Gotovo',
-  'ui.probe.warn': 'Oprezno — pogrešni parametri mogu zabiti alat u komad ili oštetiti sondu. Kreni sporo.',
+  'ui.probe.failed': 'Merenje nije uspelo — {msg}',
+  'ui.probe.err.noContact':
+    'ništa nije dodirnuto u smeru {dir}. Proveri štipaljku na alatu, i da li je lice bliže od „Razdaljina probe".',
+  'ui.probe.err.alarm': 'mašina je otišla u alarm i ciklus je stao. Očisti ga, pa pogledaj gde je alat pre pomeranja.',
+  'ui.probe.err.lost': 'veza je pukla usred ciklusa. Proveri gde je alat ostao.',
+  'ui.probe.err.timeout': 'ploča se nije javila ceo minut, pa je ciklus napušten.',
+  'ui.probe.err.touching':
+    'sonda već čita dodir — alat možda stoji na pločici, žica je u kratkom spoju, ili je $6 obrnut na pogrešnu stranu.',
+  'ui.probe.err.notStopped': 'mašina nikad nije stala, pa je ciklus napušten.',
+  'ui.probe.err.noPos': 'još nije stigla pozicija mašine.',
+  'ui.probe.warn': 'Kreni sporo. Pogrešni parametri zabiju alat u komad ili saviju sondu.',
   // probe podešavanja (Podešavanja → Probe)
   'ui.probeSet.title': 'Probe',
   'ui.probeSet.intro':
-    'Parametri merenja sondom (alat/pločica, brzine, zazori) i ožičenje touch plate-a. Probe prozor iz toolpath-a samo bira tip merenja i pokreće ga. grblHAL podešavanja probe signala su ispod.',
-  'ui.probeSet.step1': 'Zakači žicu sonde na alat / vreteno.',
+    'Podesi jednom, koristi svako merenje: kako je tvoja pločica napravljena, koliko brzo alat prilazi, koliko se odmiče oko ćoška. grblHAL podešavanja probe signala ($6, $19, $65) su ispod.',
+  'ui.probeSet.step1': 'Zakači žicu sonde na alat ili vreteno.',
   'ui.probeSet.step2': 'Nasloni pločicu na ćošak komada — ćošak materijala ulazi u ćošak pločice.',
-  'ui.probeSet.step3': 'Otvori Probe iz toolpath-a, pipni alatom pločicu za verifikaciju.',
-  'ui.probeSet.step4': 'Pokreni Probe Z — alat se spušta, dodirne i postavi Z0.',
-  'ui.probeSet.thickness': 'Debljina pločice',
-  'ui.probeSet.thicknessHint': 'Radni Z se postavlja na ovu vrednost pri dodiru — izmeri svoju pločicu.',
-  'ui.probeSet.feed': 'Feed sonde',
-  'ui.probeSet.feedHint': 'Koliko brzo se alat spušta na pločicu.',
-  'ui.probeSet.maxTravel': 'Maks. hod',
-  'ui.probeSet.maxTravelHint': 'Odustani (alarm) ako se ništa ne dodirne u ovoj razdaljini.',
+  'ui.probeSet.step3': 'Izmeri svoju pločicu i upiši Z, a i b ispod. Crtež prati ono što ukucaš.',
   'ui.probeSet.retract': 'Podizanje',
   // parametri punog probe panoa
   'ui.probeSet.toolPlate': 'Alat / pločica',
@@ -829,11 +814,10 @@ export const sr: Record<string, string> = {
   'ui.probeSet.edgeHint': 'Alat stane na rub pločice, ne na komad. Oduzima se poluprečnik alata + širina ruba.',
   'ui.probeSet.noPlate': 'Merenje metalnih blokova',
   'ui.probeSet.noPlateHint': 'Bez pločice — alat dodiruje sam komad. Z nula na vrhu, bočno samo poluprečnik alata. Komad mora da provodi.',
-  'ui.probeSet.retractHint': 'Koliko se alat podigne posle uspešnog dodira.',
   'ui.probeSet.verifyGate': 'Sigurnost okidanja',
   'ui.probeSet.verifyGateHint': 'Pipni alatom pločicu jednom da otključaš merenje — dokaz da je žica spojena. Isključeno: gledaj Probe status u futeru.',
   'ui.probeSet.safety':
-    'Uvek prvo pipni alatom pločicu da potvrdiš da sonda reaguje. Nepovezana žica znači bez zaustavljanja — alat bi zabio u pločicu.',
+    'Prekinuta žica znači da alat nema šta da zaustavi: zabija se u pločicu i nastavlja dalje. Zato „Sigurnost okidanja" gore i postoji — da to uhvati pre nego što se išta pokrene.',
   // stock (blok materijala u 3D prikazu)
   'ui.stock.title': 'Materijal',
   'ui.stock.intro':

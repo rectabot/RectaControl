@@ -214,48 +214,27 @@ export async function runEdge(axis: Axis, dir: Dir, p: ProbeParams, plate = 0): 
   }
 }
 
-/** Outside/inside corner = two edge finds (X then Y) from a diagonal start, with a
- *  clearance move between so the tool clears the first face. Sets both axes. */
-export async function runCorner(
-  xDir: Dir,
-  yDir: Dir,
-  p: ProbeParams,
-  plate: Plate = NO_PLATE
-): Promise<ProbeResult> {
-  try {
-    const lx = await probeAxis('X', xDir, p)
-    apply('X', -xDir * (p.tipDiameter / 2 + plate.x))
-    rel('X', -xDir * p.xyClearance) // clear the X face before probing Y
-    const ly = await probeAxis('Y', yDir, p)
-    apply('Y', -yDir * (p.tipDiameter / 2 + plate.y))
-    rel('Y', -yDir * p.retract)
-    return { ok: true, note: `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))}` }
-  } catch (e) {
-    return { ok: false, error: (e as Error).message }
-  }
-}
-
 /**
- * External corner, all three axes, from ONE start position ~10–15 mm inside the
- * corner over the top surface:
- *   1) probe Z down → surface zero,
+ * External corner, from ONE start position ~10–15 mm inside the corner over the top
+ * surface:
+ *   1) probe Z down → the top surface,
  *   2) lift, move OUT past the X face (`approach`), drop `depth` below the surface,
  *      probe the X face → X zero,
  *   3) return over the material, do the same for the Y face → Y zero.
- * Result: the corner is the work X0 Y0 Z0. Needs the workpiece parked far enough
- * (> approach) into positive machine space so there's room to move around it.
- * `plate` = sideways touch-plate thickness for the X/Y faces (0 = direct touch).
+ * Needs the workpiece parked far enough (> approach) into positive machine space so
+ * there's room to move around it. `plate` = sideways touch-plate thickness for the
+ * X/Y faces (0 = direct touch).
+ *
+ * Shared by the corner zero and the skew measurement, on purpose: the skew cycle
+ * begins with exactly these three probes — Filip's words, "first it measures the
+ * corner by height, then from that zero it knows to drop 5 mm and touch X, then it
+ * moves to Y and touches there, and then we have the corner point" — and two copies
+ * of a sequence that drives a tool around a workpiece is two places for a clearance
+ * to go wrong.
+ *
+ * Returns the two side contacts in machine coordinates and the start position, which
+ * is what a caller needs to go and probe somewhere else along the same edge.
  */
-/** The corner itself, shared by the plain three-axis zero and the skew measurement.
- *
- *  Kept as one routine on purpose: the skew cycle begins with exactly these three
- *  probes — Filip's words, "first it measures the corner by height, then from that
- *  zero it knows to drop 5 mm and touch X, then it moves to Y and touches there, and
- *  then we have the corner point" — and two copies of a sequence that drives a tool
- *  around a workpiece is two places for a clearance to go wrong.
- *
- *  Returns the two side contacts in machine coordinates and the start position, which
- *  is what a caller needs to go and probe somewhere else along the same edge. */
 async function cornerXYZ(
   xDir: Dir,
   yDir: Dir,
@@ -266,7 +245,17 @@ async function cornerXYZ(
    *  of lifting and coming home. For a caller that has another point to touch on the
    *  same edge, going back over the material only to come out again is a trip out and
    *  in for nothing. */
-  hold = false
+  hold = false,
+  /** Whether the top contact becomes the Z zero.
+   *
+   *  The top is TOUCHED either way, and it has to be: every lateral move in here is
+   *  measured from that contact, which is how the tool knows how far to drop to get
+   *  beside a face without knowing anything about the workpiece beforehand. What this
+   *  decides is only whether the number is written down.
+   *
+   *  Off is for somebody whose Z is already set — from a tool-length probe, or from an
+   *  earlier cycle — who wants the corner in X and Y without losing it. */
+  zeroZ = true
 ): Promise<{ lx: Prb; ly: Prb; sx: number; sy: number; drop: number }> {
   const s = startPos()
   if (!s) throw new Error('no-pos')
@@ -280,7 +269,7 @@ async function cornerXYZ(
 
   onStep?.('Z')
   await probeAxis('Z', -1, p) // probe the top surface (tool ends on the surface)
-  apply('Z', p.thickness)
+  if (zeroZ) apply('Z', p.thickness)
   rel('Z', lift) // up, clear of the top
 
   onStep?.('X')
@@ -304,17 +293,22 @@ async function cornerXYZ(
   return { lx, ly, sx, sy, drop }
 }
 
-export async function runCornerExternal3(
+/** The corner zero. `axes` is how much of it gets written: 'xyz' takes the top
+ *  contact as Z0 as well, 'xy' leaves Z exactly as it was. The motion is identical
+ *  either way — see `zeroZ` above for why the top is touched regardless. */
+export async function runCorner(
   xDir: Dir,
   yDir: Dir,
   p: ProbeParams,
   plate: Plate = NO_PLATE,
-  onStep?: (s: string) => void
+  onStep?: (s: string) => void,
+  axes: 'xy' | 'xyz' = 'xyz'
 ): Promise<ProbeResult> {
   try {
-    const { lx, ly } = await cornerXYZ(xDir, yDir, p, plate, onStep)
+    const { lx, ly } = await cornerXYZ(xDir, yDir, p, plate, onStep, false, axes === 'xyz')
     onStep?.('done')
-    return { ok: true, note: `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))} · Z ✓` }
+    const note = `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))}`
+    return { ok: true, note: axes === 'xyz' ? `${note} · Z ✓` : note }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -404,11 +398,16 @@ export async function runSkew(
   }
 }
 
-/* Hole centre and boss centre used to live here. Taken out of the app on 31 Jul
- * 2026 — Filip: "I don't know how they work or what their logic is, that is why
- * they are not confirmed" — and a hole cannot be probed with a touch plate anyway,
- * since there is nothing inside it to press against. They will come back when
- * there is a way to test them.
+/* Hole centre, boss centre and the inside corner used to live here.
+ *
+ * Hole and boss went on 31 Jul 2026 — Filip: "I don't know how they work or what
+ * their logic is, that is why they are not confirmed" — and a hole cannot be probed
+ * with a touch plate anyway, since there is nothing inside it to press against.
+ *
+ * The inside corner (`runCorner`, X and Y only) followed on 3 Aug: "we don't need
+ * internal edge measuring for now, only external". It was the last caller of the
+ * diagram's pocket drawing, so the External/Internal toggle went with it. All three
+ * come back when there is a way to test them.
  *
  * The routines are parked in `.private/probeAdvanced.ts.txt` (gitignored, and
  * outside `src/` so tsc does not compile a file nobody imports). They are also in

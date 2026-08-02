@@ -728,40 +728,58 @@ export const en: Record<string, string> = {
   'ui.upd.gone': 'The downloaded update is no longer available. It will be fetched again on the next check.',
 
   // ── Probing ────────────────────────────────────────────────────────────────
-  'ui.probe.title': 'Probe',
-  'ui.probe.thickness': 'Thickness',
-  'ui.probe.tip': 'Tip ⌀',
-  'ui.probe.note': 'Probe runs with the spindle off. The [PRB:…] result shows in the console.',
-  // probe run dialog (safety verify → run)
-  'ui.probe.verifyTitle': 'Safety check — verify the probe',
-  'ui.probe.verifyHint':
-    'Touch the tool to the plate by hand. When the probe triggers, measuring unlocks — this confirms the sonde is wired and responding.',
-  'ui.probe.verified': 'Probe verified — safe to measure',
+  // Each mode says two things on the face of the panel and no more: what the cycle
+  // SETS, and where to park the tool before it runs. Everything else — how it moves,
+  // what it needs, why a corner is fixed — lives behind the ⓘ, so it is there for
+  // whoever is stuck without standing in front of whoever is not.
+  'ui.probe.verified': 'Verified',
   'ui.probe.pinState': 'Probe',
   'ui.probe.pinTriggered': 'TRIGGERED',
   'ui.probe.pinOpen': 'open',
-  'ui.probe.runTitle': 'Measure tool height (Z)',
-  'ui.probe.runZ': 'Probe Z',
-  'ui.probe.notReady': 'Machine must be Idle (not running / alarmed) to probe.',
   'ui.probe.verifyShort': 'Tap the tool on the plate to unlock',
   'ui.probe.verifyOff': 'Verification off',
   'ui.probe.paramsLink': 'Parameters → Settings · Probe',
-  'ui.probe.editSettings': 'Change values in Settings → Probe',
-  // probe modes (phase 2: edge / corner / hole centre)
+  'ui.probe.notReady': 'Probing needs the machine idle — it is {state}.',
+  // modes
   'ui.probe.mode.z': 'Tool Z',
   'ui.probe.mode.edge': 'Edge',
-  'ui.probe.mode.corner': 'Corner',
-  'ui.probe.mode.hole': 'Hole ⊙',
-  'ui.probe.mode.rotate': 'Angle ∠',
-  'ui.probe.rotateHint':
-    'How far the workpiece is turned. Same start as the three-axis zero: jog the tool inside the front-left corner, over the top. It probes the top, then the X face, then the Y face — that corner becomes the zero — then steps Spacing along the front edge and touches it once more. The two Y contacts give the angle. Apply it to the G-code and the toolpath turns to match the crooked part, or use the number to tap the part straight. Conductive workpiece only.',
+  'ui.probe.mode.rotate': 'Skew ∠',
+  'ui.probe.zHint': 'Sets Z0 on the top face. Park the tool a few mm over the plate.',
+  // One per outcome. Each names where the tool has to be — and for a single face
+  // that means BELOW the top, which is the whole reason to say which one you picked.
+  'ui.probe.hint.x': 'Sets X0 on the left face. Park the tool beside it, lower than the top face.',
+  'ui.probe.hint.y': 'Sets Y0 on the front face. Park the tool in front of it, lower than the top face.',
+  'ui.probe.hint.xy': 'Sets X0 and Y0 on the corner, leaving Z as it is. Park the tool 10–15 mm inside the corner, over the top face.',
+  'ui.probe.hint.xyz': 'Sets X0 Y0 Z0 on the corner. Park the tool 10–15 mm inside the corner, over the top face.',
+  'ui.probe.rotateHint': 'Measures how far the workpiece is turned, and sets the corner zero on the way. Same start as the corner.',
+  // the ⓘ behind each mode title — the long answer, asked for rather than served
+  'ui.probe.info.z1':
+    'The tool comes down until it touches, lifts off and touches again slowly. Where it stops reads Z = the plate thickness, so Z0 lands on the top of the workpiece.',
+  'ui.probe.info.zNote': 'Speeds and distances: Settings → Probe.',
+  'ui.probe.info.edgeTitle': 'Edge & corner',
+  'ui.probe.info.edge1':
+    'An edge sets one axis. The tool probes sideways into the face, and the zero goes half a tool diameter beyond the contact — plus the plate rail, if you use one — so it lands on the material itself.',
+  'ui.probe.info.edge2':
+    'The corner runs from one start over the top face: it probes the top, then moves out past each face, drops below the surface and probes X, then Y.',
+  'ui.probe.info.edge3':
+    'XY0 makes exactly the same moves as XYZ0 — it has to touch the top to know how far to drop beside each face — it simply does not write a Z zero. Pick it when Z is already set and you want to keep it.',
+  'ui.probe.info.edgeNote':
+    'Only the left face, the front face and the corner between them are offered: CAM puts the origin there, and zeroing against the far side does not look wrong — it shifts the cut by the size of the stock, into the table beside the part. For a corner the workpiece must also sit further into positive machine travel than the Approach distance, so the tool has room to go around it.',
+  'ui.probe.info.skew1':
+    'It runs the corner cycle first — top, X face, Y face — so the corner is your zero either way. Then it steps Spacing along the front edge and touches the same face once more.',
+  'ui.probe.info.skew2':
+    'Two contacts a known distance apart give the angle. Apply it to the G-code and the whole program turns about X0 Y0 to follow the crooked part, or use the number to tap the part straight and measure again.',
+  'ui.probe.info.skewNote':
+    'Past about 10° the cycle reports no contact: that far out the part is clamped wrong, not crooked. Applied rotation only reaches jobs streamed from the PC.',
   'ui.probe.spacing': 'Spacing',
-  'ui.probe.runRotate': 'Measure angle',
+  'ui.probe.runZ': 'Probe Z',
+  'ui.probe.runEdge': 'Probe edge',
+  'ui.probe.runCorner': 'Probe corner',
+  'ui.probe.runRotate': 'Measure skew',
   // software workpiece rotation (apply the measured angle to the G-code)
   'ui.rot.apply': 'Apply to G-code',
   'ui.rot.applyInv': 'Wrong way? Apply the opposite sign',
-  'ui.rot.applyHint':
-    'Rotates the whole program about the work origin (X0 Y0) so the toolpath follows the crooked part — no need to re-clamp. Check the 3D preview matches, then cut. PC-streamed jobs only.',
+  'ui.rot.applyHint': 'Turns the whole program about X0 Y0 so it follows the part. Check the 3D view, then cut.',
   'ui.rot.active': 'Rotation active: {deg}°',
   'ui.rot.clear': 'Clear',
   'ui.rot.badgeTitle': 'Software workpiece rotation is applied to the program',
@@ -769,65 +787,42 @@ export const en: Record<string, string> = {
   'ui.rot.sdBody':
     'A {deg}° workpiece rotation is set, but SD-card programs run on the controller and can’t be rotated on the fly — this job would cut UN-rotated. Run it from the PC instead to apply the rotation. Start the SD job anyway?',
   'ui.rot.sdConfirm': 'Run SD job un-rotated',
-  'ui.probe.zHint': 'Tool touches the plate on the workpiece; sets Z0 to the surface (plate thickness accounted for).',
-  'ui.probe.edgeHint':
-    'Lower the tool beside the edge at cutting depth, then probe toward the material. That axis zero lands on the edge (tip radius accounted for). Needs a conductive workpiece with the wire clipped to it.',
-  'ui.probe.cornerHint':
-    'Find an outside corner: probe the X edge, reposition, probe the Y edge. Together they set the corner to X0Y0. Conductive workpiece only.',
-  'ui.probe.holeHint':
-    'Place the tool roughly in the middle of the hole at a safe depth inside it. It probes ±X and ±Y and sets X0Y0 to the true centre. Conductive workpiece only.',
   'ui.probe.tipDia': 'Tool ⌀ (mm)',
-  'ui.probe.axis': 'Axis',
-  'ui.probe.dir': 'Toward',
-  'ui.probe.runEdge': 'Probe edge',
-  'ui.probe.probeX': 'Find X edge',
-  'ui.probe.probeY': 'Find Y edge',
-  'ui.probe.cornerDone': 'Corner set to X0 Y0',
-  'ui.probe.runHole': 'Find hole centre',
-  'ui.probe.holeRunning': 'Probing…',
-  'ui.probe.holeOk': 'Centre set — X0 Y0',
-  'ui.probe.holeErr': 'Probe failed: {msg}',
-  // full probe panel (phase 2 redesign)
-  'ui.probe.external': 'External',
-  'ui.probe.internal': 'Internal',
-  'ui.probe.hole': 'Hole',
-  'ui.probe.boss': 'Boss',
-  'ui.probe.pickHint': 'Click an edge or corner above to pick what to probe.',
-  'ui.probe.pickHintFL':
-    'Click an edge, or the front-left corner for all three axes at once. Only that corner is offered: CAM puts the origin there, and zeroing a different one shifts the whole cut by the size of the stock.',
-  'ui.probe.placeDot': 'Jog the probe over the green dot, then Start.',
-  'ui.probe.actionLabel': 'Result',
-  'ui.probe.action.wcs': 'Set WCS',
-  'ui.probe.action.g92': 'G92',
-  'ui.probe.action.measure': 'Measure',
-  'ui.probe.bossHint': 'Place the tool above the boss centre near its top. It goes around all four sides and sets X0Y0 to the centre. Enter the approximate boss size.',
-  'ui.probe.bossX': 'Boss X',
-  'ui.probe.bossY': 'Boss Y',
-  'ui.probe.runBoss': 'Find boss centre',
-  'ui.probe.useTouchPlate': 'Using a touch plate against the edge',
+  // full probe panel
+  'ui.probe.placeDot': 'Jog the tool to the green dot, then Start.',
   'ui.probe.noPlateOn':
-    'No plate: the tool touches the stock itself. Z zero lands on the top face, and only the tool radius is subtracted sideways. The stock must conduct and be grounded.',
-  'ui.probe.runCorner': 'Probe corner',
-  'ui.probe.corner3Hint':
-    'External corner, all 3 axes: jog the tool ~10–15 mm inside the corner over the top, then Start. It probes Z, moves out past each face, drops below the surface and probes X then Y — setting the corner as X0 Y0 Z0. The workpiece must sit far enough into positive machine space (more than the Approach distance) so the tool can move around it.',
+    'No plate: the tool touches the stock itself. Z0 lands on the top face and only the tool radius comes off sideways. The stock must conduct and be grounded.',
+  // running / result. The step names read as the object of "Probing …", because
+  // during a corner cycle the one thing worth knowing is which face it is on now.
+  'ui.probe.runningAt': 'Probing {what}…',
+  'ui.probe.step.z': 'the top face',
+  'ui.probe.step.x': 'the X face',
+  'ui.probe.step.y': 'the Y face',
+  'ui.probe.step.far': 'the second point',
   'ui.probe.done': 'Done',
-  'ui.probe.warn': 'Use with care — wrong parameters can drive the tool into the work or damage the probe. Start slow.',
+  'ui.probe.failed': 'Probe failed — {msg}',
+  // Why these are sentences and not codes: a failed probe leaves a tool somewhere
+  // unexpected, and "X+ no contact" tells the operator nothing about what to do next.
+  'ui.probe.err.noContact':
+    'nothing was touched going {dir}. Check the clip on the tool, and that the face is nearer than the Probe distance.',
+  'ui.probe.err.alarm': 'the machine alarmed and the cycle stopped. Clear it, then look at where the tool is before moving.',
+  'ui.probe.err.lost': 'the connection dropped mid-cycle. Check where the tool ended up.',
+  'ui.probe.err.timeout': 'the board did not answer for a minute, so the cycle was abandoned.',
+  'ui.probe.err.touching':
+    'the probe already reads as touching — the tool may be resting on the plate, the wire shorted, or $6 inverted the wrong way.',
+  'ui.probe.err.notStopped': 'the machine never came to a stop, so the cycle was abandoned.',
+  'ui.probe.err.noPos': 'no machine position has arrived yet.',
+  'ui.probe.warn': 'Start slow. Wrong parameters drive the tool into the work or bend the probe.',
   // probe settings (Settings → Probe)
   'ui.probeSet.title': 'Probe',
+  // Set once here, used by every measurement — so this page describes the plate and
+  // the machine's manners, and the Probe window is left to pick a type and run it.
   'ui.probeSet.intro':
-    'The probe measuring parameters (tool/plate, speeds, clearances) and how to wire the touch plate. The Probe window opened from the toolpath just picks the measurement type and runs it. The grblHAL probe signal settings are below.',
-  'ui.probeSet.step1': 'Clip the probe wire to the tool / spindle.',
+    'Set once, used by every measurement: how your plate is built, how fast the tool approaches, how far it moves around a corner. grblHAL’s own probe signal settings ($6, $19, $65) follow below.',
+  'ui.probeSet.step1': 'Clip the probe wire to the tool or the spindle.',
   'ui.probeSet.step2': 'Seat the plate on the corner of the stock — the material corner goes into the plate corner.',
-  'ui.probeSet.step3': 'Open Probe from the toolpath, tap the tool on the plate to verify.',
-  'ui.probeSet.step4': 'Run Probe Z — the tool descends, touches, and sets Z0.',
-  'ui.probeSet.thickness': 'Plate thickness',
-  'ui.probeSet.thicknessHint': 'Work Z is set to this at contact — measure your plate.',
-  'ui.probeSet.feed': 'Probe feed',
-  'ui.probeSet.feedHint': 'How fast the tool descends onto the plate.',
-  'ui.probeSet.maxTravel': 'Max travel',
-  'ui.probeSet.maxTravelHint': 'Give up (alarm) if nothing is touched within this distance.',
+  'ui.probeSet.step3': 'Measure your plate and type Z, a and b below. The drawing follows what you enter.',
   'ui.probeSet.retract': 'Retract',
-  'ui.probeSet.retractHint': 'How far the tool lifts after a successful touch.',
   // full probe panel params
   'ui.probeSet.toolPlate': 'Tool / plate',
   'ui.probeSet.speeds': 'Speeds & distances',
@@ -852,7 +847,7 @@ export const en: Record<string, string> = {
   'ui.probeSet.verifyGate': 'Trigger safety',
   'ui.probeSet.verifyGateHint': 'Tap the tool on the plate once to unlock measuring — proof the wire is connected. Off: watch the Probe pin in the footer.',
   'ui.probeSet.safety':
-    'Always tap the tool on the plate first to confirm the probe responds. A disconnected wire means no stop — the tool would drive into the plate.',
+    'A disconnected wire means nothing stops the tool: it drives into the plate and keeps going. Trigger safety, above, exists to catch that before anything moves.',
   // stock (material block in the 3D view)
   'ui.stock.title': 'Stock',
   'ui.stock.intro':

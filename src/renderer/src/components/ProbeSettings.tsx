@@ -63,11 +63,13 @@ export function ProbeSettings(): JSX.Element {
           <p className="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[12px] leading-relaxed text-warn">
             {t('ui.probeSet.abNote')}
           </p>
+          {/* Three steps, and all three are about the plate beside them. The list used
+              to carry on into "open Probe, tap to verify, run Probe Z" — the other
+              window's job, described in a place you have to leave to do it. */}
           <ol className="list-decimal space-y-1.5 pl-4 text-[12px] leading-relaxed text-slate-300">
             <li>{t('ui.probeSet.step1')}</li>
             <li>{t('ui.probeSet.step2')}</li>
             <li>{t('ui.probeSet.step3')}</li>
-            <li>{t('ui.probeSet.step4')}</li>
           </ol>
         </div>
       </div>

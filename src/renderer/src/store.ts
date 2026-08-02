@@ -141,6 +141,13 @@ export interface ProbeParams {
   approach: number
   /** How far to lift/back off after a completed probe. */
   retract: number
+  /** How far along the front edge the skew cycle steps before touching it a second
+   *  time. Longer is more accurate — the same measuring error spread over a longer
+   *  baseline is a smaller angle — but it has to stay on the workpiece, so it is a
+   *  property of the part in the vice, not of the machine. Lives with the other
+   *  measuring parameters so that a number typed for a particular part survives
+   *  closing the window. */
+  skewSpacing: number
 }
 
 const DEFAULT_PARAMS: ProbeParams = {
@@ -158,7 +165,8 @@ const DEFAULT_PARAMS: ProbeParams = {
   xyClearance: 5,
   depth: 5,
   approach: 22,
-  retract: 3
+  retract: 3,
+  skewSpacing: 50
 }
 
 /** A saved mode that no longer exists lands on Z, not on a blank panel. */

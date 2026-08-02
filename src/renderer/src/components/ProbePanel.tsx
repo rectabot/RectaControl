@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { useT, useLabel } from '../i18n'
-import { ProbeDiagram, type ProbeSel } from './ProbeDiagram'
-import { runZ, runEdge, runCorner, runCornerExternal3, runSkew } from '../probeRun'
+import { useT, useLabel, type TFunc } from '../i18n'
+import { ProbeDiagram } from './ProbeDiagram'
+import { runZ, runEdge, runCorner, runSkew } from '../probeRun'
 import { ProbeField } from './ProbeFields'
 import { readOffsets, applyOffsetsRead } from '../offsets'
 import { ProbeIcon } from './icons'
+import { InfoTip } from './InfoTip'
 
 
 /** Compact Probe window (opened by the toolpath Probe button). It only PICKS the
@@ -33,8 +34,15 @@ export function ProbePanel(): JSX.Element | null {
    *  the surface, so there is nothing to subtract. Z reads 0 at the top face, and
    *  sideways only half the tool remains between the contact and the edge. Done by
    *  handing the cycles a thickness of zero rather than by branching inside them —
-   *  it is the same measurement, with one term gone. */
+   *  it is the same measurement, with one term gone.
+   *
+   *  There used to be a "touch plate against the edge" checkbox here as well, which
+   *  said the same thing for the sideways rails only. Two switches for one fact, and
+   *  the panel one could disagree with the setting. Whether there is a plate is a
+   *  property of the setup, so it is answered once in Settings — and when the answer
+   *  is no, the amber line below says so where the measuring happens. */
   const pp = noPlate ? { ...p, thickness: 0 } : p
+  const plate = noPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
 
   const ready = connected && !jobRunning && !sdRunning && base === 'Idle'
   const triggered = !!pins && pins.includes('P')
@@ -60,10 +68,8 @@ export function ProbePanel(): JSX.Element | null {
 
   const tab = useStore((s) => s.probeMode) // remembered across opens
   const setTab = useStore((s) => s.setProbeMode)
-  const [edgeInternal, setEdgeInternal] = useState(false)
-  const [edgeTouchPlate, setEdgeTouchPlate] = useState(true)
-  const [sel, setSel] = useState<ProbeSel | null>(null)
-  const [rotSpacing, setRotSpacing] = useState(50)
+  const [zero, setZero] = useState<Zero>('xyz')
+  const setP = useStore((s) => s.setProbeParams)
   const [measuredAngle, setMeasuredAngle] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
@@ -77,7 +83,10 @@ export function ProbePanel(): JSX.Element | null {
   const finish = (r: { ok: boolean; error?: string; note?: string }): void => {
     setBusy(false)
     setStep('')
-    setResult({ ok: r.ok, msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.holeErr', { msg: r.error || '' }) })
+    setResult({
+      ok: r.ok,
+      msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.failed', { msg: probeErr(t, r.error || '') })
+    })
     // Probing moved the work origin — go and find out where it landed.
     //
     // `G10 L20` changes the board's G54 and the board says nothing about it: no line
@@ -107,8 +116,7 @@ export function ProbePanel(): JSX.Element | null {
     void (async () => {
       // same front-left corner as the three-axis zero, and the same plate rails —
       // the skew cycle IS that cycle plus one more touch further along the edge
-      const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
-      const r = await runSkew(1, 1, rotSpacing, pp, plate, setStep)
+      const r = await runSkew(1, 1, p.skewSpacing, pp, plate, setStep)
       // through the shared finish, not alongside it: this cycle sets the corner zero
       // like any other, so it owes the 3D view the same fresh read of `$#`
       finish(r)
@@ -116,19 +124,15 @@ export function ProbePanel(): JSX.Element | null {
     })()
   }
 
-  const runEdgeOrCorner = (): void => {
-    if (!sel) return
-    // no plate → nothing to add beyond the tool radius, whatever the checkbox says
-    const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
+  /** The front-left corner, and how much of it you want written down. Both faces are
+   *  probed in the positive direction because the tool comes at them from outside. */
+  const runZeroing = (): void =>
     void guard(() => {
-      // a single edge only ever touches one rail — the one for that axis
-      if (sel.kind === 'edge') return runEdge(sel.axis, sel.dir, pp, sel.axis === 'X' ? plate.x : plate.y)
-      // external corner = full 3-axis (Z + X + Y); internal = X + Y only
-      return edgeInternal
-        ? runCorner(sel.xDir, sel.yDir, pp, plate)
-        : runCornerExternal3(sel.xDir, sel.yDir, pp, plate, setStep)
+      // a single face only ever touches one rail — the one for that axis
+      if (zero === 'x') return runEdge('X', 1, pp, plate.x)
+      if (zero === 'y') return runEdge('Y', 1, pp, plate.y)
+      return runCorner(1, 1, pp, plate, setStep, zero)
     })
-  }
 
   return (
     <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/40 p-3">
@@ -198,7 +202,11 @@ export function ProbePanel(): JSX.Element | null {
 
           {/* per-mode body */}
           {tab === 'z' && (
-            <ModeCard title={t('ui.probe.mode.z')} hint={t('ui.probe.zHint')}>
+            <ModeCard
+              title={t('ui.probe.mode.z')}
+              hint={t('ui.probe.zHint')}
+              info={{ title: t('ui.probe.mode.z'), body: [t('ui.probe.info.z1')], note: t('ui.probe.info.zNote') }}
+            >
               <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(pp))} label={`${t('ui.probe.runZ')} ↓`} />
             </ModeCard>
           )}
@@ -206,77 +214,84 @@ export function ProbePanel(): JSX.Element | null {
           {tab === 'edge' && (
             <ModeCard
               title={t('ui.probe.mode.edge')}
-              hint={sel?.kind === 'corner' && !edgeInternal ? t('ui.probe.corner3Hint') : t('ui.probe.edgeHint')}
+              hint={t(`ui.probe.hint.${zero}`)}
+              info={{
+                title: t('ui.probe.info.edgeTitle'),
+                body: [t('ui.probe.info.edge1'), t('ui.probe.info.edge2'), t('ui.probe.info.edge3')],
+                note: t('ui.probe.info.edgeNote')
+              }}
             >
-              <Toggle
-                left={t('ui.probe.external')}
-                right={t('ui.probe.internal')}
-                value={edgeInternal}
-                onChange={(v) => {
-                  setEdgeInternal(v)
-                  setSel(null)
-                }}
-              />
-              {/* With no plate in the setup at all, this checkbox has nothing to
-                  offer and its remembered state would only mislead. */}
-              {!noPlate && (
-                <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-300">
-                  <input type="checkbox" checked={edgeTouchPlate} onChange={(e) => setEdgeTouchPlate(e.target.checked)} />
-                  {t('ui.probe.useTouchPlate')}
-                  {edgeTouchPlate && (
-                    <span className="font-mono text-slate-500">
-                      (a {p.edgePlateX} · b {p.edgePlateY} mm)
-                    </span>
-                  )}
-                </label>
-              )}
-              {/* External corners: front-left only. That corner sets all three axes
-                  at once, and picking the wrong one does not look wrong — it shifts
-                  the entire cut by the width of the stock, into the table beside a
-                  workpiece the tool never reaches. CAM puts the origin front-left and
-                  the homing corner is already locked there. Edges stay open on all
-                  four sides, and so does the internal corner: those zero one axis or
-                  a pocket, where the operator is picking a feature, not an origin. */}
+              {/* The choice IS the answer: each button is the zero you end up with,
+                  so nothing has to be worked out from a face and a mode. Left as
+                  symbols in every language — X0 is X0. */}
+              <div className="grid grid-cols-4 overflow-hidden rounded-md border border-border2">
+                {(['x', 'y', 'xy', 'xyz'] as const).map((z) => (
+                  <button
+                    key={z}
+                    onClick={() => {
+                      setZero(z)
+                      setResult(null)
+                    }}
+                    className={`py-1.5 font-mono text-xs transition ${
+                      zero === z ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {z.toUpperCase()}0
+                  </button>
+                ))}
+              </div>
+              {/* Clicking the corner keeps whichever of XY0 / XYZ0 is already chosen.
+                  The dot says WHERE the tool goes; it must not quietly decide whether
+                  a Z zero gets written on top of one you already set. */}
               <div className="my-3 flex justify-center">
                 <ProbeDiagram
-                  internal={edgeInternal}
-                  selectedKey={sel?.key ?? null}
-                  onSelect={setSel}
-                  frontLeftOnly={!edgeInternal}
+                  spot={zero === 'x' || zero === 'y' ? zero : 'corner'}
+                  onSelect={(s) => setZero(s === 'corner' ? (zero === 'xy' ? 'xy' : 'xyz') : s)}
                 />
               </div>
-              <p className="mb-2 text-center text-[11px] text-slate-400">
-                {sel ? t('ui.probe.placeDot') : t(edgeInternal ? 'ui.probe.pickHint' : 'ui.probe.pickHintFL')}
-              </p>
+              <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
               <RunBtn
-                disabled={!canRun || !sel}
-                onClick={runEdgeOrCorner}
+                disabled={!canRun}
+                onClick={runZeroing}
                 label={
-                  busy
-                    ? `${t('ui.probe.holeRunning')} ${step}`
-                    : sel?.kind === 'corner'
-                      ? t('ui.probe.runCorner')
-                      : t('ui.probe.runEdge')
+                  busy ? runningLabel(t, step) : t(zero === 'x' || zero === 'y' ? 'ui.probe.runEdge' : 'ui.probe.runCorner')
                 }
               />
             </ModeCard>
           )}
 
           {tab === 'rotate' && (
-            <ModeCard title={t('ui.probe.mode.rotate')} hint={t('ui.probe.rotateHint')}>
+            <ModeCard
+              title={t('ui.probe.mode.rotate')}
+              hint={t('ui.probe.rotateHint')}
+              info={{
+                title: t('ui.probe.mode.rotate'),
+                body: [t('ui.probe.info.skew1'), t('ui.probe.info.skew2')],
+                note: t('ui.probe.info.skewNote')
+              }}
+            >
               {/* No edge to pick: the cycle starts at the front-left corner, like
                   the three-axis zero, and measures along the front edge from there. */}
               <div className="mb-3 flex justify-center">
-                <ProbeDiagram internal={false} selectedKey="c-fl" onSelect={() => {}} frontLeftOnly />
+                <ProbeDiagram spot="corner" />
               </div>
               <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
+              {/* Kept in the panel rather than sent off to Settings: it is the one
+                  number you change per part, not per machine. It persists all the
+                  same — a spacing measured for a particular workpiece should not be
+                  lost by closing the window. */}
               <div className="mb-3 flex justify-center">
-                <ProbeField label={t('ui.probe.spacing')} unit="mm" value={rotSpacing} onChange={setRotSpacing} />
+                <ProbeField
+                  label={t('ui.probe.spacing')}
+                  unit="mm"
+                  value={p.skewSpacing}
+                  onChange={(v) => setP({ skewSpacing: v })}
+                />
               </div>
               <RunBtn
                 disabled={!canRun}
                 onClick={runRotate}
-                label={busy ? `${t('ui.probe.holeRunning')} ${step}` : t('ui.probe.runRotate')}
+                label={busy ? runningLabel(t, step) : t('ui.probe.runRotate')}
               />
 
               {/* measured → apply to the G-code (software rotation about work origin) */}
@@ -313,7 +328,13 @@ export function ProbePanel(): JSX.Element | null {
               {result.msg}
             </div>
           )}
-          {!ready && <p className="text-[11px] text-warn">{t('ui.probe.notReady')}</p>}
+          {/* Naming the state it is actually in: "must be Idle" left the operator to
+              work out which of connection, alarm or a running job was in the way. */}
+          {!ready && (
+            <p className="text-[11px] text-warn">
+              {t('ui.probe.notReady', { state: connected ? base || '—' : t('ui.fm.notConnected') })}
+            </p>
+          )}
           <p className="font-mono text-[10px] leading-relaxed text-danger/80">⚠ {t('ui.probe.warn')}</p>
           <button
             className="w-full text-center text-[11px] text-slate-500 transition hover:text-brand"
@@ -329,45 +350,68 @@ export function ProbePanel(): JSX.Element | null {
 
 // ── small pieces ─────────────────────────────────────────────────────────────
 
-function Toggle({
-  left,
-  right,
-  value,
-  onChange
+/** What the cycle writes, which is the thing the operator actually chooses. The
+ *  first two are one face; the last two are the same corner cycle, differing only
+ *  in whether the top contact becomes Z0. */
+type Zero = 'x' | 'y' | 'xy' | 'xyz'
+
+/**
+ * One mode's card. The hint on the face of it answers only two questions — what the
+ * cycle sets, and where to park the tool — because those are the two you need with a
+ * tool in your hand. The rest of it (how the cycle moves, what it needs of the
+ * workpiece, why only one corner is offered) sits behind the ⓘ, which is where it
+ * stops being a wall of text above a diagram that already shows the same thing.
+ */
+function ModeCard({
+  title,
+  hint,
+  info,
+  children
 }: {
-  left: string
-  right: string
-  value: boolean
-  onChange: (v: boolean) => void
+  title: string
+  hint: string
+  info?: { title: string; body: string[]; note?: string }
+  children: React.ReactNode
 }): JSX.Element {
   return (
-    <div className="flex overflow-hidden rounded-md border border-border2">
-      {[
-        [false, left],
-        [true, right]
-      ].map(([v, lbl]) => (
-        <button
-          key={String(v)}
-          onClick={() => onChange(v as boolean)}
-          className={`flex-1 py-1.5 font-mono text-xs transition ${
-            value === v ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          {lbl as string}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function ModeCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }): JSX.Element {
-  return (
     <div className="rounded-lg border border-border bg-panel2 p-3">
-      <div className="mb-1 text-xs font-semibold text-slate-200">{title}</div>
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className="text-xs font-semibold text-slate-200">{title}</span>
+        {info && <InfoTip title={info.title} body={info.body} note={info.note} width="w-72" />}
+      </div>
       <p className="mb-3 text-[11px] leading-relaxed text-slate-400">{hint}</p>
       {children}
     </div>
   )
+}
+
+/** "Probing the X face…" — during a corner cycle the useful thing to show is which
+ *  face it is on now, not the bare letter the routine happens to report. */
+function runningLabel(t: TFunc, step: string): string {
+  const KEY: Record<string, string> = { Z: 'ui.probe.step.z', X: 'ui.probe.step.x', Y: 'ui.probe.step.y', '∠': 'ui.probe.step.far' }
+  return t('ui.probe.runningAt', { what: KEY[step] ? t(KEY[step]) : step })
+}
+
+/** The cycle's internal error text, turned into something to act on.
+ *
+ *  probeRun speaks in short phrases meant for a log — "X+ no contact", "probe already
+ *  touching" — and that is fine for a log. On screen it is the wrong end of the
+ *  problem: a probe that failed has left a tool somewhere unexpected, and the operator
+ *  needs the next move, not the symptom. This is the only reader of those strings, so
+ *  they stay stable there and become sentences here. Anything unrecognised passes
+ *  through unchanged rather than being swallowed. */
+function probeErr(t: TFunc, msg: string): string {
+  const nc = /^([XYZ][+-]) no contact$/.exec(msg)
+  if (nc) return t('ui.probe.err.noContact', { dir: nc[1] })
+  const KEY: Record<string, string> = {
+    'machine alarmed': 'ui.probe.err.alarm',
+    'connection lost': 'ui.probe.err.lost',
+    'probe timeout': 'ui.probe.err.timeout',
+    'probe already touching': 'ui.probe.err.touching',
+    'machine did not stop': 'ui.probe.err.notStopped',
+    'no-pos': 'ui.probe.err.noPos'
+  }
+  return KEY[msg] ? t(KEY[msg]) : msg
 }
 
 function RunBtn({ disabled, onClick, label }: { disabled: boolean; onClick: () => void; label: string }): JSX.Element {

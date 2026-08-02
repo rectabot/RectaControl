@@ -148,10 +148,10 @@ async function settle(maxMs = 30000): Promise<void> {
  *  usual causes are worth naming rather than coding around: the tool is resting on the
  *  plate, or the wire is shorted, or `$6` inverts the probe input the wrong way and the
  *  board believes it is touching all the time. */
-async function probeAxis(axis: Axis, dir: Dir, p: ProbeParams): Promise<Prb> {
+async function probeAxis(axis: Axis, dir: Dir, p: ProbeParams, reach = p.probeDistance): Promise<Prb> {
   await settle()
   if ((useStore.getState().status?.pins ?? '').includes('P')) throw new Error('probe already touching')
-  await probeStep(axis, dir, p.probeDistance, p.searchFeed)
+  await probeStep(axis, dir, reach, p.searchFeed)
   rel(axis, -dir * p.latchDistance) // back off the surface
   return probeStep(axis, dir, p.latchDistance * 2, p.latchFeed)
 }
@@ -368,7 +368,25 @@ export async function runSkew(
     onStep?.('∠')
     rel('Y', -yDir * p.approach) // clear of the face, where it stood before probing
     rel('X', xDir * spacing) // along the edge
-    const far = await probeAxis('Y', yDir, p)
+
+    // This one probe reaches further than `probeDistance`, and only this one.
+    //
+    // The tool stands `approach` off the face where it touched it. Fifty millimetres
+    // later the face has moved by `spacing · tan(skew)` — away from the tool if the
+    // part leans that way — so the reach it needs is the standing-off distance plus
+    // that drift. With 22 mm of approach against a 25 mm limit there were three
+    // millimetres of headroom, which is 3.4° of skew, and Filip's part was past it:
+    // the probe ran out of travel and reported no contact on a part that was there.
+    //
+    // The first three probes keep the tight limit and should. They approach a face
+    // that is where the operator put the tool, and a long search there is a tool
+    // travelling into something unknown. This one is the opposite: the whole cycle
+    // exists to find out how far the edge has wandered, so the distance is derived
+    // from how far it is allowed to have wandered. Past MAX_SKEW the part is not
+    // crooked, it is clamped wrong, and "no contact" is the right answer.
+    const MAX_SKEW_DEG = 10
+    const reach = Math.max(p.probeDistance, p.approach + spacing * Math.tan((MAX_SKEW_DEG * Math.PI) / 180))
+    const far = await probeAxis('Y', yDir, p, reach)
     rel('Z', drop) // lift clear of the part before coming home
     gotoMachine('Y', sy)
     gotoMachine('X', sx)

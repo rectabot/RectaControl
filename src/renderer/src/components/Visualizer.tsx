@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useStore, rotaryRadius, rotarySweptRadius } from '../store'
 import { readDump } from '../readDump'
+import { readOffsets } from '../offsets'
 import { parseToolpath, usesRotary } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 import { ViewerControls } from './ViewerControls'
@@ -937,11 +938,13 @@ export function Visualizer(): JSX.Element {
     }
     if (busy || didConnectRead.current) return
     didConnectRead.current = true
-    // `$$` goes through the shared reader: the Settings panel wants the same 116
-    // lines on the same reconnect, and two requests brought back both copies — which
-    // is not merely waste, see readDump. `$#` stays direct; it is one line, and
-    // nobody else asks for it at this moment.
-    window.recta.send('$#')
+    // Both go through the shared readers, because somebody else wants exactly these
+    // lines at exactly this moment: the Settings panel reads `$$`, and App reads the
+    // offsets. Neither reply is ours alone — they land in the store, which is where
+    // this component takes them from — so the only thing worth owning is that they
+    // happen. Asking separately put a second `$$` (116 lines) and a second `$#` (15)
+    // on the wire on every connect.
+    void readOffsets()
     void readDump({ quiet: true })
   }, [connected, busy, setSuppressLog])
 

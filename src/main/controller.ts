@@ -123,7 +123,7 @@ export class Controller {
     this.startPoll()
     // ask the controller who it is + current parser state (WCS / units)
     setTimeout(() => this.sendLine('$I'), 250)
-    setTimeout(() => this.sendLine('$G'), 400)
+    this.askParserState(400)
     // enumerate the registered spindles (machine-readable) so the $395 picker can
     // list the real drivers this firmware carries (analog PWM + every Modbus VFD).
     setTimeout(() => this.sendLine('$SPINDLESH'), 550)
@@ -198,6 +198,26 @@ export class Controller {
    *  line to come back. `$I` is the right probe — it is refused in no state, it does
    *  not move anything, and its reply is the same information the app wants anyway.
    */
+  /** Ask for the parser state (`$G`) — at most once per connection event.
+   *
+   *  Two places want it and both are right: opening a connection, because we do not
+   *  know what WCS or units the board is in, and the grblHAL greeting, because a
+   *  reset takes the parser state and the homed reference with it.
+   *
+   *  They are not two events, though. That banner means BOTH "I have just booted"
+   *  AND "hello, new connection" — it arrives about a millisecond after the socket
+   *  opens — so every ordinary connect fired both and asked twice. Same trap that
+   *  had me telling Filip the board had rebooted when it had not (1 Aug 2026), seen
+   *  from the other side. Whichever fires first wins and the other stands down; the
+   *  window is wide enough to cover the gap between them and far short of anything
+   *  that could legitimately ask again. */
+  private lastParserAsk = 0
+  private askParserState(delayMs: number): void {
+    if (Date.now() - this.lastParserAsk < 1500) return
+    this.lastParserAsk = Date.now()
+    setTimeout(() => this.sendLine('$G'), delayMs)
+  }
+
   probeLine(timeoutMs = 2500): Promise<boolean> {
     if (!this.transport?.isOpen) return Promise.resolve(false)
     return new Promise((resolve) => {
@@ -535,7 +555,7 @@ export class Controller {
       // the restart took the planner and the position with it, so anything we were
       // streaming is void — drop it rather than carry it across the reset
       if (this.running) abortAfter = true
-      setTimeout(() => this.sendLine('$G'), 200)
+      this.askParserState(200)
     }
 
     // job flow control: ok / error answer the lines we metered out — the program's

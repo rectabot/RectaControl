@@ -346,12 +346,16 @@ export async function runSkew(
   try {
     const { ly, sx, sy, drop } = await cornerXYZ(xDir, yDir, p, plate, onStep)
 
-    // Step along the front edge and touch it again. `xDir` points from the tool
-    // toward the X face, so the material lies the other way — which is where the
-    // second point has to be.
+    // Step along the front edge and touch it again.
+    //
+    // The direction is `+xDir`, and getting that backwards is what the first hardware
+    // run caught: the corner cycle moves `-xDir * approach` to get OUT past the X
+    // face, so the face lies that way and the BODY of the workpiece lies the other —
+    // along +xDir. Going the other way walks off the end of the part into open air,
+    // and the second Y probe then finds nothing to touch. On a front-left corner that
+    // is a confident 50 mm to the left of a workpiece extending to the right.
     onStep?.('∠')
-    const along = -xDir * spacing
-    gotoMachine('X', sx + along)
+    gotoMachine('X', sx + xDir * spacing)
     rel('Y', -yDir * p.approach) // out past the Y face, as before
     rel('Z', -drop) // and down to the same depth as the first touch
     const far = await probeAxis('Y', yDir, p)
@@ -361,8 +365,11 @@ export async function runSkew(
 
     onStep?.('done')
     const delta = AX(far, 'Y') - AX(ly, 'Y')
-    // measured along +X, whichever way the routine actually walked
-    const deg = (Math.atan2(delta * -xDir, spacing) * 180) / Math.PI
+    // The rise is per +X of machine travel, so it is measured against the direction
+    // the routine actually walked. `delta * xDir` rather than dividing by `xDir *
+    // spacing`, which would hand atan2 a negative second argument and fold the answer
+    // around ±180° instead of changing its sign.
+    const deg = (Math.atan2(delta * xDir, spacing) * 180) / Math.PI
     return { ok: true, angle: deg, note: `∠ ${deg.toFixed(3)}°  ·  Δ ${fmt(delta)} / ${spacing} mm` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }

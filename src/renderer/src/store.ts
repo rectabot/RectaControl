@@ -1058,12 +1058,21 @@ export const useStore = create<AppState>((set, get) => ({
           // Alarms are NOT included: an E-stop during a restore is real, is the
           // operator's business immediately, and has nothing to do with the writing.
           const alarmState = (s.status?.state ?? '').split(':')[0] === 'Alarm'
+          // OURS: an error a routine of ours provoked, rather than one the machine
+          // volunteered. Kept apart from the alarm case below because the two want
+          // different things from the footer — an alarm's wake stays written there
+          // (it is true, and the operator is dealing with the alarm anyway), while
+          // this must leave no mark at all. The footer draws from two places and
+          // suppressing only the alert was half a fix: the transient message still
+          // flashed "error:10 — Soft limits need homing" and then cleared itself,
+          // which is arguably worse than leaving it up — a red line nobody can read
+          // twice is a thing you cannot check afterwards.
+          const ours = parsed?.kind === 'error' && (s.bulkWriting || s.rescueRunning)
           const echo =
             parsed?.kind === 'error' &&
             ((s.alert?.kind === 'alarm' && (alarmState || s.resetRequired || critical)) ||
               (parsed.detail.code === 79 && (s.resetRequired || critical)) ||
-              s.bulkWriting ||
-              s.rescueRunning)
+              ours)
           const recover =
             parsed && !echo && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
           const sameAlert =
@@ -1098,7 +1107,8 @@ export const useStore = create<AppState>((set, get) => ({
             ...alertPatch,
             ...resetPatch,
             ...limitsPatch,
-            ...(banner ? { message: null } : msg ? { message: msg } : {}),
+            // `ours` keeps the footer clean; the line still reaches the console below
+            ...(banner ? { message: null } : msg && !ours ? { message: msg } : {}),
             ...(gc.wcs ? { wcs: gc.wcs } : {}),
             ...(mSet
               ? { settingValues: { ...s.settingValues, [Number(mSet[1])]: mSet[2].trim() } }

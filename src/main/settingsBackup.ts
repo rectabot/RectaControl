@@ -70,11 +70,11 @@ export function listBackups(spindles: SpindleInfo[] = []): BackupRow[] {
     // the person the limits exist for, and this is the one moment we are certain they
     // are looking. Cheap, idempotent, and it runs before the list is built, so what
     // comes back is what is actually on disk.
-    tidy(dir)
+    const kept = tidy(dir)
     const rows: BackupRow[] = readdirSync(dir)
       .filter((f) => f === 'latest.txt' || f.startsWith('settings_') || f.startsWith('baseline_'))
       .map((name) => {
-        const text = readBackup(name) ?? ''
+        const text = kept.get(name) ?? readBackup(name) ?? ''
         return {
           name,
           kind: name === 'latest.txt' ? 'latest' : name.startsWith('baseline_') ? 'baseline' : 'history',
@@ -168,10 +168,13 @@ function prune(dir: string, files: string[], keep: number): void {
  *  of each content is the one kept — "these settings have existed since 30 Jul" is a
  *  more useful thing for a row to say than "…and also at 13:04, and 13:07, and 13:09".
  */
-function tidy(dir: string): void {
+/** Returns the dated files that survived, with the contents already read — the caller
+ *  is usually about to want exactly that, and reading every file twice per call is a
+ *  cost paid on the main process, which is where the board's connection lives. */
+function tidy(dir: string): Map<string, string> {
+  const kept = new Map<string, string>()
   try {
     const seen = new Set<string>()
-    const distinct: string[] = []
     for (const f of datedFiles(dir)) {
       // oldest first, so the survivor of a duplicate set is the earliest one
       let text: string
@@ -183,16 +186,21 @@ function tidy(dir: string): void {
       if (seen.has(text)) rmSync(join(dir, f), { force: true })
       else {
         seen.add(text)
-        distinct.push(f)
+        kept.set(f, text)
       }
     }
-    prune(dir, distinct, KEEP_DATED)
+    const over = [...kept.keys()].slice(0, Math.max(0, kept.size - KEEP_DATED))
+    for (const f of over) {
+      rmSync(join(dir, f), { force: true })
+      kept.delete(f)
+    }
     // The diagnostic piles never had a ceiling at all.
     for (const kind of ['factory_', 'partial_'])
       prune(dir, readdirSync(dir).filter((f) => f.startsWith(kind)).sort(), KEEP_ASIDE)
   } catch {
     // housekeeping is never worth failing a backup — or a settings read — over
   }
+  return kept
 }
 
 function stamp(): string {

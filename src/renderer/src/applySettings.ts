@@ -200,18 +200,39 @@ export async function applySettings(
  *  `reconnect.ts` for why the two must not be chosen separately. Waiting this long
  *  costs nothing while the board is quick (the poll below returns the moment the
  *  parser answers); the price is paid only when the board is truly not coming back,
- *  which is a thing worth being sure about before saying it. */
+ *  which is a thing worth being sure about before saying it.
+ *
+ *  It also SAYS how long each part took, which is why the numbers below exist. A
+ *  restart is the slowest thing this app ever does to a machine and the one an
+ *  operator watches most closely, and until now the log recorded only the moment the
+ *  link came back — so "it felt slower than before" could not be answered, by them or
+ *  by us. Three spans, and they fail in different places: the board booting, us
+ *  noticing it has, and the parser being ready to be written to. On 2 Aug 2026 the
+ *  board was answering in 30 ms a full 14 s before anything asked it anything, and
+ *  that gap was invisible. */
 async function waitForBoard(
   onProgress?: (frac: number) => void,
   totalMs = RECONNECT_GIVE_UP_MS
 ): Promise<boolean> {
   const start = Date.now()
+  const since = (): string => `${((Date.now() - start) / 1000).toFixed(1)} s`
+  const note = (text: string): void => void window.recta.logWrite('ui', `reboot wait: ${text}`)
+  let linked = false
   await new Promise((r) => setTimeout(r, 2500)) // do not probe into the reset itself
   while (Date.now() - start < totalMs) {
-    if (useStore.getState().connected && (await window.recta.rescueProbe(1500))) return true
+    const up = useStore.getState().connected
+    if (up && !linked) {
+      linked = true
+      note(`link back after ${since()}`)
+    }
+    if (up && (await window.recta.rescueProbe(1500))) {
+      note(`parser answered after ${since()} — writing what the restart was for`)
+      return true
+    }
     onProgress?.(Math.min(1, (Date.now() - start) / totalMs))
     await new Promise((r) => setTimeout(r, 700))
   }
+  note(`gave up after ${since()} (link ${linked ? 'came back' : 'never returned'})`)
   return false
 }
 

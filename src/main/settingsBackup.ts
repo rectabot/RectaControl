@@ -66,6 +66,11 @@ export function settingsDir(): string {
 export function listBackups(spindles: SpindleInfo[] = []): BackupRow[] {
   try {
     const dir = settingsDir()
+    // The other end of the clean-up (see tidy): whoever is about to READ this list is
+    // the person the limits exist for, and this is the one moment we are certain they
+    // are looking. Cheap, idempotent, and it runs before the list is built, so what
+    // comes back is what is actually on disk.
+    tidy(dir)
     const rows: BackupRow[] = readdirSync(dir)
       .filter((f) => f === 'latest.txt' || f.startsWith('settings_') || f.startsWith('baseline_'))
       .map((name) => {
@@ -147,6 +152,47 @@ function datedFiles(dir: string): string[] {
 function prune(dir: string, files: string[], keep: number): void {
   for (const old of files.slice(0, Math.max(0, files.length - keep)))
     rmSync(join(dir, old), { force: true })
+}
+
+/** Bring the folder back inside its limits.
+ *
+ *  Called from BOTH ends, and that is the fix rather than the tidiness: hanging the
+ *  clean-up off the write path alone meant a folder full of duplicates stayed full
+ *  until somebody happened to change a setting. Filip saw exactly that — the new
+ *  rules were in, the old pile was still there, and nothing he could do would clear
+ *  it because clearing it was waiting on an event that had no reason to come.
+ *
+ *  Duplicates go FIRST, and by content rather than by age. Capping to the newest five
+ *  files is not the same as keeping five states: among thirty dumps holding seven
+ *  distinct contents, the five newest can easily be three machines. The oldest copy
+ *  of each content is the one kept — "these settings have existed since 30 Jul" is a
+ *  more useful thing for a row to say than "…and also at 13:04, and 13:07, and 13:09".
+ */
+function tidy(dir: string): void {
+  try {
+    const seen = new Set<string>()
+    const distinct: string[] = []
+    for (const f of datedFiles(dir)) {
+      // oldest first, so the survivor of a duplicate set is the earliest one
+      let text: string
+      try {
+        text = readFileSync(join(dir, f), 'utf8')
+      } catch {
+        continue // unreadable: leave it alone rather than delete what we cannot see
+      }
+      if (seen.has(text)) rmSync(join(dir, f), { force: true })
+      else {
+        seen.add(text)
+        distinct.push(f)
+      }
+    }
+    prune(dir, distinct, KEEP_DATED)
+    // The diagnostic piles never had a ceiling at all.
+    for (const kind of ['factory_', 'partial_'])
+      prune(dir, readdirSync(dir).filter((f) => f.startsWith(kind)).sort(), KEEP_ASIDE)
+  } catch {
+    // housekeeping is never worth failing a backup — or a settings read — over
+  }
 }
 
 function stamp(): string {
@@ -274,11 +320,7 @@ export class SettingsBackup {
       }
 
       writeFileSync(join(dir, `settings_${stamp()}.txt`), text, 'utf8')
-      prune(dir, datedFiles(dir), KEEP_DATED)
-      // The diagnostic piles get a ceiling too, in the one place that runs often
-      // enough to keep them at it and rarely enough to cost nothing.
-      for (const kind of ['factory_', 'partial_'])
-        prune(dir, readdirSync(dir).filter((f) => f.startsWith(kind)).sort(), KEEP_ASIDE)
+      tidy(dir)
     } catch {
       // a backup is a convenience: never let a full disk or a locked file take
       // the connection down with it

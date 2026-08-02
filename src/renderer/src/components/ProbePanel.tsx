@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT, useLabel } from '../i18n'
 import { ProbeDiagram, type ProbeSel } from './ProbeDiagram'
-import { runZ, runEdge, runCorner, runCornerExternal3, runRotation } from '../probeRun'
+import { runZ, runEdge, runCorner, runCornerExternal3, runSkew } from '../probeRun'
 import { ProbeField } from './ProbeFields'
 import { ProbeIcon } from './icons'
 
@@ -62,8 +62,7 @@ export function ProbePanel(): JSX.Element | null {
   const [edgeInternal, setEdgeInternal] = useState(false)
   const [edgeTouchPlate, setEdgeTouchPlate] = useState(true)
   const [sel, setSel] = useState<ProbeSel | null>(null)
-  const [rotSel, setRotSel] = useState<ProbeSel | null>(null)
-  const [rotSpacing, setRotSpacing] = useState(75)
+  const [rotSpacing, setRotSpacing] = useState(50)
   const [measuredAngle, setMeasuredAngle] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
@@ -89,12 +88,15 @@ export function ProbePanel(): JSX.Element | null {
   // rotation mode has its own handler (not the shared guard) so it can capture the
   // numeric angle for the "apply to G-code" step
   const runRotate = (): void => {
-    if (rotSel?.kind !== 'edge' || !canRun) return
+    if (!canRun) return
     setBusy(true)
     setResult(null)
     setMeasuredAngle(null)
     void (async () => {
-      const r = await runRotation(rotSel.axis, rotSel.dir, rotSpacing, pp, setStep)
+      // same front-left corner as the three-axis zero, and the same plate rails —
+      // the skew cycle IS that cycle plus one more touch further along the edge
+      const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
+      const r = await runSkew(1, 1, rotSpacing, pp, plate, setStep)
       setBusy(false)
       setStep('')
       setResult({ ok: r.ok, msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.holeErr', { msg: r.error || '' }) })
@@ -250,17 +252,17 @@ export function ProbePanel(): JSX.Element | null {
 
           {tab === 'rotate' && (
             <ModeCard title={t('ui.probe.mode.rotate')} hint={t('ui.probe.rotateHint')}>
+              {/* No edge to pick: the cycle starts at the front-left corner, like
+                  the three-axis zero, and measures along the front edge from there. */}
               <div className="mb-3 flex justify-center">
-                <ProbeDiagram internal={false} selectedKey={rotSel?.key ?? null} onSelect={setRotSel} edgesOnly />
+                <ProbeDiagram internal={false} selectedKey="c-fl" onSelect={() => {}} frontLeftOnly />
               </div>
-              <p className="mb-2 text-center text-[11px] text-slate-400">
-                {rotSel?.kind === 'edge' ? t('ui.probe.placeDot') : t('ui.probe.rotatePick')}
-              </p>
+              <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
               <div className="mb-3 flex justify-center">
                 <ProbeField label={t('ui.probe.spacing')} unit="mm" value={rotSpacing} onChange={setRotSpacing} />
               </div>
               <RunBtn
-                disabled={!canRun || rotSel?.kind !== 'edge'}
+                disabled={!canRun}
                 onClick={runRotate}
                 label={busy ? `${t('ui.probe.holeRunning')} ${step}` : t('ui.probe.runRotate')}
               />

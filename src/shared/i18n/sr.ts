@@ -735,8 +735,7 @@ export const sr: Record<string, string> = {
   'ui.probe.mode.hole': 'Rupa ⊙',
   'ui.probe.mode.rotate': 'Ugao ∠',
   'ui.probe.rotateHint':
-    'Provera koliko je komad upravan (uravnat). Izaberi ivicu, dovezi alat pored nje na dubini reza, pa Start. Probа dve tačke duž te ivice (na „Razmak" razmaka) i prijavi ugao odstupanja — pa ga primeni na G-kod (putanja se rotira da prati ukošen komad) ili broj iskoristi da fizički poravnaš komad (kucni ga). Samo provodan komad.',
-  'ui.probe.rotatePick': 'Klikni jednu ivicu gore da izmeriš njen ugao.',
+    'Koliko je komad zakošen. Isti start kao trosni ćošak: dovezi alat unutar prednjeg-levog ćoška, iznad vrha. Probа vrh, pa X lice, pa Y lice — taj ćošak postaje nula — pa se pomeri za „Razmak" duž prednje ivice i pipne je još jednom. Ta dva Y dodira daju ugao. Primeni ga na G-kod pa se putanja zaokrene da prati ukošen komad, ili broj iskoristi da kucneš komad da stane pravo. Samo provodan komad.',
   'ui.probe.spacing': 'Razmak',
   'ui.probe.runRotate': 'Izmeri ugao',
   // softverska rotacija komada (primeni izmereni ugao na G-kod)

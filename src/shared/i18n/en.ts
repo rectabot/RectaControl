@@ -754,8 +754,7 @@ export const en: Record<string, string> = {
   'ui.probe.mode.hole': 'Hole ⊙',
   'ui.probe.mode.rotate': 'Angle ∠',
   'ui.probe.rotateHint':
-    'Check how square the workpiece sits. Pick an edge, jog the tool beside it at cutting depth, then Start. It probes two points along that edge (Spacing apart) and reports the skew angle — then apply it to the G-code (the toolpath rotates to match the crooked part) or use the number to tap the part square. Conductive workpiece only.',
-  'ui.probe.rotatePick': 'Click one edge above to measure its angle.',
+    'How far the workpiece is turned. Same start as the three-axis zero: jog the tool inside the front-left corner, over the top. It probes the top, then the X face, then the Y face — that corner becomes the zero — then steps Spacing along the front edge and touches it once more. The two Y contacts give the angle. Apply it to the G-code and the toolpath turns to match the crooked part, or use the number to tap the part straight. Conductive workpiece only.',
   'ui.probe.spacing': 'Spacing',
   'ui.probe.runRotate': 'Measure angle',
   // software workpiece rotation (apply the measured angle to the G-code)

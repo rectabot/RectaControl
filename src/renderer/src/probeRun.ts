@@ -246,6 +246,57 @@ export async function runCorner(
  * (> approach) into positive machine space so there's room to move around it.
  * `plate` = sideways touch-plate thickness for the X/Y faces (0 = direct touch).
  */
+/** The corner itself, shared by the plain three-axis zero and the skew measurement.
+ *
+ *  Kept as one routine on purpose: the skew cycle begins with exactly these three
+ *  probes — Filip's words, "first it measures the corner by height, then from that
+ *  zero it knows to drop 5 mm and touch X, then it moves to Y and touches there, and
+ *  then we have the corner point" — and two copies of a sequence that drives a tool
+ *  around a workpiece is two places for a clearance to go wrong.
+ *
+ *  Returns the two side contacts in machine coordinates and the start position, which
+ *  is what a caller needs to go and probe somewhere else along the same edge. */
+async function cornerXYZ(
+  xDir: Dir,
+  yDir: Dir,
+  p: ProbeParams,
+  plate: Plate,
+  onStep?: (s: string) => void
+): Promise<{ lx: Prb; ly: Prb; sx: number; sy: number; drop: number }> {
+  const s = startPos()
+  if (!s) throw new Error('no-pos')
+  const [sx, sy] = s
+  const offX = p.tipDiameter / 2 + plate.x
+  const offY = p.tipDiameter / 2 + plate.y
+  // relative Z moves (referenced to the surface contact) so the routine doesn't
+  // depend on Z0 being set, and is robust across WCS.
+  const lift = p.retract // clear above the surface to move laterally
+  const drop = p.retract + p.depth // from +retract above surface to `depth` below
+
+  onStep?.('Z')
+  await probeAxis('Z', -1, p) // probe the top surface (tool ends on the surface)
+  apply('Z', p.thickness)
+  rel('Z', lift) // up, clear of the top
+
+  onStep?.('X')
+  rel('X', -xDir * p.approach) // move out past the X face
+  rel('Z', -drop) // drop beside the face
+  const lx = await probeAxis('X', xDir, p)
+  apply('X', -xDir * offX)
+  rel('Z', drop) // back up
+  gotoMachine('X', sx) // back over the material in X
+
+  onStep?.('Y')
+  rel('Y', -yDir * p.approach)
+  rel('Z', -drop)
+  const ly = await probeAxis('Y', yDir, p)
+  apply('Y', -yDir * offY)
+  rel('Z', drop)
+  gotoMachine('Y', sy)
+
+  return { lx, ly, sx, sy, drop }
+}
+
 export async function runCornerExternal3(
   xDir: Dir,
   yDir: Dir,
@@ -253,37 +304,8 @@ export async function runCornerExternal3(
   plate: Plate = NO_PLATE,
   onStep?: (s: string) => void
 ): Promise<ProbeResult> {
-  const s = startPos()
-  if (!s) return { ok: false, error: 'no-pos' }
-  const [sx, sy] = s
-  const offX = p.tipDiameter / 2 + plate.x
-  const offY = p.tipDiameter / 2 + plate.y
-  // relative Z moves (referenced to the surface contact) so the routine doesn't
-  // depend on Z0 being set — works for Measure too, and is robust across WCS.
-  const lift = p.retract // clear above the surface to move laterally
-  const drop = p.retract + p.depth // from +retract above surface to `depth` below
   try {
-    onStep?.('Z')
-    await probeAxis('Z', -1, p) // probe the top surface (tool ends on the surface)
-    apply('Z', p.thickness)
-    rel('Z', lift) // up, clear of the top
-
-    onStep?.('X')
-    rel('X', -xDir * p.approach) // move out past the X face
-    rel('Z', -drop) // drop beside the face
-    const lx = await probeAxis('X', xDir, p)
-    apply('X', -xDir * offX)
-    rel('Z', drop) // back up
-    gotoMachine('X', sx) // back over the material in X
-
-    onStep?.('Y')
-    rel('Y', -yDir * p.approach)
-    rel('Z', -drop)
-    const ly = await probeAxis('Y', yDir, p)
-    apply('Y', -yDir * offY)
-    rel('Z', drop)
-    gotoMachine('Y', sy)
-
+    const { lx, ly } = await cornerXYZ(xDir, yDir, p, plate, onStep)
     onStep?.('done')
     return { ok: true, note: `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))} · Z ✓` }
   } catch (e) {
@@ -292,40 +314,55 @@ export async function runCornerExternal3(
 }
 
 /**
- * Workpiece rotation / squareness: probe ONE edge at TWO points `spacing` apart and
- * report the skew angle of that edge versus the machine axis. From a start beside the
- * edge (green dot), it probes point 1, backs off, moves `spacing` ALONG the edge,
- * probes point 2, then returns. angle = atan2(Δperp, spacing).
+ * How far the workpiece is turned, measured from the corner it is zeroed on.
  *
- * `probeAx` = the axis pushed toward the edge (X for a left/right edge, Y for a
- * front/back edge); the edge itself runs along the OTHER axis, which is where we
- * step `spacing`. The touch-plate/tip offset cancels out (both points share it), so
- * the angle is independent of tool radius. This only MEASURES — grblHAL has no
- * coordinate rotation, so use the number to physically re-square the part (tap it).
+ * Filip's sequence, and the order matters: probe the top first so the sides can be
+ * touched a known depth below it, probe X to find the corner, probe Y to complete
+ * it — that is the corner point and the work zero — then step `spacing` along the
+ * front edge and touch Y a second time. Two Y contacts a known distance apart give
+ * the angle: atan(ΔY / spacing).
+ *
+ * The angle therefore describes THE EDGE THE Y PROBE TOUCHES, against the machine's
+ * X axis. On stock that is not square in itself, the other edge would answer
+ * differently — which is a property of the workpiece, not a fault in the measurement.
+ *
+ * Both Y contacts are made at the same depth and from the same side, by construction
+ * rather than by asking the operator to reproduce it: two points taken at different
+ * depths would fold the tilt of the face into a number that claims to be rotation.
+ * The tip radius and plate thickness cancel for the same reason — both points carry
+ * them equally — so the angle is independent of the tool.
+ *
+ * Kept separate from the plain corner cycle on Filip's call: skew is wanted only when
+ * it is wanted, and it costs an extra traverse and probe every time.
  */
-export async function runRotation(
-  probeAx: Axis,
-  dir: Dir,
+export async function runSkew(
+  xDir: Dir,
+  yDir: Dir,
   spacing: number,
   p: ProbeParams,
+  plate: Plate = NO_PLATE,
   onStep?: (s: string) => void
 ): Promise<ProbeResult> {
-  const s = startPos()
-  if (!s) return { ok: false, error: 'no-pos' }
-  const edgeAxis: Axis = probeAx === 'X' ? 'Y' : 'X'
-  const startAlong = probeAx === 'X' ? s[1] : s[0] // machine coord of edgeAxis at start
   try {
-    onStep?.('1')
-    const a = await probeAxis(probeAx, dir, p)
-    rel(probeAx, -dir * p.retract) // back off the edge
-    onStep?.('2')
-    rel(edgeAxis, spacing) // step along the edge
-    const b = await probeAxis(probeAx, dir, p)
-    rel(probeAx, -dir * p.retract)
-    gotoMachine(edgeAxis, startAlong) // slide back to the start along the edge
+    const { ly, sx, sy, drop } = await cornerXYZ(xDir, yDir, p, plate, onStep)
+
+    // Step along the front edge and touch it again. `xDir` points from the tool
+    // toward the X face, so the material lies the other way — which is where the
+    // second point has to be.
+    onStep?.('∠')
+    const along = -xDir * spacing
+    gotoMachine('X', sx + along)
+    rel('Y', -yDir * p.approach) // out past the Y face, as before
+    rel('Z', -drop) // and down to the same depth as the first touch
+    const far = await probeAxis('Y', yDir, p)
+    rel('Z', drop)
+    gotoMachine('Y', sy)
+    gotoMachine('X', sx)
+
     onStep?.('done')
-    const delta = AX(b, probeAx) - AX(a, probeAx)
-    const deg = (Math.atan2(delta, spacing) * 180) / Math.PI
+    const delta = AX(far, 'Y') - AX(ly, 'Y')
+    // measured along +X, whichever way the routine actually walked
+    const deg = (Math.atan2(delta * -xDir, spacing) * 180) / Math.PI
     return { ok: true, angle: deg, note: `∠ ${deg.toFixed(3)}°  ·  Δ ${fmt(delta)} / ${spacing} mm` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }

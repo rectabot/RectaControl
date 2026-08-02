@@ -386,6 +386,18 @@ interface AppState {
   bulkWriting: boolean
   /** The guided recovery dialog is open. */
   rescueWizardOpen: boolean
+  /** The guided recovery is actually RUNNING — erasing, restarting, writing back.
+   *
+   *  Distinct from the dialog merely being open, where the operator is still reading
+   *  and choosing a backup and any error is genuinely their news. Once it starts, the
+   *  errors it provokes are its own: erasing the settings makes the board answer
+   *  `error:7` ("a stored setting could not be read"), because that is precisely what
+   *  was asked for. The catalogue entry ends "persistent failures point to the storage
+   *  chip" — so the app spent 26 s on 2 Aug 2026 hinting at dying hardware to an
+   *  operator who had just pressed *erase the settings*. The procedure reports its own
+   *  outcome, step by step, and that report is better than anything the footer can say
+   *  over the top of it. */
+  rescueRunning: boolean
   /** The board is answering `?` but not commands — offer the recovery. Raised by the
    *  detector in App.tsx, cleared the moment the parser answers again. */
   rescueSuggested: boolean
@@ -591,6 +603,7 @@ interface AppState {
   setNoReconnect: (on: boolean) => void
   setBulkWriting: (on: boolean) => void
   setRescueWizardOpen: (open: boolean) => void
+  setRescueRunning: (on: boolean) => void
   setRescueSuggested: (on: boolean) => void
   /** One-tap escape from a limit switch: suspend hard limits, back the axis off by
    *  ESCAPE_MM in the chosen direction, and let the automatic restore re-arm them.
@@ -694,6 +707,7 @@ export const useStore = create<AppState>((set, get) => ({
   recoveryOpen: false,
   bulkWriting: false,
   rescueWizardOpen: false,
+  rescueRunning: false,
   rescueSuggested: false,
   noReconnect: false,
   alarmHandled: false,
@@ -1048,7 +1062,8 @@ export const useStore = create<AppState>((set, get) => ({
             parsed?.kind === 'error' &&
             ((s.alert?.kind === 'alarm' && (alarmState || s.resetRequired || critical)) ||
               (parsed.detail.code === 79 && (s.resetRequired || critical)) ||
-              s.bulkWriting)
+              s.bulkWriting ||
+              s.rescueRunning)
           const recover =
             parsed && !echo && (parsed.detail.cause || parsed.detail.recovery) ? parsed : null
           const sameAlert =
@@ -1120,6 +1135,7 @@ export const useStore = create<AppState>((set, get) => ({
   setNoReconnect: (on) => set({ noReconnect: on }),
   setBulkWriting: (on) => set({ bulkWriting: on }),
   setRescueWizardOpen: (open) => set({ rescueWizardOpen: open }),
+  setRescueRunning: (on) => set({ rescueRunning: on }),
   setRescueSuggested: (on) => set({ rescueSuggested: on }),
   escapeSwitch: (axis, dir) => {
     const s = get()

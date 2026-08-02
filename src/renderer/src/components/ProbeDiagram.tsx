@@ -44,15 +44,32 @@ export function ProbeDiagram({
   internal,
   selectedKey,
   onSelect,
-  edgesOnly = false
+  edgesOnly = false,
+  frontLeftOnly = false
 }: {
   internal: boolean
   selectedKey: string | null
   onSelect: (sel: ProbeSel) => void
   /** hide corner hotspots — used by the rotation mode, which measures one edge */
   edgesOnly?: boolean
+  /** Only the front-left corner, for the three-axis zero.
+   *
+   *  All four used to be offered, and that was a quiet way to lose a part. Zeroing
+   *  the wrong corner is not a mirror image, which somebody would notice — it is a
+   *  clean shift of the whole cut by the width of the stock, so the machine carves
+   *  the table beside a workpiece it never touches. CAM output puts the origin at
+   *  the front-left corner, the app already locks the homing corner there for the
+   *  same reason, and a three-axis zero that can land anywhere else is the one
+   *  choice in this dialog with no good answer. Single-axis edges and the internal
+   *  corner stay open: those are for pockets and for zeroing one axis at a time,
+   *  where the operator is choosing a feature rather than an origin. */
+  frontLeftOnly?: boolean
 }): JSX.Element {
-  const hots = (internal ? INTERNAL : EXTERNAL).filter((h) => !edgesOnly || h.sel.kind === 'edge')
+  const hots = (internal ? INTERNAL : EXTERNAL).filter(
+    (h) =>
+      (!edgesOnly || h.sel.kind === 'edge') &&
+      (!frontLeftOnly || h.sel.kind !== 'corner' || h.sel.key === 'c-fl')
+  )
   return (
     <svg viewBox="0 0 200 200" className="w-full max-w-[280px]">
       {/* workpiece / pocket */}

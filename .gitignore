@@ -20,3 +20,6 @@ Thumbs.db
 __pycache__/
 
 mockups/
+
+# parked code (hole/boss probing) — see .private/probeAdvanced.ts.txt
+.private/

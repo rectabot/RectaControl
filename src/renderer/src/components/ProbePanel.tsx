@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT, useLabel } from '../i18n'
 import { ProbeDiagram, type ProbeSel } from './ProbeDiagram'
-import { runZ, runEdge, runCorner, runCornerExternal3, runHoleCenter, runBossCenter, runRotation, type ProbeAction } from '../probeRun'
+import { runZ, runEdge, runCorner, runCornerExternal3, runRotation } from '../probeRun'
 import { ProbeField } from './ProbeFields'
 import { ProbeIcon } from './icons'
 
-type ActionKind = 'wcs' | 'g92' | 'measure'
-const WCS = ['G54', 'G55', 'G56', 'G57', 'G58', 'G59']
 
 /** Compact Probe window (opened by the toolpath Probe button). It only PICKS the
  *  measurement type (Z / edge-corner / centre / angle) and runs it — the measuring
@@ -61,17 +59,12 @@ export function ProbePanel(): JSX.Element | null {
 
   const tab = useStore((s) => s.probeMode) // remembered across opens
   const setTab = useStore((s) => s.setProbeMode)
-  const [actKind, setActKind] = useState<ActionKind>('wcs')
-  const [wcs, setWcs] = useState('G54')
   const [edgeInternal, setEdgeInternal] = useState(false)
   const [edgeTouchPlate, setEdgeTouchPlate] = useState(true)
-  const [centerBoss, setCenterBoss] = useState(false)
   const [sel, setSel] = useState<ProbeSel | null>(null)
   const [rotSel, setRotSel] = useState<ProbeSel | null>(null)
   const [rotSpacing, setRotSpacing] = useState(75)
   const [measuredAngle, setMeasuredAngle] = useState<number | null>(null)
-  const [bossX, setBossX] = useState(50)
-  const [bossY, setBossY] = useState(50)
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
@@ -80,7 +73,6 @@ export function ProbePanel(): JSX.Element | null {
   // gate on the tap-to-unlock verification only when it's required (default). Turned
   // off in Settings → Probe for experienced users who read the footer probe pin.
   const canRun = ready && (!probeVerify || verified) && !busy
-  const action: ProbeAction = actKind === 'wcs' ? { kind: 'wcs', wcs } : actKind === 'g92' ? { kind: 'g92' } : { kind: 'measure' }
 
   const finish = (r: { ok: boolean; error?: string; note?: string }): void => {
     setBusy(false)
@@ -116,11 +108,11 @@ export function ProbePanel(): JSX.Element | null {
     const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
     void guard(() => {
       // a single edge only ever touches one rail — the one for that axis
-      if (sel.kind === 'edge') return runEdge(sel.axis, sel.dir, pp, action, sel.axis === 'X' ? plate.x : plate.y)
+      if (sel.kind === 'edge') return runEdge(sel.axis, sel.dir, pp, sel.axis === 'X' ? plate.x : plate.y)
       // external corner = full 3-axis (Z + X + Y); internal = X + Y only
       return edgeInternal
-        ? runCorner(sel.xDir, sel.yDir, pp, action, plate)
-        : runCornerExternal3(sel.xDir, sel.yDir, pp, action, plate, setStep)
+        ? runCorner(sel.xDir, sel.yDir, pp, plate)
+        : runCornerExternal3(sel.xDir, sel.yDir, pp, plate, setStep)
     })
   }
 
@@ -169,8 +161,8 @@ export function ProbePanel(): JSX.Element | null {
           )}
 
           {/* mode tabs */}
-          <div className="grid grid-cols-4 overflow-hidden rounded-md border border-border2">
-            {([['z', 'z'], ['edge', 'edge'], ['center', 'hole'], ['rotate', 'rotate']] as const).map(([m, key]) => (
+          <div className="grid grid-cols-3 overflow-hidden rounded-md border border-border2">
+            {([['z', 'z'], ['edge', 'edge'], ['rotate', 'rotate']] as const).map(([m, key]) => (
               <button
                 key={m}
                 onClick={() => {
@@ -186,14 +178,14 @@ export function ProbePanel(): JSX.Element | null {
             ))}
           </div>
 
-          {/* action selector — shared by all modes except rotation (which only
-              measures an angle; grblHAL can't store a coordinate rotation) */}
-          {tab !== 'rotate' && <ActionSelector kind={actKind} setKind={setActKind} wcs={wcs} setWcs={setWcs} />}
+          {/* No "what to do with it" row: probing sets the work zero in the
+              coordinate system the DRO has active. See probeRun.ts for why the
+              three-way choice went away. */}
 
           {/* per-mode body */}
           {tab === 'z' && (
             <ModeCard title={t('ui.probe.mode.z')} hint={t('ui.probe.zHint')}>
-              <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(pp, action))} label={`${t('ui.probe.runZ')} ↓`} />
+              <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(pp))} label={`${t('ui.probe.runZ')} ↓`} />
             </ModeCard>
           )}
 
@@ -224,11 +216,23 @@ export function ProbePanel(): JSX.Element | null {
                   )}
                 </label>
               )}
+              {/* External corners: front-left only. That corner sets all three axes
+                  at once, and picking the wrong one does not look wrong — it shifts
+                  the entire cut by the width of the stock, into the table beside a
+                  workpiece the tool never reaches. CAM puts the origin front-left and
+                  the homing corner is already locked there. Edges stay open on all
+                  four sides, and so does the internal corner: those zero one axis or
+                  a pocket, where the operator is picking a feature, not an origin. */}
               <div className="my-3 flex justify-center">
-                <ProbeDiagram internal={edgeInternal} selectedKey={sel?.key ?? null} onSelect={setSel} />
+                <ProbeDiagram
+                  internal={edgeInternal}
+                  selectedKey={sel?.key ?? null}
+                  onSelect={setSel}
+                  frontLeftOnly={!edgeInternal}
+                />
               </div>
               <p className="mb-2 text-center text-[11px] text-slate-400">
-                {sel ? t('ui.probe.placeDot') : t('ui.probe.pickHint')}
+                {sel ? t('ui.probe.placeDot') : t(edgeInternal ? 'ui.probe.pickHint' : 'ui.probe.pickHintFL')}
               </p>
               <RunBtn
                 disabled={!canRun || !sel}
@@ -240,28 +244,6 @@ export function ProbePanel(): JSX.Element | null {
                       ? t('ui.probe.runCorner')
                       : t('ui.probe.runEdge')
                 }
-              />
-            </ModeCard>
-          )}
-
-          {tab === 'center' && (
-            <ModeCard title={t('ui.probe.mode.hole')} hint={centerBoss ? t('ui.probe.bossHint') : t('ui.probe.holeHint')}>
-              <Toggle left={t('ui.probe.hole')} right={t('ui.probe.boss')} value={centerBoss} onChange={setCenterBoss} />
-              {centerBoss && (
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <ProbeField label={t('ui.probe.bossX')} unit="mm" value={bossX} onChange={setBossX} />
-                  <ProbeField label={t('ui.probe.bossY')} unit="mm" value={bossY} onChange={setBossY} />
-                </div>
-              )}
-              <div className="my-2 text-center font-mono text-4xl text-slate-600">⊙</div>
-              <RunBtn
-                disabled={!canRun}
-                onClick={() =>
-                  void guard(() =>
-                    centerBoss ? runBossCenter(pp, action, bossX, bossY, setStep) : runHoleCenter(pp, action, setStep)
-                  )
-                }
-                label={busy ? `${t('ui.probe.holeRunning')} ${step}` : centerBoss ? t('ui.probe.runBoss') : t('ui.probe.runHole')}
               />
             </ModeCard>
           )}
@@ -332,51 +314,6 @@ export function ProbePanel(): JSX.Element | null {
 }
 
 // ── small pieces ─────────────────────────────────────────────────────────────
-
-function ActionSelector({
-  kind,
-  setKind,
-  wcs,
-  setWcs
-}: {
-  kind: ActionKind
-  setKind: (k: ActionKind) => void
-  wcs: string
-  setWcs: (w: string) => void
-}): JSX.Element {
-  const t = useT()
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border2 bg-panel2 px-3 py-2">
-      <span className="font-mono text-[11px] text-slate-500">{t('ui.probe.actionLabel')}</span>
-      <div className="flex overflow-hidden rounded-md border border-border2">
-        {(['wcs', 'g92', 'measure'] as const).map((k) => (
-          <button
-            key={k}
-            onClick={() => setKind(k)}
-            className={`px-2.5 py-1 font-mono text-[11px] transition ${
-              kind === k ? 'bg-brand text-[#020617]' : 'bg-base text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {t(`ui.probe.action.${k}`)}
-          </button>
-        ))}
-      </div>
-      {kind === 'wcs' && (
-        <select
-          value={wcs}
-          onChange={(e) => setWcs(e.target.value)}
-          className="input !py-1 ml-auto font-mono text-xs"
-        >
-          {WCS.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
-      )}
-    </div>
-  )
-}
 
 function Toggle({
   left,

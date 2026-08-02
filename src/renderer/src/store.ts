@@ -161,6 +161,12 @@ const DEFAULT_PARAMS: ProbeParams = {
   retract: 3
 }
 
+/** A saved mode that no longer exists lands on Z, not on a blank panel. */
+function loadProbeMode(): 'z' | 'edge' | 'rotate' {
+  const saved = localStorage.getItem('probeMode')
+  return saved === 'edge' || saved === 'rotate' ? saved : 'z'
+}
+
 function loadProbeParams(): ProbeParams {
   try {
     const saved = JSON.parse(localStorage.getItem('probeParams') || '{}')
@@ -566,7 +572,10 @@ interface AppState {
   probeOpen: boolean
   /** Last-used probe measurement type — the Probe window reopens to it (persisted),
    *  so pressing Probe goes straight to the type you use most. */
-  probeMode: 'z' | 'edge' | 'center' | 'rotate'
+  /** Last probe type used, remembered across opens. `center` (hole/boss) was one of
+   *  these until 31 Jul 2026 and anyone who used it last has it in localStorage —
+   *  see loadProbeMode, which lands them on Z rather than on an empty panel. */
+  probeMode: 'z' | 'edge' | 'rotate'
   /** Require the tap-to-unlock probe verification before measuring (persisted).
    *  On by default — great safety for beginners. Experienced users can turn it off
    *  in Settings → Probe (the footer already shows the live Probe pin state). */
@@ -665,7 +674,7 @@ interface AppState {
   /** Clear the pending deep-link once SettingsBrowser has consumed it. */
   clearSettingsSection: () => void
   setProbeOpen: (open: boolean) => void
-  setProbeMode: (mode: 'z' | 'edge' | 'center' | 'rotate') => void
+  setProbeMode: (mode: 'z' | 'edge' | 'rotate') => void
   setProbeVerify: (on: boolean) => void
   setProbeNoPlate: (on: boolean) => void
   setFromLineOpen: (open: boolean) => void
@@ -774,7 +783,7 @@ export const useStore = create<AppState>((set, get) => ({
   settingsOpen: false,
   settingsSection: null,
   probeOpen: false,
-  probeMode: (localStorage.getItem('probeMode') as 'z' | 'edge' | 'center' | 'rotate') || 'z',
+  probeMode: loadProbeMode(),
   probeVerify: localStorage.getItem('probeVerify') !== '0',
   probeNoPlate: localStorage.getItem('probeNoPlate') === '1',
   fromLineOpen: false,

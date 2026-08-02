@@ -775,6 +775,8 @@ export const sr: Record<string, string> = {
   'ui.probe.hole': 'Rupa',
   'ui.probe.boss': 'Boss',
   'ui.probe.pickHint': 'Klikni ivicu ili ugao gore da izabereš šta se probа.',
+  'ui.probe.pickHintFL':
+    'Klikni ivicu, ili prednji-levi ćošak za sve tri ose odjednom. Samo taj ćošak se nudi: CAM tamo stavlja ishodište, a nulovanje drugog pomeri ceo rez za dimenziju komada.',
   'ui.probe.placeDot': 'Dovezi sondu iznad zelene tačke, pa Start.',
   'ui.probe.actionLabel': 'Rezultat',
   'ui.probe.action.wcs': 'Postavi WCS',

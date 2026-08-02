@@ -794,6 +794,8 @@ export const en: Record<string, string> = {
   'ui.probe.hole': 'Hole',
   'ui.probe.boss': 'Boss',
   'ui.probe.pickHint': 'Click an edge or corner above to pick what to probe.',
+  'ui.probe.pickHintFL':
+    'Click an edge, or the front-left corner for all three axes at once. Only that corner is offered: CAM puts the origin there, and zeroing a different one shifts the whole cut by the size of the stock.',
   'ui.probe.placeDot': 'Jog the probe over the green dot, then Start.',
   'ui.probe.actionLabel': 'Result',
   'ui.probe.action.wcs': 'Set WCS',

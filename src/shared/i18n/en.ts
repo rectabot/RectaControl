@@ -20,6 +20,9 @@ export const en: Record<string, string> = {
     '{count} setting(s) could not be written yet: {list}. Some settings only exist once the board has started with the thing they belong to — the VFD address needs a Modbus spindle chosen at startup, for example. Restarting the board writes them. The connection drops for a few seconds and comes back on its own.',
   'ui.settings.importRebootNow': 'Restart and finish',
   'ui.settings.importRebootLater': 'Leave it',
+  'ui.settings.importRebootLostTitle': 'The board has not come back yet',
+  'ui.settings.importRebootLost':
+    'The restart was sent and the board has not answered since, so the last {count} setting(s) were never put to it — they were not refused, they were never asked: {list}. Nothing has been lost; everything written before the restart is on the board. Wait for the connection to return (or press Auto-connect), then import the same file again — it will pick up where this stopped.',
   'ui.settings.exportIncompleteTitle':
     'This backup would be missing the VFD address',
   'ui.settings.exportIncomplete':

@@ -18,6 +18,9 @@ export const sr: Record<string, string> = {
     '{count} podešavanja još nisu mogla da se upišu: {list}. Neka podešavanja postoje tek kad se ploča digne sa onim čemu pripadaju — adresa VFD-a, na primer, traži da je Modbus vreteno izabrano pri dizanju. Restart ploče ih upisuje. Veza padne na par sekundi i sama se vrati.',
   'ui.settings.importRebootNow': 'Restartuj i završi',
   'ui.settings.importRebootLater': 'Ostavi tako',
+  'ui.settings.importRebootLostTitle': 'Ploča se još nije vratila',
+  'ui.settings.importRebootLost':
+    'Restart je poslat i ploča se od tada nije javila, pa poslednjih {count} podešavanja nije ni stiglo do nje — nisu odbijena, nego neupitana: {list}. Ništa nije izgubljeno, sve upisano pre restarta stoji na ploči. Sačekaj da se veza vrati (ili pritisni Auto-poveži), pa uvezi isti fajl ponovo — nastaviće odatle gde je stalo.',
   'ui.settings.exportIncompleteTitle':
     'Ovom bekapu bi nedostajala adresa VFD-a',
   'ui.settings.exportIncomplete':

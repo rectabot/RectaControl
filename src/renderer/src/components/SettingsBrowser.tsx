@@ -206,7 +206,7 @@ export function SettingsBrowser(): JSX.Element | null {
     // used to be asked out here, which meant saying yes ran the whole file again from
     // the top — 116 settings rewritten to reach the one that needed the restart.
     let announced = false
-    const { refused } = await applySettings(text, undefined, {
+    const { refused, rebootLost } = await applySettings(text, undefined, {
       mayReboot: async (missed) => {
         const fixable = missed.some((r) => r.includes('not on this board'))
         const ok = await askConfirm({
@@ -226,7 +226,18 @@ export function SettingsBrowser(): JSX.Element | null {
     })
     setTimeout(read, 300)
     // …and if the restart did not manage it either, that is news, and it is told once.
-    if (refused.length && !announced)
+    //
+    // Except when the board never came back: then nothing was refused, it was never
+    // asked, and the operator needs the machine back before anything else means
+    // anything. Blaming the settings there sends them hunting for the wrong fault.
+    if (rebootLost)
+      void askConfirm({
+        title: t('ui.settings.importRebootLostTitle'),
+        body: t('ui.settings.importRebootLost', { count: refused.length, list: refused.join(', ') }),
+        confirmLabel: t('ui.settings.importRefusedOk'),
+        tone: 'warn'
+      })
+    else if (refused.length && !announced)
       void askConfirm({
         title: t('ui.settings.importRefusedTitle'),
         body: t('ui.settings.importRefused', { count: refused.length, list: refused.join(', ') }),

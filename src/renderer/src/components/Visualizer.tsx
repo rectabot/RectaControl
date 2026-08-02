@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useStore, rotaryRadius, rotarySweptRadius } from '../store'
+import { readDump } from '../readDump'
 import { parseToolpath, usesRotary } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 import { ViewerControls } from './ViewerControls'
@@ -936,25 +937,12 @@ export function Visualizer(): JSX.Element {
     }
     if (busy || didConnectRead.current) return
     didConnectRead.current = true
-    let off: (() => void) | null = null
-    let timer: ReturnType<typeof setTimeout>
-    let done = false
-    let oks = 0
-    const finish = (): void => {
-      if (done) return
-      done = true
-      clearTimeout(timer)
-      off?.()
-      setSuppressLog(false)
-    }
-    setSuppressLog(true)
-    off = window.recta.onEvent((e) => {
-      if (e.type === 'line' && e.data.trim() === 'ok' && ++oks >= 2) finish()
-    })
-    timer = setTimeout(finish, 3000)
+    // `$$` goes through the shared reader: the Settings panel wants the same 116
+    // lines on the same reconnect, and two requests brought back both copies — which
+    // is not merely waste, see readDump. `$#` stays direct; it is one line, and
+    // nobody else asks for it at this moment.
     window.recta.send('$#')
-    window.recta.send('$$')
-    return finish
+    void readDump({ quiet: true })
   }, [connected, busy, setSuppressLog])
 
   return (

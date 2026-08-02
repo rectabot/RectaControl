@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
+import { readDump } from '../readDump'
 import { vfdAddressMissing } from '@shared/settings-file'
 import { BaselineBanner } from './BaselineBanner'
 import { SettingsGuided } from './SettingsGuided'
@@ -87,34 +88,13 @@ export function SettingsBrowser(): JSX.Element | null {
    *  them. Same hazard, same answer as applySettings.readBack(). */
   const read = (): void => {
     if (!connected || busy) return
-    const collected: Record<number, string> = {}
     setReading(true)
-    let off: (() => void) | null = null
-    let quiet: ReturnType<typeof setTimeout> | null = null
-    let cap: ReturnType<typeof setTimeout>
-    const finish = (): void => {
-      if (!off) return
-      off()
-      off = null
-      if (quiet) clearTimeout(quiet)
-      clearTimeout(cap)
+    // Shared with the visualizer's own read — see readDump. Two components wanting
+    // the same 116 lines at the same moment used to put two `$$` on the wire.
+    void readDump().then((values) => {
       setReading(false)
-      setRows(
-        Object.entries(collected)
-          .map(([k, v]) => ({ num: Number(k), value: v }))
-          .sort((a, b) => a.num - b.num)
-      )
-    }
-    off = window.recta.onEvent((e) => {
-      if (e.type !== 'line' || !off) return
-      const m = /^\$(\d+)=(.*)$/.exec(e.data.trim())
-      if (!m) return
-      collected[Number(m[1])] = m[2]
-      if (quiet) clearTimeout(quiet)
-      quiet = setTimeout(finish, 700)
+      setRows([...values].map(([num, value]) => ({ num, value })).sort((a, b) => a.num - b.num))
     })
-    cap = setTimeout(finish, 5000) // safety: a board that answers nothing at all
-    window.recta.send('$$')
   }
 
   // A settings list describes a live board, so it does not outlive the connection to
@@ -135,6 +115,24 @@ export function SettingsBrowser(): JSX.Element | null {
     if (open && connected && !busy && rows.length === 0) read()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, connected, busy])
+
+  // …and again the moment a bulk write ENDS, which is the refresh Filip actually
+  // asked for. Clearing the list with the connection (c2180a7) was right — a list
+  // describing a board we are no longer talking to is a lie — but it left the panel
+  // blank after a restore, with a Read button he had to know to press. The trigger is
+  // the end of the writing rather than the reconnect in the middle of it: a restore
+  // reboots the board, and values read during that are the ones being replaced.
+  //
+  // `bulkWriting` covers both routes without either of them knowing about this panel
+  // — the Settings import and the guided recovery both pass through applySettings.
+  const bulkWriting = useStore((s) => s.bulkWriting)
+  const wasBulkWriting = useRef(false)
+  useEffect(() => {
+    const ending = wasBulkWriting.current && !bulkWriting
+    wasBulkWriting.current = bulkWriting
+    if (ending && open && connected && !busy) read()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkWriting])
 
   if (!open) return null
 
@@ -225,7 +223,8 @@ export function SettingsBrowser(): JSX.Element | null {
         return fixable && ok
       }
     })
-    setTimeout(read, 300)
+    // (no read here: the effect above fires on the end of the bulk write, and this
+    // used to be a second `$$` 300 ms behind it)
     // …and if the restart did not manage it either, that is news, and it is told once.
     //
     // Except when the board never came back: then nothing was refused, it was never

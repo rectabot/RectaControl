@@ -261,7 +261,12 @@ async function cornerXYZ(
   yDir: Dir,
   p: ProbeParams,
   plate: Plate,
-  onStep?: (s: string) => void
+  onStep?: (s: string) => void,
+  /** Leave the tool where the Y probe stopped — beside the face, at depth — instead
+   *  of lifting and coming home. For a caller that has another point to touch on the
+   *  same edge, going back over the material only to come out again is a trip out and
+   *  in for nothing. */
+  hold = false
 ): Promise<{ lx: Prb; ly: Prb; sx: number; sy: number; drop: number }> {
   const s = startPos()
   if (!s) throw new Error('no-pos')
@@ -291,8 +296,10 @@ async function cornerXYZ(
   rel('Z', -drop)
   const ly = await probeAxis('Y', yDir, p)
   apply('Y', -yDir * offY)
-  rel('Z', drop)
-  gotoMachine('Y', sy)
+  if (!hold) {
+    rel('Z', drop)
+    gotoMachine('Y', sy)
+  }
 
   return { lx, ly, sx, sy, drop }
 }
@@ -344,9 +351,13 @@ export async function runSkew(
   onStep?: (s: string) => void
 ): Promise<ProbeResult> {
   try {
-    const { ly, sx, sy, drop } = await cornerXYZ(xDir, yDir, p, plate, onStep)
+    // `hold`: stay beside the Y face at depth rather than lifting home, because the
+    // next point is on that same face. Going back over the material and out again
+    // would be a trip in and out for nothing.
+    const { ly, sx, sy, drop } = await cornerXYZ(xDir, yDir, p, plate, onStep, true)
 
-    // Step along the front edge and touch it again.
+    // Back off the face, slide along it, touch it again — all at the depth the first
+    // contact was made at, which is what keeps the two points comparable.
     //
     // The direction is `+xDir`, and getting that backwards is what the first hardware
     // run caught: the corner cycle moves `-xDir * approach` to get OUT past the X
@@ -355,11 +366,10 @@ export async function runSkew(
     // and the second Y probe then finds nothing to touch. On a front-left corner that
     // is a confident 50 mm to the left of a workpiece extending to the right.
     onStep?.('∠')
-    gotoMachine('X', sx + xDir * spacing)
-    rel('Y', -yDir * p.approach) // out past the Y face, as before
-    rel('Z', -drop) // and down to the same depth as the first touch
+    rel('Y', -yDir * p.approach) // clear of the face, where it stood before probing
+    rel('X', xDir * spacing) // along the edge
     const far = await probeAxis('Y', yDir, p)
-    rel('Z', drop)
+    rel('Z', drop) // lift clear of the part before coming home
     gotoMachine('Y', sy)
     gotoMachine('X', sx)
 

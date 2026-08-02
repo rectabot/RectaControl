@@ -4,6 +4,7 @@ import { useT, useLabel } from '../i18n'
 import { ProbeDiagram, type ProbeSel } from './ProbeDiagram'
 import { runZ, runEdge, runCorner, runCornerExternal3, runSkew } from '../probeRun'
 import { ProbeField } from './ProbeFields'
+import { readOffsets, applyOffsetsRead } from '../offsets'
 import { ProbeIcon } from './icons'
 
 
@@ -77,6 +78,17 @@ export function ProbePanel(): JSX.Element | null {
     setBusy(false)
     setStep('')
     setResult({ ok: r.ok, msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.holeErr', { msg: r.error || '' }) })
+    // Probing moved the work origin — go and find out where it landed.
+    //
+    // `G10 L20` changes the board's G54 and the board says nothing about it: no line
+    // comes back, and `$#` is otherwise only read on connect or by hand from the
+    // offsets table. So the 3D view went on drawing the toolpath, the grid and the
+    // stock around the OLD origin while the machine worked from the new one — which
+    // is what Filip saw as the toolpath not matching the motion. The DRO was right
+    // throughout, because its work coordinates are computed by the board.
+    //
+    // Fresh read, no age allowance: the whole point is that what we hold is stale.
+    if (r.ok) void readOffsets().then(applyOffsetsRead)
   }
   const guard = async (fn: () => Promise<{ ok: boolean; error?: string; note?: string }>): Promise<void> => {
     if (!canRun) return
@@ -97,9 +109,9 @@ export function ProbePanel(): JSX.Element | null {
       // the skew cycle IS that cycle plus one more touch further along the edge
       const plate = noPlate || !edgeTouchPlate ? { x: 0, y: 0 } : { x: p.edgePlateX, y: p.edgePlateY }
       const r = await runSkew(1, 1, rotSpacing, pp, plate, setStep)
-      setBusy(false)
-      setStep('')
-      setResult({ ok: r.ok, msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.holeErr', { msg: r.error || '' }) })
+      // through the shared finish, not alongside it: this cycle sets the corner zero
+      // like any other, so it owes the 3D view the same fresh read of `$#`
+      finish(r)
       if (r.ok && r.angle !== undefined) setMeasuredAngle(r.angle)
     })()
   }

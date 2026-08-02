@@ -5,6 +5,7 @@ import { useT } from '../i18n'
 import { applySettings } from '../applySettings'
 import { vfdAddressMissing } from '@shared/settings-file'
 import type { BackupRow } from '@shared/types'
+import { backupLabel } from './BackupPicker'
 
 /** Guided recovery for a board that has stopped answering commands.
  *
@@ -361,14 +362,7 @@ export function RescueWizard(): React.JSX.Element | null {
                         rather than confessed once the board is already wiped. */}
                     {backups.map((b) => (
                       <option key={b.name} value={b.name} className="bg-panel">
-                        {b.kind === 'export'
-                          ? `★ ${t('ui.rescue.backupExport')}${b.label ? ` · ${b.label}` : ''}`
-                          : b.kind === 'latest'
-                            ? t('ui.rescue.backupLatest')
-                            : new Date(b.taken).toLocaleString()}
-                        {b.kind === 'history' ? '' : ` · ${new Date(b.taken).toLocaleString()}`}
-                        {` · ${t('ui.rescue.backupCount', { count: b.count })}`}
-                        {b.vfdMissing === null ? '' : ` · ⚠ ${t('ui.rescue.backupNoVfd')}`}
+                        {backupLabel(b, t)}
                       </option>
                     ))}
                   </select>

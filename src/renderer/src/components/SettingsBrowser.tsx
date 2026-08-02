@@ -5,6 +5,7 @@ import { applySettings } from '../applySettings'
 import { readDump } from '../readDump'
 import { vfdAddressMissing } from '@shared/settings-file'
 import { SettingsCompare } from './SettingsCompare'
+import { BackupPicker } from './BackupPicker'
 import { SettingsGuided } from './SettingsGuided'
 import { FirmwareFlash } from './FirmwareFlash'
 import { AppUpdate } from './AppUpdate'
@@ -53,6 +54,7 @@ export function SettingsBrowser(): JSX.Element | null {
   // other hooks, above the `if (!open) return null` further down: a hook after an
   // early return changes the hook count between renders and React throws.
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null)
+  const [picking, setPicking] = useState(false)
 
   // honour a deep-link (e.g. the Probe window's "params in Settings" link) by
   // jumping to that category on open, then clear it so it doesn't re-fire
@@ -181,14 +183,25 @@ export function SettingsBrowser(): JSX.Element | null {
   /** Restore a saved `$$` dump. The applying itself lives in applySettings.ts, so
    *  the guided recovery finishes with exactly the same code path — including the
    *  retry pass that keeps a refused `$20` from silently leaving soft limits off. */
-  const importSettings = async (): Promise<void> => {
-    if (!connected) return
-    // Opens standing in the settings folder, where every saved dump now is — the file
-    // you want is under the cursor rather than several folders away. A plain file
-    // input could not do that: it opens wherever the OS last left off.
+  /** Pick a file from the app's own list — the same one the guided recovery shows.
+   *
+   *  The OS dialog was the wrong answer twice over: it opens on filenames that mean
+   *  nothing on their own, and it will hand over the factory dumps that list hides on
+   *  purpose. Browsing the disk is still one button away, for a file somebody mailed. */
+  const chooseAndImport = async (name: string): Promise<void> => {
+    setPicking(false)
+    const text = await window.recta.readSettingsBackup(name)
+    if (text != null) void importSettings(name, text)
+  }
+
+  const browseAndImport = async (): Promise<void> => {
+    setPicking(false)
     const picked = await window.recta.pickSettingsFile()
-    if (!picked) return
-    const text = picked.text
+    if (picked) void importSettings(picked.name, picked.text)
+  }
+
+  const importSettings = async (fileName: string, text: string): Promise<void> => {
+    if (!connected) return
 
     // The guided recovery has never offered these, on purpose: a factory dump
     // describes the firmware, not this machine, and a partial one is a dump taken
@@ -196,15 +209,16 @@ export function SettingsBrowser(): JSX.Element | null {
     // restored onto a tuned gantry — 250 steps/mm, reported as success — which is why
     // they are filed under their own names and kept out of that list.
     //
-    // A file dialog cannot hide them, so this says the same thing the list says by
-    // omitting them. Asked rather than refused: they are legitimately useful to
-    // somebody comparing what the board came up on against what it should hold.
-    const aside = /^(factory|partial)_/.exec(picked.name)
+    // Unreachable from the list, still reachable by browsing the disk — so the warning
+    // stands here, where both routes meet. Asked rather than refused: they are
+    // legitimately useful to somebody comparing what the board came up on against what
+    // it should hold.
+    const aside = /^(factory|partial)_/.exec(fileName)
     if (aside) {
       const go = await askConfirm({
         title: t('ui.settings.importAsideTitle'),
         body: t(aside[1] === 'factory' ? 'ui.settings.importFactory' : 'ui.settings.importPartial', {
-          name: picked.name
+          name: fileName
         }),
         confirmLabel: t('ui.settings.importAnyway'),
         cancelLabel: t('ui.settings.exportCancel'),
@@ -455,10 +469,17 @@ export function SettingsBrowser(): JSX.Element | null {
                 <button
                   className="btn w-[95px] shrink-0 px-0 py-1.5 text-sm"
                   disabled={!connected}
-                  onClick={() => void importSettings()}
+                  onClick={() => setPicking(true)}
                 >
                   {t('ui.settings.import')}
                 </button>
+                {picking && (
+                  <BackupPicker
+                    onPick={(n) => void chooseAndImport(n)}
+                    onBrowse={() => void browseAndImport()}
+                    onCancel={() => setPicking(false)}
+                  />
+                )}
               </>
             )}
             <LanguageSelect className="min-w-0 flex-1" />

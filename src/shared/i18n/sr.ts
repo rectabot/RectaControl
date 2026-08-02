@@ -955,6 +955,12 @@ export const sr: Record<string, string> = {
   'ui.settings.exportName': 'Nešto po čemu ćeš ga kasnije prepoznati, ili ostavi prazno pa ostaje datum.',
   'ui.settings.exportNamePlaceholder': 'npr. posle puštanja VFD-a',
   'ui.settings.exportDone': 'Podešavanja izvezena u {name} (Documents\\RectaControl\\settings).',
+  'ui.import.title': 'Upiši sačuvana podešavanja na ploču',
+  'ui.import.loading': 'Čitam fasciklu sa podešavanjima…',
+  'ui.import.empty':
+    'Još ništa nije sačuvano. Poveži se sa pločom i pritisni Izvezi — ili Potraži, ako imaš fajl sa podešavanjima sa strane.',
+  'ui.import.browse': 'Potraži…',
+  'ui.import.write': 'Upiši na ploču',
   'ui.settings.importAsideTitle': 'Taj fajl ne opisuje tvoju mašinu',
   'ui.settings.importFactory':
     '{name} je dump koji je ploča dala na fabričkim vrednostima — posle brisanja podešavanja ili flešovanja. On opisuje firmver, ne ovu mašinu: koraci po milimetru, smer hominga, hod i vreteno su onakvi kakvi dolaze uz build. Vraćanje takvog fajla na naštelovanu mašinu se već desilo, i mašina je to prijavila kao uspeh. Zato ga vođeni oporavak nikad ne nudi.',

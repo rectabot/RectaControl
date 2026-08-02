@@ -982,6 +982,12 @@ export const en: Record<string, string> = {
   'ui.settings.exportName': 'Something you will recognise later, or leave it empty for the date.',
   'ui.settings.exportNamePlaceholder': 'e.g. after the VFD went in',
   'ui.settings.exportDone': 'Settings exported to {name} (Documents\\RectaControl\\settings).',
+  'ui.import.title': 'Write saved settings onto the board',
+  'ui.import.loading': 'Reading the settings folder…',
+  'ui.import.empty':
+    'Nothing saved yet. Connect to the board and press Export — or Browse, if you have a settings file from somewhere else.',
+  'ui.import.browse': 'Browse…',
+  'ui.import.write': 'Write to board',
   'ui.settings.importAsideTitle': 'That file does not describe your machine',
   'ui.settings.importFactory':
     '{name} is a dump the board produced on factory defaults — after a settings wipe or a firmware flash. It describes the firmware, not this machine: steps/mm, homing direction, travel and spindle are whatever the build ships with. Restoring it onto a tuned machine has happened before, and the machine reported it as a success. The guided recovery never offers these files for this reason.',

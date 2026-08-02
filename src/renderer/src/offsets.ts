@@ -37,11 +37,11 @@ export function readOffsets(): Promise<OffsetMap> {
     const finish = (): void => {
       off?.()
       clearTimeout(timer)
-      useStore.getState().setSuppressLog(false)
+      useStore.getState().quietConsole(false)
       inFlight = null
       resolve(collected)
     }
-    useStore.getState().setSuppressLog(true)
+    useStore.getState().quietConsole(true)
     off = window.recta.onEvent((e) => {
       if (e.type !== 'line') return
       const line = e.data.trim()

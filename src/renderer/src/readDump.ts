@@ -44,11 +44,11 @@ export function readDump(opts?: {
       off = null
       if (idle) clearTimeout(idle)
       clearTimeout(cap)
-      if (quiet) useStore.getState().setSuppressLog(false)
+      if (quiet) useStore.getState().quietConsole(false)
       inflight = null
       resolve(out)
     }
-    if (quiet) useStore.getState().setSuppressLog(true)
+    if (quiet) useStore.getState().quietConsole(true)
     off = window.recta.onEvent((e) => {
       if (e.type !== 'line' || !off) return
       const m = /^\$(\d+)=(.*)$/.exec(e.data.trim())

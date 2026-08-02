@@ -329,6 +329,8 @@ export interface ConfirmOpts {
  *  resolving doesn't force an extra render. `askConfirm` sets it; the dialog's
  *  buttons call `resolveConfirm`. */
 let confirmResolve: ((ok: boolean) => void) | null = null
+/** How many housekeeping reads currently want the console quiet — see quietConsole. */
+let quietDepth = 0
 
 interface AppState {
   connected: boolean
@@ -667,6 +669,15 @@ interface AppState {
   setFilesOpen: (open: boolean) => void
   setOffsetsOpen: (open: boolean) => void
   setSuppressLog: (v: boolean) => void
+  /** Hold the console quiet while housekeeping streams — NESTABLE, unlike the flag
+   *  above, and that is the whole point of it existing.
+   *
+   *  Two readers run at once on every connect: `$#` for the offsets and `$$` for the
+   *  settings. Each used to set and clear the flag itself, so whichever finished first
+   *  unquietened the console while the other was still streaming — and the one still
+   *  streaming is the 116-line one. Each caller now says only when its own quiet
+   *  begins and ends; the console stays down until the last of them is done. */
+  quietConsole: (on: boolean) => void
   /** Begin the live input test: hard limits are suspended for its duration, so a
    *  switch pressed on purpose reports its state without alarming the machine. */
   startPinTest: () => void
@@ -1326,6 +1337,10 @@ export const useStore = create<AppState>((set, get) => ({
   setFilesOpen: (filesOpen) => set({ filesOpen }),
   setOffsetsOpen: (offsetsOpen) => set({ offsetsOpen }),
   setSuppressLog: (suppressLog) => set({ suppressLog }),
+  quietConsole: (on) => {
+    quietDepth = Math.max(0, quietDepth + (on ? 1 : -1))
+    set({ suppressLog: quietDepth > 0 })
+  },
   startPinTest: () => {
     // Pressing a limit switch on a machine with hard limits armed raises ALARM:1 —
     // which is right when it happens by accident and pure noise when the operator

@@ -724,8 +724,11 @@ export const sr: Record<string, string> = {
   'ui.probe.zHint': 'Postavlja Z0 na gornju površinu. Dovezi alat par mm iznad pločice.',
   'ui.probe.hint.x': 'Postavlja X0 na levo lice. Dovezi alat pored njega, niže od gornje površine.',
   'ui.probe.hint.y': 'Postavlja Y0 na prednje lice. Dovezi alat ispred njega, niže od gornje površine.',
-  'ui.probe.hint.xy': 'Postavlja X0 i Y0 na ćošak, Z ostaje kakav jeste. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
-  'ui.probe.hint.xyz': 'Postavlja X0 Y0 Z0 na ćošak. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
+  'ui.probe.hint.zx': 'Prvo vrh, pa levo lice: Z0, pa X0. Dovezi alat iznad vrha, 10–15 mm unutar leve ivice.',
+  'ui.probe.hint.zy': 'Prvo vrh, pa prednje lice: Z0, pa Y0. Dovezi alat iznad vrha, 10–15 mm unutar prednje ivice.',
+  'ui.probe.hint.zxy': 'Vrh, pa oba lica: Z0, X0, Y0. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
+  'ui.probe.hint.xy':
+    'Isti pokreti kao ZXY0, ali Z ostaje kakav jeste — vrh se svejedno dodirne, da se zna koliko da se spusti. Dovezi alat 10–15 mm unutar ćoška, iznad gornje površine.',
   'ui.probe.rotateHint': 'Meri koliko je komad zakošen, i usput postavi nulu na ćošak. Isti start kao ćošak.',
   // ⓘ iza naslova režima — dug odgovor, za onoga ko ga zatraži
   'ui.probe.info.z1':
@@ -733,17 +736,17 @@ export const sr: Record<string, string> = {
   'ui.probe.info.zNote': 'Brzine i razdaljine: Podešavanja → Probe.',
   'ui.probe.info.edgeTitle': 'Ivica i ćošak',
   'ui.probe.info.edge1':
-    'Ivica postavlja jednu osu. Alat probа bočno u lice, a nula ide pola prečnika alata iza dodira — plus rub pločice, ako je koristiš — da padne na sam materijal.',
+    'Svaki od ovih probа bočno u lice, a nulu upisuje pola prečnika alata iza dodira — plus rub pločice, ako je koristiš — da padne na sam materijal. X0 i Y0 nuluju samo tu jednu osu: tamo alat ti spuštaš na dubinu reza pored lica, i vrh se uopšte ne dira.',
   'ui.probe.info.edge2':
-    'Ćošak ide iz jednog starta iznad gornje površine: probа vrh, pa izađe van svakog lica, spusti se ispod površine i probа X pa Y.',
+    'Sva četiri desno od crte kreću sa istog mesta — iznad gornje površine, kod ćoška — a ime je redosled kojim rade. Prvo se probа vrh, i to je ono što alatu dozvoljava da se spusti za poznatu meru pored lica a da mu niko nije rekao ništa o komadu; pa onda izlazi van svakog traženog lica i probа ka unutra.',
   'ui.probe.info.edge3':
-    'XY0 pravi potpuno iste pokrete kao XYZ0 — mora da dodirne vrh da bi znao koliko da se spusti pored svakog lica — samo ne upisuje Z nulu. Biraš ga kad je Z već postavljen i hoćeš da ga sačuvaš.',
+    'XY0 pravi baš te pokrete i svejedno dodirne vrh, zbog tog zazora, samo ne upisuje Z nulu. Biraš ga kad je Z postavljen sa druge reference i mora da preživi.',
   'ui.probe.info.edgeNote':
     'Nude se samo levo lice, prednje lice i ćošak između njih: CAM tamo stavlja ishodište, a nulovanje sa suprotne strane ne izgleda pogrešno — pomeri rez za dimenziju komada, u sto pored komada. Za ćošak komad mora i da stoji dublje u plusu mašinskog hoda od „Izlaz" razdaljine, da alat ima kuda da ga obiđe.',
   'ui.probe.info.skew1':
     'Prvo odradi ćošak — vrh, X lice, Y lice — pa je ćošak tvoja nula u svakom slučaju. Onda se pomeri za „Razmak" duž prednje ivice i pipne isto lice još jednom.',
   'ui.probe.info.skew2':
-    'Dva dodira na poznatom rastojanju daju ugao. Primeni ga na G-kod pa se ceo program zaokrene oko X0 Y0 da prati ukošen komad, ili broj iskoristi da kucneš komad da stane pravo pa izmeri ponovo.',
+    'Dva dodira na poznatom rastojanju daju ugao. Primeni ga na G-kod pa se ceo program zaokrene oko X0 Y0 da prati ukošen komad — proveri da se 3D pregled poklapa pre nego što režeš — ili broj iskoristi da kucneš komad da stane pravo pa izmeri ponovo.',
   'ui.probe.info.skewNote':
     'Preko oko 10° ciklus javi da nema dodira: toliko van, komad nije zakošen nego pogrešno stegnut. Primenjena rotacija važi samo za poslove sa PC-ja.',
   'ui.probe.spacing': 'Razmak',
@@ -754,7 +757,6 @@ export const sr: Record<string, string> = {
   // softverska rotacija komada (primeni izmereni ugao na G-kod)
   'ui.rot.apply': 'Primeni na G-kod',
   'ui.rot.applyInv': 'Pogrešan smer? Primeni suprotan znak',
-  'ui.rot.applyHint': 'Zaokrene ceo program oko X0 Y0 da prati komad. Proveri 3D pregled, pa reži.',
   'ui.rot.active': 'Rotacija aktivna: {deg}°',
   'ui.rot.clear': 'Poništi',
   'ui.rot.badgeTitle': 'Softverska rotacija komada je primenjena na program',
@@ -764,7 +766,8 @@ export const sr: Record<string, string> = {
   'ui.rot.sdConfirm': 'Pokreni SD posao bez rotacije',
   'ui.probe.tipDia': 'Alat ⌀ (mm)',
   // pun probe pano
-  'ui.probe.placeDot': 'Dovezi alat na zelenu tačku, pa Start.',
+  'ui.probe.placeDot': 'Dovezi alat na tačku 1, pa Start.',
+  'ui.probe.placeStep1': 'Dovezi alat na tačku 1, pa Start — brojevi su redosled dodira.',
   'ui.probe.noPlateOn':
     'Bez pločice: alat dodiruje sam komad. Z0 pada na gornju površinu, a bočno se skida samo poluprečnik alata. Komad mora da provodi i da je na masi.',
   // tok merenja / rezultat

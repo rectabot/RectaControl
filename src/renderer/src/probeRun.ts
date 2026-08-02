@@ -215,53 +215,59 @@ export async function runEdge(axis: Axis, dir: Dir, p: ProbeParams, plate = 0): 
 }
 
 /**
- * External corner, from ONE start position ~10–15 mm inside the corner over the top
- * surface:
+ * Every cycle that starts ABOVE the top face, from ONE position ~10–15 mm inside the
+ * corner:
  *   1) probe Z down → the top surface,
- *   2) lift, move OUT past the X face (`approach`), drop `depth` below the surface,
- *      probe the X face → X zero,
- *   3) return over the material, do the same for the Y face → Y zero.
+ *   2) lift, move OUT past a side face (`approach`), drop `depth` below the surface,
+ *      probe that face → its zero, come back up and over the material,
+ *   3) repeat for the other face, if it was asked for.
  * Needs the workpiece parked far enough (> approach) into positive machine space so
  * there's room to move around it. `plate` = sideways touch-plate thickness for the
  * X/Y faces (0 = direct touch).
  *
- * Shared by the corner zero and the skew measurement, on purpose: the skew cycle
- * begins with exactly these three probes — Filip's words, "first it measures the
- * corner by height, then from that zero it knows to drop 5 mm and touch X, then it
- * moves to Y and touches there, and then we have the corner point" — and two copies
- * of a sequence that drives a tool around a workpiece is two places for a clearance
- * to go wrong.
+ * The top contact is what makes the rest possible, and that is why every one of these
+ * begins with it: each drop is measured DOWN FROM THE SURFACE THE TOOL JUST TOUCHED,
+ * so the routine needs to know nothing about the workpiece beforehand. It is also why
+ * a side face on its own is a different cycle (`runEdge`) — there the operator has put
+ * the tool at depth, and taken that responsibility.
  *
- * Returns the two side contacts in machine coordinates and the start position, which
- * is what a caller needs to go and probe somewhere else along the same edge.
+ * Shared by the corner zeros and the skew measurement, on purpose: the skew cycle
+ * begins with exactly these probes — Filip's words, "first it measures the corner by
+ * height, then from that zero it knows to drop 5 mm and touch X, then it moves to Y
+ * and touches there, and then we have the corner point" — and two copies of a
+ * sequence that drives a tool around a workpiece is two places for a clearance to go
+ * wrong.
+ *
+ * Returns the side contacts in machine coordinates and the start position, which is
+ * what a caller needs to go and probe somewhere else along the same edge.
  */
-async function cornerXYZ(
+async function fromTop(
   xDir: Dir,
   yDir: Dir,
   p: ProbeParams,
   plate: Plate,
+  /** Which side faces to visit, in order. One entry for a single-face zero, both for
+   *  a corner. The order IS the order the tool walks them. */
+  sides: Axis[],
   onStep?: (s: string) => void,
-  /** Leave the tool where the Y probe stopped — beside the face, at depth — instead
-   *  of lifting and coming home. For a caller that has another point to touch on the
-   *  same edge, going back over the material only to come out again is a trip out and
-   *  in for nothing. */
+  /** Leave the tool where the LAST probe stopped — beside the face, at depth —
+   *  instead of lifting and coming home. For a caller that has another point to touch
+   *  on that same face, going back over the material only to come out again is a trip
+   *  out and in for nothing. */
   hold = false,
   /** Whether the top contact becomes the Z zero.
    *
-   *  The top is TOUCHED either way, and it has to be: every lateral move in here is
-   *  measured from that contact, which is how the tool knows how far to drop to get
-   *  beside a face without knowing anything about the workpiece beforehand. What this
-   *  decides is only whether the number is written down.
-   *
-   *  Off is for somebody whose Z is already set — from a tool-length probe, or from an
-   *  earlier cycle — who wants the corner in X and Y without losing it. */
+   *  The top is touched either way; see above for why. This decides only whether the
+   *  number is written down — off is for somebody whose Z is already set from another
+   *  reference and must not lose it. */
   zeroZ = true
-): Promise<{ lx: Prb; ly: Prb; sx: number; sy: number; drop: number }> {
+): Promise<{ hit: Partial<Record<Axis, Prb>>; sx: number; sy: number; drop: number }> {
   const s = startPos()
   if (!s) throw new Error('no-pos')
   const [sx, sy] = s
-  const offX = p.tipDiameter / 2 + plate.x
-  const offY = p.tipDiameter / 2 + plate.y
+  const off: Record<string, number> = { X: p.tipDiameter / 2 + plate.x, Y: p.tipDiameter / 2 + plate.y }
+  const dirOf: Record<string, Dir> = { X: xDir, Y: yDir }
+  const homeOf: Record<string, number> = { X: sx, Y: sy }
   // relative Z moves (referenced to the surface contact) so the routine doesn't
   // depend on Z0 being set, and is robust across WCS.
   const lift = p.retract // clear above the surface to move laterally
@@ -272,43 +278,47 @@ async function cornerXYZ(
   if (zeroZ) apply('Z', p.thickness)
   rel('Z', lift) // up, clear of the top
 
-  onStep?.('X')
-  rel('X', -xDir * p.approach) // move out past the X face
-  rel('Z', -drop) // drop beside the face
-  const lx = await probeAxis('X', xDir, p)
-  apply('X', -xDir * offX)
-  rel('Z', drop) // back up
-  gotoMachine('X', sx) // back over the material in X
-
-  onStep?.('Y')
-  rel('Y', -yDir * p.approach)
-  rel('Z', -drop)
-  const ly = await probeAxis('Y', yDir, p)
-  apply('Y', -yDir * offY)
-  if (!hold) {
-    rel('Z', drop)
-    gotoMachine('Y', sy)
+  const hit: Partial<Record<Axis, Prb>> = {}
+  for (let i = 0; i < sides.length; i++) {
+    const ax = sides[i]
+    const dir = dirOf[ax]
+    onStep?.(ax)
+    rel(ax, -dir * p.approach) // move out past the face
+    rel('Z', -drop) // drop beside it
+    hit[ax] = await probeAxis(ax, dir, p)
+    apply(ax, -dir * off[ax])
+    // Come back up and over the material before the next face — except at the very
+    // end when the caller has said it is staying put.
+    if (!(hold && i === sides.length - 1)) {
+      rel('Z', drop)
+      gotoMachine(ax, homeOf[ax])
+    }
   }
 
-  return { lx, ly, sx, sy, drop }
+  return { hit, sx, sy, drop }
 }
 
-/** The corner zero. `axes` is how much of it gets written: 'xyz' takes the top
- *  contact as Z0 as well, 'xy' leaves Z exactly as it was. The motion is identical
- *  either way — see `zeroZ` above for why the top is touched regardless. */
-export async function runCorner(
+/** What a from-the-top cycle writes down, in the order it does it. The name is the
+ *  order: `zx` touches the top and the left face, and sets Z then X. `xy` is the
+ *  corner with the Z left alone. */
+export type FromTop = 'zx' | 'zy' | 'zxy' | 'xy'
+
+const SIDES: Record<FromTop, Axis[]> = { zx: ['X'], zy: ['Y'], zxy: ['X', 'Y'], xy: ['X', 'Y'] }
+
+export async function runFromTop(
   xDir: Dir,
   yDir: Dir,
   p: ProbeParams,
   plate: Plate = NO_PLATE,
   onStep?: (s: string) => void,
-  axes: 'xy' | 'xyz' = 'xyz'
+  what: FromTop = 'zxy'
 ): Promise<ProbeResult> {
   try {
-    const { lx, ly } = await cornerXYZ(xDir, yDir, p, plate, onStep, false, axes === 'xyz')
+    const { hit } = await fromTop(xDir, yDir, p, plate, SIDES[what], onStep, false, what !== 'xy')
     onStep?.('done')
-    const note = `X ${fmt(AX(lx, 'X'))} · Y ${fmt(AX(ly, 'Y'))}`
-    return { ok: true, note: axes === 'xyz' ? `${note} · Z ✓` : note }
+    const parts = SIDES[what].map((a) => `${a} ${fmt(AX(hit[a] as Prb, a))}`)
+    if (what !== 'xy') parts.unshift('Z ✓')
+    return { ok: true, note: parts.join(' · ') }
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
@@ -348,7 +358,8 @@ export async function runSkew(
     // `hold`: stay beside the Y face at depth rather than lifting home, because the
     // next point is on that same face. Going back over the material and out again
     // would be a trip in and out for nothing.
-    const { ly, sx, sy, drop } = await cornerXYZ(xDir, yDir, p, plate, onStep, true)
+    const { hit, sx, sy, drop } = await fromTop(xDir, yDir, p, plate, ['X', 'Y'], onStep, true)
+    const ly = hit.Y as Prb
 
     // Back off the face, slide along it, touch it again — all at the depth the first
     // contact was made at, which is what keeps the two points comparable.

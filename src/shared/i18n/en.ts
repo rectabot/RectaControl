@@ -745,12 +745,17 @@ export const en: Record<string, string> = {
   'ui.probe.mode.edge': 'Edge',
   'ui.probe.mode.rotate': 'Skew ∠',
   'ui.probe.zHint': 'Sets Z0 on the top face. Park the tool a few mm over the plate.',
-  // One per outcome. Each names where the tool has to be — and for a single face
-  // that means BELOW the top, which is the whole reason to say which one you picked.
+  // One per outcome, and each one ends with where to park the tool — because that is
+  // what the name is really telling you. A name that starts with Z means the cycle
+  // measures the top itself and you start ABOVE it; a name that does not means you
+  // put the tool at depth beside the face yourself.
   'ui.probe.hint.x': 'Sets X0 on the left face. Park the tool beside it, lower than the top face.',
   'ui.probe.hint.y': 'Sets Y0 on the front face. Park the tool in front of it, lower than the top face.',
-  'ui.probe.hint.xy': 'Sets X0 and Y0 on the corner, leaving Z as it is. Park the tool 10–15 mm inside the corner, over the top face.',
-  'ui.probe.hint.xyz': 'Sets X0 Y0 Z0 on the corner. Park the tool 10–15 mm inside the corner, over the top face.',
+  'ui.probe.hint.zx': 'Top first, then the left face: Z0, then X0. Park the tool over the top, 10–15 mm inside the left edge.',
+  'ui.probe.hint.zy': 'Top first, then the front face: Z0, then Y0. Park the tool over the top, 10–15 mm inside the front edge.',
+  'ui.probe.hint.zxy': 'Top, then both faces: Z0, X0, Y0. Park the tool 10–15 mm inside the corner, over the top face.',
+  'ui.probe.hint.xy':
+    'The same moves as ZXY0, but Z is left as it is — the top is still touched, to know how far to drop. Park the tool 10–15 mm inside the corner, over the top face.',
   'ui.probe.rotateHint': 'Measures how far the workpiece is turned, and sets the corner zero on the way. Same start as the corner.',
   // the ⓘ behind each mode title — the long answer, asked for rather than served
   'ui.probe.info.z1':
@@ -758,17 +763,17 @@ export const en: Record<string, string> = {
   'ui.probe.info.zNote': 'Speeds and distances: Settings → Probe.',
   'ui.probe.info.edgeTitle': 'Edge & corner',
   'ui.probe.info.edge1':
-    'An edge sets one axis. The tool probes sideways into the face, and the zero goes half a tool diameter beyond the contact — plus the plate rail, if you use one — so it lands on the material itself.',
+    'Every one of these probes sideways into a face, and puts the zero half a tool diameter beyond the contact — plus the plate rail, if you use one — so it lands on the material itself. X0 and Y0 zero that one axis and nothing else: you park the tool at cutting depth beside the face yourself, and the top is never touched.',
   'ui.probe.info.edge2':
-    'The corner runs from one start over the top face: it probes the top, then moves out past each face, drops below the surface and probes X, then Y.',
+    'The four to the right of the line all start from the same place — over the top face, near the corner — and the name is the order they work in. The top is probed first, which is what lets the tool drop a known distance beside a face without being told anything about the workpiece; then it moves out past each face it was asked for and probes inward.',
   'ui.probe.info.edge3':
-    'XY0 makes exactly the same moves as XYZ0 — it has to touch the top to know how far to drop beside each face — it simply does not write a Z zero. Pick it when Z is already set and you want to keep it.',
+    'XY0 makes exactly those moves and still touches the top, for that clearance, but does not write a Z zero. Pick it when Z is already set from another reference and must survive.',
   'ui.probe.info.edgeNote':
     'Only the left face, the front face and the corner between them are offered: CAM puts the origin there, and zeroing against the far side does not look wrong — it shifts the cut by the size of the stock, into the table beside the part. For a corner the workpiece must also sit further into positive machine travel than the Approach distance, so the tool has room to go around it.',
   'ui.probe.info.skew1':
     'It runs the corner cycle first — top, X face, Y face — so the corner is your zero either way. Then it steps Spacing along the front edge and touches the same face once more.',
   'ui.probe.info.skew2':
-    'Two contacts a known distance apart give the angle. Apply it to the G-code and the whole program turns about X0 Y0 to follow the crooked part, or use the number to tap the part straight and measure again.',
+    'Two contacts a known distance apart give the angle. Apply it to the G-code and the whole program turns about X0 Y0 to follow the crooked part — check the 3D view matches before you cut — or use the number to tap the part straight and measure again.',
   'ui.probe.info.skewNote':
     'Past about 10° the cycle reports no contact: that far out the part is clamped wrong, not crooked. Applied rotation only reaches jobs streamed from the PC.',
   'ui.probe.spacing': 'Spacing',
@@ -779,7 +784,6 @@ export const en: Record<string, string> = {
   // software workpiece rotation (apply the measured angle to the G-code)
   'ui.rot.apply': 'Apply to G-code',
   'ui.rot.applyInv': 'Wrong way? Apply the opposite sign',
-  'ui.rot.applyHint': 'Turns the whole program about X0 Y0 so it follows the part. Check the 3D view, then cut.',
   'ui.rot.active': 'Rotation active: {deg}°',
   'ui.rot.clear': 'Clear',
   'ui.rot.badgeTitle': 'Software workpiece rotation is applied to the program',
@@ -789,7 +793,8 @@ export const en: Record<string, string> = {
   'ui.rot.sdConfirm': 'Run SD job un-rotated',
   'ui.probe.tipDia': 'Tool ⌀ (mm)',
   // full probe panel
-  'ui.probe.placeDot': 'Jog the tool to the green dot, then Start.',
+  'ui.probe.placeDot': 'Jog the tool to point 1, then Start.',
+  'ui.probe.placeStep1': 'Jog the tool to point 1, then Start — the numbers are the order it touches.',
   'ui.probe.noPlateOn':
     'No plate: the tool touches the stock itself. Z0 lands on the top face and only the tool radius comes off sideways. The stock must conduct and be grounded.',
   // running / result. The step names read as the object of "Probing …", because

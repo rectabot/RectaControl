@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT, useLabel, type TFunc } from '../i18n'
-import { ProbeDiagram } from './ProbeDiagram'
-import { runZ, runEdge, runCorner, runSkew } from '../probeRun'
+import { ProbeSequence, STEP_TOKENS, stepCount, type Sequence } from './ProbeDiagram'
+import { runZ, runEdge, runFromTop, runSkew, type FromTop } from '../probeRun'
 import { ProbeField } from './ProbeFields'
 import { readOffsets, applyOffsetsRead } from '../offsets'
 import { ProbeIcon } from './icons'
@@ -68,11 +68,15 @@ export function ProbePanel(): JSX.Element | null {
 
   const tab = useStore((s) => s.probeMode) // remembered across opens
   const setTab = useStore((s) => s.setProbeMode)
-  const [zero, setZero] = useState<Zero>('xyz')
+  const [zero, setZero] = useState<Zero>('zxy')
   const setP = useStore((s) => s.setProbeParams)
   const [measuredAngle, setMeasuredAngle] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [step, setStep] = useState('')
+  /** How many touches of the running cycle are behind us — the ticks in the drawing.
+   *  Reset by anything that changes which cycle is being talked about, so a tick can
+   *  never describe a zero somebody set with a different button. */
+  const [done, setDone] = useState(0)
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   if (!open) return null
@@ -80,9 +84,23 @@ export function ProbePanel(): JSX.Element | null {
   // off in Settings → Probe for experienced users who read the footer probe pin.
   const canRun = ready && (!probeVerify || verified) && !busy
 
-  const finish = (r: { ok: boolean; error?: string; note?: string }): void => {
+  /** Follow a cycle's step reports so the drawing can tick as it goes. A token names
+   *  the touch about to START, so everything before it in the list is finished. */
+  const track = (seq: Sequence) => (s: string): void => {
+    setStep(s)
+    if (s === 'done') return setDone(stepCount(seq))
+    const i = STEP_TOKENS[seq].indexOf(s)
+    if (i >= 0) setDone(i)
+  }
+
+  const finish = (seq: Sequence, r: { ok: boolean; error?: string; note?: string }): void => {
     setBusy(false)
     setStep('')
+    // A cycle that came back clean has done all of its touches — which is the only
+    // way the single-face zeros ever tick, since `runEdge` reports no steps at all.
+    // A failed one keeps the ticks it earned: those zeros really were written, one
+    // axis at a time, before it stopped.
+    if (r.ok) setDone(stepCount(seq))
     setResult({
       ok: r.ok,
       msg: r.ok ? r.note || t('ui.probe.done') : t('ui.probe.failed', { msg: probeErr(t, r.error || '') })
@@ -99,11 +117,15 @@ export function ProbePanel(): JSX.Element | null {
     // Fresh read, no age allowance: the whole point is that what we hold is stale.
     if (r.ok) void readOffsets().then(applyOffsetsRead)
   }
-  const guard = async (fn: () => Promise<{ ok: boolean; error?: string; note?: string }>): Promise<void> => {
+  const guard = async (
+    seq: Sequence,
+    fn: () => Promise<{ ok: boolean; error?: string; note?: string }>
+  ): Promise<void> => {
     if (!canRun) return
     setBusy(true)
     setResult(null)
-    finish(await fn())
+    setDone(0)
+    finish(seq, await fn())
   }
 
   // rotation mode has its own handler (not the shared guard) so it can capture the
@@ -112,14 +134,15 @@ export function ProbePanel(): JSX.Element | null {
     if (!canRun) return
     setBusy(true)
     setResult(null)
+    setDone(0)
     setMeasuredAngle(null)
     void (async () => {
       // same front-left corner as the three-axis zero, and the same plate rails —
       // the skew cycle IS that cycle plus one more touch further along the edge
-      const r = await runSkew(1, 1, p.skewSpacing, pp, plate, setStep)
+      const r = await runSkew(1, 1, p.skewSpacing, pp, plate, track('skew'))
       // through the shared finish, not alongside it: this cycle sets the corner zero
       // like any other, so it owes the 3D view the same fresh read of `$#`
-      finish(r)
+      finish('skew', r)
       if (r.ok && r.angle !== undefined) setMeasuredAngle(r.angle)
     })()
   }
@@ -127,16 +150,19 @@ export function ProbePanel(): JSX.Element | null {
   /** The front-left corner, and how much of it you want written down. Both faces are
    *  probed in the positive direction because the tool comes at them from outside. */
   const runZeroing = (): void =>
-    void guard(() => {
+    void guard(zero, () => {
       // a single face only ever touches one rail — the one for that axis
       if (zero === 'x') return runEdge('X', 1, pp, plate.x)
       if (zero === 'y') return runEdge('Y', 1, pp, plate.y)
-      return runCorner(1, 1, pp, plate, setStep, zero)
+      return runFromTop(1, 1, pp, plate, track(zero), zero)
     })
 
   return (
     <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/40 p-3">
-      <div className="flex max-h-full w-full max-w-md flex-col overflow-hidden rounded-lg border border-border bg-panel shadow-glow">
+      {/* Wider than the `max-w-md` it was born with: that size dates from when this
+          was a type-picker with one button per mode, and it has since taken on a
+          diagram, six zeroing choices and a spacing field. */}
+      <div className="flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-lg border border-border bg-panel shadow-glow">
         {/* header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <span className="flex items-center gap-2 font-display text-sm font-bold tracking-wider text-brand">
@@ -186,6 +212,7 @@ export function ProbePanel(): JSX.Element | null {
                 onClick={() => {
                   setTab(m)
                   setResult(null)
+                  setDone(0) // a Tool-Z run must not leave a tick on the Edge drawing
                 }}
                 className={`py-1.5 font-mono text-xs transition ${
                   tab === m ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
@@ -200,18 +227,36 @@ export function ProbePanel(): JSX.Element | null {
               coordinate system the DRO has active. See probeRun.ts for why the
               three-way choice went away. */}
 
-          {/* per-mode body */}
-          {tab === 'z' && (
-            <ModeCard
-              title={t('ui.probe.mode.z')}
-              hint={t('ui.probe.zHint')}
-              info={{ title: t('ui.probe.mode.z'), body: [t('ui.probe.info.z1')], note: t('ui.probe.info.zNote') }}
-            >
-              <RunBtn disabled={!canRun} onClick={() => void guard(() => runZ(pp))} label={`${t('ui.probe.runZ')} ↓`} />
-            </ModeCard>
-          )}
+          {/* All three modes are stacked in ONE grid cell rather than swapped in and
+              out, so the container is always as tall as the tallest and switching
+              between them moves nothing. The hidden ones are `invisible`, not
+              unmounted — that is what keeps their height in the measurement, and
+              `visibility:hidden` also takes them out of hit-testing and the tab
+              order, so there is nothing behind the visible card to click or tab into.
 
-          {tab === 'edge' && (
+              Tool Z joined the other two once it got a drawing of its own: before
+              that it was a card with a single button in it, and forcing it to the
+              height of the Edge tab would have been a window mostly made of nothing. */}
+          <div className="grid">
+            <div className={`col-start-1 row-start-1 ${tab === 'z' ? '' : 'invisible'}`}>
+              <ModeCard
+                title={t('ui.probe.mode.z')}
+                hint={t('ui.probe.zHint')}
+                info={{ title: t('ui.probe.mode.z'), body: [t('ui.probe.info.z1')], note: t('ui.probe.info.zNote') }}
+              >
+                <div className="my-3 flex justify-center">
+                  <ProbeSequence what="z" done={done} />
+                </div>
+                <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
+                <RunBtn
+                  disabled={!canRun}
+                  onClick={() => void guard('z', () => runZ(pp))}
+                  label={`${t('ui.probe.runZ')} ↓`}
+                />
+              </ModeCard>
+            </div>
+
+            <div className={`col-start-1 row-start-1 ${tab === 'edge' ? '' : 'invisible'}`}>
             <ModeCard
               title={t('ui.probe.mode.edge')}
               hint={t(`ui.probe.hint.${zero}`)}
@@ -221,18 +266,28 @@ export function ProbePanel(): JSX.Element | null {
                 note: t('ui.probe.info.edgeNote')
               }}
             >
-              {/* The choice IS the answer: each button is the zero you end up with,
-                  so nothing has to be worked out from a face and a mode. Left as
-                  symbols in every language — X0 is X0. */}
-              <div className="grid grid-cols-4 overflow-hidden rounded-md border border-border2">
-                {(['x', 'y', 'xy', 'xyz'] as const).map((z) => (
+              {/* Filip's naming, and the whole point of it: the name is the ORDER the
+                  cycle works in, so ZXY0 says the top is measured FIRST and the two
+                  faces follow. That is also what tells you where to park the tool —
+                  a name starting with Z means the cycle finds the surface itself, and
+                  you start high. Left as symbols in every language.
+
+                  Hovering gives the full sentence for the ones you did NOT pick; the
+                  chosen one already reads out under the title. */}
+              <div className="grid grid-cols-6 overflow-hidden rounded-md border border-border2">
+                {(['x', 'y', 'zx', 'zy', 'zxy', 'xy'] as const).map((z) => (
                   <button
                     key={z}
+                    title={t(`ui.probe.hint.${z}`)}
                     onClick={() => {
                       setZero(z)
                       setResult(null)
+                      setDone(0) // ticks belong to the cycle that earned them
                     }}
-                    className={`py-1.5 font-mono text-xs transition ${
+                    // The rule that splits them is where the tool starts, so the line
+                    // goes there: to the left of it you park at depth beside a face,
+                    // to the right the cycle measures the top and drops by itself.
+                    className={`py-1.5 font-mono text-xs transition ${z === 'zx' ? 'border-l border-border2' : ''} ${
                       zero === z ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -240,16 +295,17 @@ export function ProbePanel(): JSX.Element | null {
                   </button>
                 ))}
               </div>
-              {/* Clicking the corner keeps whichever of XY0 / XYZ0 is already chosen.
-                  The dot says WHERE the tool goes; it must not quietly decide whether
-                  a Z zero gets written on top of one you already set. */}
+              {/* The drawing no longer picks anything — the row of buttons above does
+                  that — it shows the chosen cycle as the numbered touches it will
+                  make, in order. Filip's point, and it is a safety one: with a hand
+                  on the probe you want to know where the tool goes NEXT, not only
+                  which face this move is aimed at. */}
               <div className="my-3 flex justify-center">
-                <ProbeDiagram
-                  spot={zero === 'x' || zero === 'y' ? zero : 'corner'}
-                  onSelect={(s) => setZero(s === 'corner' ? (zero === 'xy' ? 'xy' : 'xyz') : s)}
-                />
+                <ProbeSequence what={zero} done={done} />
               </div>
-              <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
+              <p className="mb-2 text-center text-[11px] text-slate-400">
+                {t(zero === 'x' || zero === 'y' ? 'ui.probe.placeDot' : 'ui.probe.placeStep1')}
+              </p>
               <RunBtn
                 disabled={!canRun}
                 onClick={runZeroing}
@@ -258,9 +314,9 @@ export function ProbePanel(): JSX.Element | null {
                 }
               />
             </ModeCard>
-          )}
+            </div>
 
-          {tab === 'rotate' && (
+            <div className={`col-start-1 row-start-1 ${tab === 'rotate' ? '' : 'invisible'}`}>
             <ModeCard
               title={t('ui.probe.mode.rotate')}
               hint={t('ui.probe.rotateHint')}
@@ -270,12 +326,12 @@ export function ProbePanel(): JSX.Element | null {
                 note: t('ui.probe.info.skewNote')
               }}
             >
-              {/* No edge to pick: the cycle starts at the front-left corner, like
-                  the three-axis zero, and measures along the front edge from there. */}
+              {/* Nothing to pick — the cycle is always the same four touches — so the
+                  drawing numbers them instead of offering a choice. */}
               <div className="mb-3 flex justify-center">
-                <ProbeDiagram spot="corner" />
+                <ProbeSequence what="skew" done={done} />
               </div>
-              <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeDot')}</p>
+              <p className="mb-2 text-center text-[11px] text-slate-400">{t('ui.probe.placeStep1')}</p>
               {/* Kept in the panel rather than sent off to Settings: it is the one
                   number you change per part, not per machine. It persists all the
                   same — a spacing measured for a particular workpiece should not be
@@ -288,54 +344,70 @@ export function ProbePanel(): JSX.Element | null {
                   onChange={(v) => setP({ skewSpacing: v })}
                 />
               </div>
-              <RunBtn
-                disabled={!canRun}
-                onClick={runRotate}
-                label={busy ? runningLabel(t, step) : t('ui.probe.runRotate')}
-              />
-
-              {/* measured → apply to the G-code (software rotation about work origin) */}
-              {measuredAngle !== null && (
-                <div className="mt-3 space-y-2 rounded-md border border-border bg-base p-2.5">
-                  <div className="text-center font-mono text-lg text-brand">∠ {measuredAngle.toFixed(3)}°</div>
-                  <RunBtn disabled={false} onClick={() => setRotationDeg(measuredAngle)} label={t('ui.rot.apply')} />
-                  <button
-                    className="w-full text-[11px] text-slate-400 transition hover:text-slate-200"
-                    onClick={() => setRotationDeg(-measuredAngle)}
-                  >
-                    {t('ui.rot.applyInv')}
-                  </button>
-                  <p className="text-[10px] leading-relaxed text-slate-500">{t('ui.rot.applyHint')}</p>
-                </div>
-              )}
-
-              {/* current applied rotation + clear */}
-              {!!rotationDeg && (
-                <div className="mt-2 flex items-center justify-between rounded-md border border-warn/40 bg-panel2 px-2.5 py-1.5 text-[11px] text-warn">
-                  <span className="font-mono">{t('ui.rot.active', { deg: rotationDeg.toFixed(3) })}</span>
-                  <button className="rounded px-1.5 hover:bg-warn/20" onClick={() => setRotationDeg(0)}>
-                    {t('ui.rot.clear')}
-                  </button>
-                </div>
-              )}
+              {/* Measure and Apply side by side, both there from the start.
+                  Apply used to arrive in a box of its own once an angle existed,
+                  which meant the panel rearranged itself underneath the hand that
+                  had just pressed Measure. Now it only lights up: the shape of the
+                  window never changes, and a greyed-out Apply says, before you
+                  measure anything, that measuring is not the last step. */}
+              <div className="grid grid-cols-2 gap-2">
+                <RunBtn
+                  disabled={!canRun}
+                  onClick={runRotate}
+                  label={busy ? runningLabel(t, step) : t('ui.probe.runRotate')}
+                />
+                <RunBtn
+                  disabled={measuredAngle === null}
+                  onClick={() => measuredAngle !== null && setRotationDeg(measuredAngle)}
+                  label={t('ui.rot.apply')}
+                />
+              </div>
+              <button
+                className="mt-1.5 w-full text-[11px] text-slate-400 transition enabled:hover:text-slate-200 disabled:opacity-40"
+                disabled={measuredAngle === null}
+                onClick={() => measuredAngle !== null && setRotationDeg(-measuredAngle)}
+              >
+                {t('ui.rot.applyInv')}
+              </button>
             </ModeCard>
-          )}
+            </div>
+          </div>
 
-          {/* result + warnings */}
-          {result && (
-            <div className={`rounded-md px-3 py-2 text-xs font-semibold ${result.ok ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'}`}>
-              {result.ok ? '✓ ' : ''}
-              {result.msg}
+          {/* The result line keeps a slot whether or not it has anything to say. It
+              carries the measured numbers and, when a cycle fails, the reason — so it
+              stays — but appearing out of nothing shoved the warning and the settings
+              link down the window every single run. The ticks in the drawing are now
+              where success is read; this is the detail underneath it. */}
+          <div className="min-h-[32px]">
+            {result && (
+              <div
+                className={`rounded-md px-3 py-2 text-center text-xs font-semibold ${
+                  result.ok ? 'bg-ok/15 text-ok' : 'bg-danger/15 text-danger'
+                }`}
+              >
+                {result.ok ? '✓ ' : ''}
+                {result.msg}
+              </div>
+            )}
+          </div>
+
+          {/* the rotation currently applied to the program, and the way out of it */}
+          {tab === 'rotate' && !!rotationDeg && (
+            <div className="flex items-center justify-between rounded-md border border-warn/40 bg-panel2 px-2.5 py-1.5 text-[11px] text-warn">
+              <span className="font-mono">{t('ui.rot.active', { deg: rotationDeg.toFixed(3) })}</span>
+              <button className="rounded px-1.5 hover:bg-warn/20" onClick={() => setRotationDeg(0)}>
+                {t('ui.rot.clear')}
+              </button>
             </div>
           )}
           {/* Naming the state it is actually in: "must be Idle" left the operator to
               work out which of connection, alarm or a running job was in the way. */}
           {!ready && (
-            <p className="text-[11px] text-warn">
+            <p className="text-center text-[11px] text-warn">
               {t('ui.probe.notReady', { state: connected ? base || '—' : t('ui.fm.notConnected') })}
             </p>
           )}
-          <p className="font-mono text-[10px] leading-relaxed text-danger/80">⚠ {t('ui.probe.warn')}</p>
+          <p className="text-center font-mono text-[10px] leading-relaxed text-danger/80">⚠ {t('ui.probe.warn')}</p>
           <button
             className="w-full text-center text-[11px] text-slate-500 transition hover:text-brand"
             onClick={() => openSettingsAt('probe')}
@@ -350,10 +422,11 @@ export function ProbePanel(): JSX.Element | null {
 
 // ── small pieces ─────────────────────────────────────────────────────────────
 
-/** What the cycle writes, which is the thing the operator actually chooses. The
- *  first two are one face; the last two are the same corner cycle, differing only
- *  in whether the top contact becomes Z0. */
-type Zero = 'x' | 'y' | 'xy' | 'xyz'
+/** What the cycle writes, in the order it writes it — which is the thing the operator
+ *  actually chooses. `x` and `y` are the one-face zeros reachable from the diagram,
+ *  where the tool is already at depth; the rest start above the top face and are the
+ *  four buttons. */
+type Zero = 'x' | 'y' | FromTop
 
 /**
  * One mode's card. The hint on the face of it answers only two questions — what the
@@ -377,9 +450,16 @@ function ModeCard({
     <div className="rounded-lg border border-border bg-panel2 p-3">
       <div className="mb-1 flex items-center gap-1.5">
         <span className="text-xs font-semibold text-slate-200">{title}</span>
-        {info && <InfoTip title={info.title} body={info.body} note={info.note} width="w-72" />}
+        {/* Wide enough not to scroll. A tall narrow column of text inside a panel
+            that itself scrolls means reading a paragraph by dragging, and the ⓘ
+            exists to be read at a glance. 416 px still clears the panel's right
+            edge from where the dot hangs. */}
+        {info && <InfoTip title={info.title} body={info.body} note={info.note} width="w-[26rem]" />}
       </div>
-      <p className="mb-3 text-[11px] leading-relaxed text-slate-400">{hint}</p>
+      {/* Two lines' worth, always. These hints are one line for most choices and two
+          for XY0, and letting the box breathe with them dragged the diagram and the
+          Start button up and down as you moved along the row of zeroing buttons. */}
+      <p className="mb-3 min-h-[36px] text-[11px] leading-relaxed text-slate-400">{hint}</p>
       {children}
     </div>
   )
@@ -417,7 +497,10 @@ function probeErr(t: TFunc, msg: string): string {
 function RunBtn({ disabled, onClick, label }: { disabled: boolean; onClick: () => void; label: string }): JSX.Element {
   return (
     <button
-      className="w-full rounded-md bg-brand py-2 font-semibold text-[#020617] transition enabled:hover:bg-brandDark disabled:opacity-40"
+      // text-base at py-2 was the biggest thing in a window whose job is to be read
+      // before it is pressed. Still unmistakably the primary control, just no longer
+      // shouting over the drawing that tells you what it will do.
+      className="w-full rounded-md bg-brand py-1.5 text-sm font-semibold text-[#020617] transition enabled:hover:bg-brandDark disabled:opacity-40"
       disabled={disabled}
       onClick={onClick}
     >

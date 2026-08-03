@@ -217,7 +217,29 @@ function setSkewCorner(xDir: Dir, yDir: Dir, deg: number, lx: Prb, ly: Prb, p: P
 }
 
 const fmt = (n: number): string => Number(n.toFixed(3)).toString()
-const startPos = (): number[] | null => useStore.getState().status?.mpos ?? null
+/**
+ * Where the cycle begins, in machine coordinates — the spot it will come home to.
+ *
+ * Settles FIRST, and that is the whole point of this function existing rather than
+ * reading the store inline. The status report is a snapshot of whenever the last poll
+ * happened; asked while anything is still moving it answers about the past. `settle()`
+ * waits for `Idle`, so the report it leaves behind describes a machine that has
+ * stopped — which is the only kind of report a "return here afterwards" may be built on.
+ *
+ * Filip found it on 3 Aug 2026, running the same cycle twice in a row. The first came
+ * home to X-8.623 and the second to X-23.691, from identical motion. -23.691 was not a
+ * start position at all: it was where the machine had come to rest after the PREVIOUS
+ * cycle's probe, six microns past its trigger. So the second cycle "returned" to the
+ * face it had just measured, and stayed pressed against it — and the cycle after that
+ * would have begun from there, carrying the mistake forward.
+ *
+ * Same trap as the touch check on 2 Aug and the same cure, one step earlier in the
+ * routine: `settle()` guarded the probing, and this ran in front of it, unguarded.
+ */
+async function startPos(): Promise<number[] | null> {
+  await settle()
+  return useStore.getState().status?.mpos ?? null
+}
 
 // ── modes ────────────────────────────────────────────────────────────────────
 
@@ -313,7 +335,7 @@ async function fromTop(
    *  reference and must not lose it. */
   zeroZ = true
 ): Promise<{ hit: Partial<Record<Axis, Prb>>; sx: number; sy: number; drop: number }> {
-  const s = startPos()
+  const s = await startPos()
   if (!s) throw new Error('no-pos')
   const [sx, sy] = s
   const off: Record<string, number> = { X: p.tipDiameter / 2 + plate.x, Y: p.tipDiameter / 2 + plate.y }

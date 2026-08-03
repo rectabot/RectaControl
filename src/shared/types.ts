@@ -16,6 +16,15 @@ export interface EthernetConnectOptions {
 
 export type ConnectOptions = UsbConnectOptions | EthernetConnectOptions
 
+/** What the main process's link looks like at this instant — for a window that has just
+ *  appeared (a launch, a reload, a recovered crash) and has to find out what it missed.
+ *  The link and everything learned about the machine outlive the window. */
+export interface LinkState {
+  connected: boolean
+  kind: TransportKind | null
+  info: MachineInfo
+}
+
 /** Marks the one connection failure worth telling apart: the board completed the TCP
  *  handshake and dropped the session immediately, because its telnet daemon still has a
  *  client. Reachable, but not available — and the way out is USB, not another try.
@@ -315,8 +324,21 @@ export interface RectaApi {
   onCloseRequest(cb: () => void): () => void
   /** Tell main to proceed with quitting after the user confirmed. */
   confirmClose(): Promise<void>
+  /** The link as main has it right now — asked once, on mount, instead of guessed. */
+  linkState(): Promise<LinkState>
+  /** The same, synchronously, for the store's initial state — the only caller that has
+   *  to have it before the first frame rather than shortly after it. */
+  linkStateSync(): LinkState
+  /** Reload the whole document, no questions — the error screen's way out. */
+  reloadWindow(): Promise<void>
+  /** Main asks the window to rebuild its interface in place; returns an unsubscribe fn. */
+  onRebuild(cb: () => void): () => void
+  /** Tell main the rebuild is done, so it does not fall back to reloading the document. */
+  rebuilt(): Promise<void>
   /** Set the UI scale: a number pins a manual override, null returns to auto-fit. */
   setZoom(factor: number | null): Promise<void>
+  /** Tell main the active theme's background, so it can paint between two documents. */
+  setBackdrop(color: string): Promise<void>
   /** Subscribe to the effective zoom factor (auto-fit or override); unsubscribe fn. */
   onZoom(cb: (factor: number) => void): () => void
 }

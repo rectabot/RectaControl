@@ -13,7 +13,7 @@
 
 import { StringDecoder } from 'node:string_decoder'
 import { StatusParser, RT, stripComment, parseSpindleEntry } from '@shared/grbl'
-import type { ConnectOptions, ControllerEvent, MachineInfo, ResumeMap, TransportKind } from '@shared/types'
+import type { ConnectOptions, ControllerEvent, LinkState, MachineInfo, ResumeMap, TransportKind } from '@shared/types'
 import type { Transport } from './transport'
 import { SerialTransport, pickBoardPort } from './transport/serial'
 import { EthernetTransport } from './transport/ethernet'
@@ -125,7 +125,7 @@ export class Controller {
     // the same discovery a fresh connection runs, which repopulates what it lost.
     if (this.transport?.isOpen && sameTarget(this.connOpts, opts)) {
       this.emit({ type: 'connected', data: { kind: opts.kind } })
-      this.announce()
+      this.announce(true)
       return
     }
 
@@ -174,14 +174,26 @@ export class Controller {
   /** Ask the board to introduce itself. Everything the UI needs and cannot guess:
    *  who it is, what parser state it is in, and which spindles this firmware carries.
    *  Run on every fresh connection, and again when a reloaded window rejoins one that
-   *  was already up — the board's answers are what fills the new window in. */
-  private announce(): void {
+   *  was already up — the board's answers are what fills the new window in.
+   *
+   *  `rejoin` is the difference between a board that may still be booting and one that
+   *  has been answering for the last quarter of an hour. A fresh connection staggers the
+   *  three questions and gives the board a moment first; a rejoin asks at once, and does
+   *  not ask the window to wait for the answers at all — this process already has them,
+   *  and handing them over is instant.
+   *
+   *  Without that, a reload left the DRO showing three axes for very nearly a second on
+   *  a four-axis machine: window shown at 17:37:04.723, `$I` sent at 17:37:05.665. It
+   *  was right in the end, which is the kind of wrong that is worse — the operator sees
+   *  an axis vanish and reappear and has no way to know it was only the screen. */
+  private announce(rejoin = false): void {
+    if (rejoin && this.info.version) this.emit({ type: 'info', data: { ...this.info } })
     // ask the controller who it is + current parser state (WCS / units)
-    setTimeout(() => this.sendLine('$I'), 250)
-    this.askParserState(400)
+    setTimeout(() => this.sendLine('$I'), rejoin ? 0 : 250)
+    this.askParserState(rejoin ? 50 : 400)
     // enumerate the registered spindles (machine-readable) so the $395 picker can
     // list the real drivers this firmware carries (analog PWM + every Modbus VFD).
-    setTimeout(() => this.sendLine('$SPINDLESH'), 550)
+    setTimeout(() => this.sendLine('$SPINDLESH'), rejoin ? 100 : 550)
     // Units are owned by the controller's $13 (report inches). We no longer pin
     // $13 — the unit is set exclusively via the $13 setting and the display
     // (DRO/header) reflects whatever the controller reports.
@@ -332,6 +344,18 @@ export class Controller {
    *  be read against the firmware and board that produced it. */
   get machineInfo(): MachineInfo {
     return { ...this.info }
+  }
+
+  /** Everything a window that has just appeared needs in order to stop guessing.
+   *
+   *  A fresh window assumes nothing is connected and finds out otherwise by trying to
+   *  connect — which on a reload took 684 ms (measured 3 Aug 2026), and for all of it
+   *  the DRO showed a three-axis machine because three is what it shows when it has not
+   *  been told. The axis count was never in question: this process had it. Asking is
+   *  immediate and it is the truth, where connecting-to-find-out is neither. */
+  get linkState(): LinkState {
+    const connected = !!this.transport?.isOpen
+    return { connected, kind: connected ? this.kind : null, info: { ...this.info } }
   }
 
   // ------------------------------------------------------------------ output

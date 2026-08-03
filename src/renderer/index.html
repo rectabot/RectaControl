@@ -8,6 +8,20 @@
       content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;"
     />
     <title>RectaControl</title>
+    <!-- Deliberately no background here. The document paints before the bundle carrying
+         index.css has arrived, and an unstyled page is white — but the right colour at
+         that moment depends on the theme, which nothing in this file can know. So the
+         page stays transparent and the WINDOW's backdrop shows through instead: main
+         remembers the active theme's background across reloads and restarts, and paints
+         it (main/index.ts). Height and margin are here because a transparent page still
+         has to be the right shape. -->
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type {
   ConnectOptions,
   ControllerEvent,
@@ -7,6 +7,32 @@ import type {
   ResumeMap,
   UpdateReady
 } from '@shared/types'
+
+// Paint the document before it can be painted white.
+//
+// A reloaded document has no stylesheet for a moment, and Chromium's base colour for a
+// document — which is separate from the window's, and is not what `setBackgroundColor`
+// changes — is white. On a dark app that is a full-screen white flash on every Ctrl+R,
+// and it read as the interface breaking rather than refreshing. index.html cannot fix it
+// either: the right colour depends on the theme, which no static file knows, and the CSP
+// rightly forbids the inline script that would look it up.
+//
+// The preload is the only code that runs after the document exists and before it is
+// parsed, and it can ask main synchronously — main remembers the active theme's
+// background across reloads and restarts. Written onto <html>, so it is the page's
+// backdrop from the first frame; index.css takes over the instant it arrives, in the
+// same colour.
+// It has to be `webFrame.insertCSS`, and nothing that touches the DOM: at this point
+// there IS no DOM. The preload runs before parsing starts, so `document.documentElement`
+// is still null, and code that waits for it runs after parsing — which is after the
+// white. That was the first attempt at this, and it did nothing.
+try {
+  const color = ipcRenderer.sendSync('ui:backdrop:sync')
+  if (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color))
+    webFrame.insertCSS(`html{background-color:${color}}`)
+} catch {
+  /* no colour is better than no window */
+}
 
 const api: RectaApi = {
   listPorts: () => ipcRenderer.invoke('ports:list'),
@@ -85,7 +111,17 @@ const api: RectaApi = {
     return () => ipcRenderer.removeListener('app:close-request', listener)
   },
   confirmClose: () => ipcRenderer.invoke('app:confirm-close'),
+  linkState: () => ipcRenderer.invoke('link:state'),
+  linkStateSync: () => ipcRenderer.sendSync('link:state:sync'),
+  reloadWindow: () => ipcRenderer.invoke('app:reload'),
+  onRebuild: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('app:rebuild', listener)
+    return () => ipcRenderer.removeListener('app:rebuild', listener)
+  },
+  rebuilt: () => ipcRenderer.invoke('app:rebuilt'),
   setZoom: (factor: number | null) => ipcRenderer.invoke('ui:setZoom', factor),
+  setBackdrop: (color: string) => ipcRenderer.invoke('ui:backdrop', color),
   onZoom: (cb: (factor: number) => void) => {
     const listener = (_e: unknown, factor: number): void => cb(factor)
     ipcRenderer.on('ui:zoom', listener)

@@ -62,7 +62,10 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
 
         <div className="flex shrink-0 gap-2">
           <button
-            onClick={() => window.location.reload()}
+            // through main, so the refresh carries the app's backdrop rather than
+            // Chromium's white one; window.location is the fallback if the bridge is
+            // the thing that broke
+            onClick={() => void (window.recta?.reloadWindow?.() ?? window.location.reload())}
             className="rounded-lg border-2 border-ok px-4 py-2 text-sm font-semibold text-ok transition hover:bg-ok hover:text-[#020617]"
           >
             Reload interface

@@ -38,6 +38,19 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
 
   ipcMain.handle('ports:list', () => listPorts())
 
+  // What a window asks the moment it exists, before it assumes anything.
+  ipcMain.handle('link:state', () => controller.linkState)
+
+  // The same answer, synchronously, for the one caller that cannot wait: the store's
+  // initial state. An awaited answer arrives after the first frame is on screen, and
+  // that frame showed a disconnected three-axis machine on a connected four-axis one —
+  // the operator sees an axis appear out of nowhere on every reload. Blocking the
+  // renderer is the wrong tool almost everywhere and exactly right here: it is one
+  // property read, once, before there is anything to block.
+  ipcMain.on('link:state:sync', (e) => {
+    e.returnValue = controller.linkState
+  })
+
   ipcMain.handle('connect', async (_e, opts: ConnectOptions) => {
     await controller.connect(opts)
   })

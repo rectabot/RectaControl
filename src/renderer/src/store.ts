@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ControllerEvent, JobProgress, MachineInfo, StatusReport, TransportKind, UpdateReady } from '@shared/types'
+import type { ControllerEvent, JobProgress, LinkState, MachineInfo, StatusReport, TransportKind, UpdateReady } from '@shared/types'
 import { describe, parseCode, getAlarm, getError } from '@shared/messages'
 import { t, type Lang } from '@shared/i18n'
 import { DEFAULT_BINDINGS, type Binding } from './controls'
@@ -728,13 +728,37 @@ interface AppState {
   setParkPos: (p: [number, number, number] | null) => void
 }
 
+/** The link as it stands before this window has drawn anything.
+ *
+ *  The connection belongs to the main process and outlives the window, so a reload —
+ *  or a crash the ErrorBoundary recovered from — comes back to a machine that is still
+ *  connected and still has however many axes it had. Starting from `false` / EMPTY_INFO
+ *  and correcting it a few milliseconds later is not a small lie: the first frame drew
+ *  a disconnected three-axis DRO, and on a four-axis machine the operator watched an
+ *  axis blink out and return on every reload. Read here, synchronously, because the
+ *  first frame is rendered before any promise can resolve.
+ *
+ *  Not cached, and deliberately not persisted: this is what main knows THIS instant. A
+ *  remembered axis list is the bug EMPTY_INFO exists to prevent — see above. */
+function bootLink(): LinkState {
+  const empty: LinkState = { connected: false, kind: null, info: EMPTY_INFO }
+  // guarded so the store can be imported outside a preload'd window (tests, tooling)
+  if (typeof window === 'undefined' || !window.recta?.linkStateSync) return empty
+  try {
+    return window.recta.linkStateSync() ?? empty
+  } catch {
+    return empty
+  }
+}
+const boot = bootLink()
+
 export const useStore = create<AppState>((set, get) => ({
-  connected: false,
-  connKind: null,
+  connected: boot.connected,
+  connKind: boot.kind,
   status: null,
   overrides: [100, 100, 100],
   accessory: '',
-  info: EMPTY_INFO,
+  info: boot.info,
   travel: null,
   wcsOffsets: {},
   g92Offset: [0, 0, 0],

@@ -3,6 +3,7 @@ import { useStore, parserSilentFor } from './store'
 import { readOffsets, applyOffsetsRead } from './offsets'
 import { t as translate } from '@shared/i18n'
 import { BUSY_SESSION } from '@shared/types'
+import { baseColor } from './themeColors'
 import { TopBar } from './components/TopBar'
 import { DRO } from './components/DRO'
 import { JogPanel } from './components/JogPanel'
@@ -66,6 +67,23 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const off = window.recta.onEvent((e) => apply(e))
     return off
+  }, [apply])
+
+  // Before assuming anything: ask what the link already is.
+  //
+  // The connection and everything learned about the machine belong to the main process
+  // and outlive this window. A window that has just appeared — a launch, a reload, a
+  // crash the ErrorBoundary recovered from — used to find out by trying to connect, and
+  // showed a disconnected three-axis machine until that came back: 684 ms on a reload
+  // measured 3 Aug 2026, of which the operator's own four-axis DRO spent every
+  // millisecond claiming to have three axes. It was never a question worth asking the
+  // board; main had the answer the whole time. Same reason `pendingUpdate()` exists.
+  useEffect(() => {
+    void window.recta.linkState().then((s) => {
+      if (!s.connected || !s.kind) return
+      apply({ type: 'connected', data: { kind: s.kind } })
+      if (s.info.version) apply({ type: 'info', data: s.info })
+    })
   }, [apply])
 
   // An update is found and downloaded by the main process, which may well have
@@ -141,6 +159,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     let cancelled = false
     const timer = setTimeout(async () => {
+      // The link snapshot above may already have found one up — a reload, not a launch.
+      // Auto-connecting on top of it is answered by a rejoin, so nothing breaks, but it
+      // re-asks the board three questions it has already answered and says so in the
+      // console every time the window comes back.
+      if (useStore.getState().connected) return
       const lang = useStore.getState().lang
       const ethHost = localStorage.getItem('conn.ethHost') || '192.168.5.1'
       const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
@@ -355,6 +378,12 @@ export default function App(): JSX.Element {
     const el = document.documentElement
     el.classList.remove('light', 'softlight', 'violet')
     if (theme !== 'dark') el.classList.add(theme)
+    // and tell main, which paints the gap between two documents on a reload and has no
+    // other way to know which theme it is painting for. The same colour goes onto <html>
+    // here as well as in the preload, so switching theme at runtime does not leave the
+    // backdrop under the page showing the theme before last.
+    el.style.backgroundColor = baseColor(theme)
+    void window.recta.setBackdrop(baseColor(theme))
   }, [theme])
 
   return (

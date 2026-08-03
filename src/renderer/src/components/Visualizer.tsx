@@ -7,13 +7,17 @@ import { readOffsets } from '../offsets'
 import { parseToolpath, usesRotary } from '../toolpath'
 import { rotateGcode } from '../gcodeRotate'
 import { ViewerControls } from './ViewerControls'
+import { panelColor } from '../themeColors'
 
-/** The 3D background for a theme — the app's recessed surface (bg-base). Also what a
- *  spent rapid is faded TOWARDS, so "barely visible" means the same thing on a dark
- *  background and a light one instead of being a fixed grey that only works on one. */
-function bgColor(theme: string): number {
-  return theme === 'light' ? 0xe2e8f0 : theme === 'softlight' ? 0xdde2ea : theme === 'violet' ? 0x100c1c : 0x0a1421
-}
+/** The 3D background for a theme — the recessed surface (bg-panel2) this canvas sits on,
+ *  so the viewport is the pane rather than a rectangle laid over it. Also what a spent
+ *  rapid is faded TOWARDS, so "barely visible" means the same thing on a dark background
+ *  and a light one instead of being a fixed grey that only works on one.
+ *
+ *  It used to carry its own table, which read bg-base on three themes and bg-panel2 on
+ *  dark — so it matched its frame on exactly the theme it was written against, and was a
+ *  shade off on the other three. */
+const bgColor = panelColor
 
 const GRID_CELL = 10 // mm per square
 const LABEL_STEP = 100 // mm between axis dimension labels (100, 200, …)
@@ -424,7 +428,14 @@ export function Visualizer(): JSX.Element {
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(mount.clientWidth, mount.clientHeight)
-    renderer.setClearColor(0x0a1421, 1)
+    // From the theme, not from the dark one's value: an effect below repaints this on
+    // every theme change, but the first frame is drawn before it runs, and on a light
+    // theme that first frame was a dark rectangle where the work should be.
+    renderer.setClearColor(bgColor(useStore.getState().theme), 1)
+    // …and the same colour on the element itself, so even a frame where the canvas has
+    // no content — a lost GPU context, a resize between paints — is the pane's colour
+    // rather than the compositor's white.
+    renderer.domElement.style.backgroundColor = bgColor(useStore.getState().theme)
     mount.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
@@ -503,12 +514,30 @@ export function Visualizer(): JSX.Element {
     })
     ro.observe(mount)
 
+    // Draw once, now, before this frame is composited.
+    //
+    // The canvas is in the document from the moment it is appended, but the loop above
+    // does not draw until the next animation frame — and a canvas that exists with
+    // nothing drawn on it composites WHITE. On every reload that was a white rectangle
+    // exactly the size of the viewport, on every theme, gone the instant the loop caught
+    // up: the same flash whether the app is dark or light, because white is not one of
+    // its colours. It is only ever one frame, which is why holding Ctrl+R down hid it —
+    // the canvas never got created between reloads.
+    renderer.render(scene, camera)
+
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
       controls.removeEventListener('change', onControlsChange)
       controls.dispose()
       renderer.dispose()
+      // dispose() frees what three.js allocated; the WebGL context itself is the
+      // browser's and outlives it until garbage collection gets round to it. A browser
+      // keeps only a handful of live contexts and drops the oldest when a new one asks —
+      // and a dropped context is a blank canvas. Nothing noticed while the visualizer
+      // mounted once a session; it mounts twice per load under StrictMode and again on
+      // every reload, which is a fresh reason to hand the context back on the way out.
+      renderer.forceContextLoss()
       mount.removeChild(renderer.domElement)
       three.current = null
     }
@@ -826,9 +855,11 @@ export function Visualizer(): JSX.Element {
     const t = three.current
     if (!t) return
     const light = theme === 'light' || theme === 'softlight'
-    // 3D background matches the active theme's recessed surface (bg-base)
+    // 3D background matches the active theme's recessed surface (bg-panel2), which is
+    // the pane this canvas sits in
     const clear = bgColor(theme)
     t.renderer.setClearColor(clear, 1)
+    t.renderer.domElement.style.backgroundColor = clear
     t.scene.remove(t.grid)
     disposeGrid(t.grid)
     const grid = buildGrid(travel, light)

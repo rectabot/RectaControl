@@ -12,6 +12,7 @@
  * (caught → reported). Lateral returns use G53 (machine coords) so they're exact.
  */
 import { useStore, type ProbeParams } from './store'
+import { skewCorner } from '@shared/skew'
 
 /* There is no longer a choice of what to do with the measurement, and that is the
  * point. It used to offer three: set the work zero, apply a G92 offset, or measure
@@ -163,6 +164,33 @@ async function probeAxis(axis: Axis, dir: Dir, p: ProbeParams, reach = p.probeDi
  *  rather than carrying its own idea of which system to write. */
 function apply(axis: Axis, value: number): void {
   send(`G10 L20 P0 ${axis}${value.toFixed(4)}`)
+}
+
+/**
+ * Move the work origin onto the corner the skew cycle works out once it knows the
+ * angle, correcting the two zeros its corner probes set along the way.
+ *
+ * `G10 L2` takes the machine coordinate of the origin outright. `G10 L20` — what
+ * every other zero here uses — derives it instead from wherever the tool is standing,
+ * and the board computes that from `gc_state.position` (see gcode.c): the machine
+ * stops a little PAST the point the probe triggered at, 12 to 14 µm on 3 Aug 2026 and
+ * always in the direction of travel. `[PRB:]` is the trigger itself, captured in the
+ * step interrupt, so an answer built from it leaves that error behind as well.
+ *
+ * The geometry is in @shared/skew, away from the store, so it can be checked against
+ * the numbers the machine really produced.
+ */
+function setSkewCorner(xDir: Dir, yDir: Dir, deg: number, lx: Prb, ly: Prb, p: ProbeParams, plate: Plate): void {
+  const c = skewCorner({
+    deg,
+    left: { x: lx.x, y: lx.y },
+    front: { x: ly.x, y: ly.y },
+    standoffX: p.tipDiameter / 2 + plate.x,
+    standoffY: p.tipDiameter / 2 + plate.y,
+    xDir,
+    yDir
+  })
+  send(`G10 L2 P0 X${c.x.toFixed(4)} Y${c.y.toFixed(4)}`)
 }
 
 const fmt = (n: number): string => Number(n.toFixed(3)).toString()
@@ -403,6 +431,7 @@ export async function runSkew(
     // spacing`, which would hand atan2 a negative second argument and fold the answer
     // around ±180° instead of changing its sign.
     const deg = (Math.atan2(delta * xDir, spacing) * 180) / Math.PI
+    setSkewCorner(xDir, yDir, deg, hit.X as Prb, ly, p, plate)
     return { ok: true, angle: deg, note: `∠ ${deg.toFixed(3)}°  ·  Δ ${fmt(delta)} / ${spacing} mm` }
   } catch (e) {
     return { ok: false, error: (e as Error).message }

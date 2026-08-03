@@ -157,25 +157,46 @@ async function probeAxis(axis: Axis, dir: Dir, p: ProbeParams, reach = p.probeDi
   return probeStep(axis, dir, p.latchDistance * 2, p.latchFeed)
 }
 
-/** Set the work zero for one axis at the CURRENT position (tool is at the trigger).
- *  `value` = the work coordinate this position should read.
+/**
+ * Set the work zero for one axis from the point the probe TRIGGERED at, so that
+ * `machine` reads work coordinate `value`.
  *
- *  `P0` is grblHAL's "whatever coordinate system is active", so this follows the DRO
- *  rather than carrying its own idea of which system to write. */
-function apply(axis: Axis, value: number): void {
-  send(`G10 L20 P0 ${axis}${value.toFixed(4)}`)
+ * This used to be `G10 L20`, which sets the zero from wherever the tool is standing —
+ * and the tool is never standing on the trigger point. The board captures `[PRB:]` in
+ * the step interrupt at the instant the probe closes, then stops as fast as it can,
+ * which takes a little further travel. Measured on 3 Aug 2026 across a whole corner
+ * cycle: 10 µm on X, 13 on Y, 14 on Z, every one of them in the direction the probe was
+ * moving. Systematic, not noise — it does not average out over repeats, and it grows
+ * with the approach feed. The X/Y zeros therefore sat that far INSIDE the material and
+ * Z0 that far BELOW the surface.
+ *
+ * `[PRB:]` is the trigger itself, so building the answer from it leaves the overshoot
+ * behind entirely. `G10 L2` takes the machine coordinate of the origin outright.
+ *
+ * The two subtractions are what `G10 L20` was doing for us. The board computes it as
+ * `WCS = MPos - G92 - TLO - WPos` (gcode.c), and `L2` applies no modifiers at all, so
+ * a replacement that ignored them would be exact only while both are zero. They are
+ * zero on this machine today; TLO stops being zero the moment tool lengths are
+ * measured, and that is precisely when a silently wrong Z would be hardest to spot.
+ *
+ * `P0` is grblHAL's "whatever coordinate system is active", so this still follows the
+ * DRO rather than carrying its own idea of which system to write.
+ */
+function applyAt(axis: Axis, machine: number, value: number): void {
+  const s = useStore.getState()
+  const i = axis === 'X' ? 0 : axis === 'Y' ? 1 : 2
+  const origin = machine - value - (s.g92Offset[i] ?? 0) - (s.toolOffset[i] ?? 0)
+  send(`G10 L2 P0 ${axis}${origin.toFixed(4)}`)
 }
 
 /**
  * Move the work origin onto the corner the skew cycle works out once it knows the
  * angle, correcting the two zeros its corner probes set along the way.
  *
- * `G10 L2` takes the machine coordinate of the origin outright. `G10 L20` — what
- * every other zero here uses — derives it instead from wherever the tool is standing,
- * and the board computes that from `gc_state.position` (see gcode.c): the machine
- * stops a little PAST the point the probe triggered at, 12 to 14 µm on 3 Aug 2026 and
- * always in the direction of travel. `[PRB:]` is the trigger itself, captured in the
- * step interrupt, so an answer built from it leaves that error behind as well.
+ * Goes out through `applyAt` like every other zero, which is what keeps the G92/TLO
+ * subtraction in ONE place. The first version of this wrote its `G10 L2` directly and
+ * so quietly ignored both modifiers — right on a machine where they are zero, wrong on
+ * the first one where they are not, and invisible either way.
  *
  * The geometry is in @shared/skew, away from the store, so it can be checked against
  * the numbers the machine really produced.
@@ -190,7 +211,9 @@ function setSkewCorner(xDir: Dir, yDir: Dir, deg: number, lx: Prb, ly: Prb, p: P
     xDir,
     yDir
   })
-  send(`G10 L2 P0 X${c.x.toFixed(4)} Y${c.y.toFixed(4)}`)
+  // the corner IS the origin, so each axis reads work 0 there
+  applyAt('X', c.x, 0)
+  applyAt('Y', c.y, 0)
 }
 
 const fmt = (n: number): string => Number(n.toFixed(3)).toString()
@@ -201,8 +224,8 @@ const startPos = (): number[] | null => useStore.getState().status?.mpos ?? null
 /** Tool-height Z touch-off (two-stage). Surface reads `thickness` (touch plate). */
 export async function runZ(p: ProbeParams): Promise<ProbeResult> {
   try {
-    await probeAxis('Z', -1, p)
-    apply('Z', p.thickness)
+    const latch = await probeAxis('Z', -1, p)
+    applyAt('Z', latch.z, p.thickness)
     rel('Z', p.retract)
     return { ok: true, note: `Z ✓` }
   } catch (e) {
@@ -234,7 +257,7 @@ export async function runEdge(axis: Axis, dir: Dir, p: ProbeParams, plate = 0): 
   try {
     const off = p.tipDiameter / 2 + plate
     const latch = await probeAxis(axis, dir, p)
-    apply(axis, -dir * off)
+    applyAt(axis, AX(latch, axis), -dir * off)
     rel(axis, -dir * p.retract)
     return { ok: true, note: `${axis}: ${fmt(AX(latch, axis))}` }
   } catch (e) {
@@ -302,8 +325,8 @@ async function fromTop(
   const drop = p.retract + p.depth // from +retract above surface to `depth` below
 
   onStep?.('Z')
-  await probeAxis('Z', -1, p) // probe the top surface (tool ends on the surface)
-  if (zeroZ) apply('Z', p.thickness)
+  const top = await probeAxis('Z', -1, p) // probe the top surface (tool ends on the surface)
+  if (zeroZ) applyAt('Z', top.z, p.thickness)
   rel('Z', lift) // up, clear of the top
 
   const hit: Partial<Record<Axis, Prb>> = {}
@@ -313,8 +336,8 @@ async function fromTop(
     onStep?.(ax)
     rel(ax, -dir * p.approach) // move out past the face
     rel('Z', -drop) // drop beside it
-    hit[ax] = await probeAxis(ax, dir, p)
-    apply(ax, -dir * off[ax])
+    const latch = (hit[ax] = await probeAxis(ax, dir, p))
+    applyAt(ax, AX(latch, ax), -dir * off[ax])
     // Come back up and over the material before the next face — except at the very
     // end when the caller has said it is staying put.
     if (!(hold && i === sides.length - 1)) {

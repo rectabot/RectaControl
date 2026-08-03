@@ -368,6 +368,12 @@ interface AppState {
   /** WCS offsets (machine coords of each G54–G59 zero) parsed from `$#`, so the
    *  toolpath can draw multi-fixture programs at their real positions. */
   wcsOffsets: Record<string, [number, number, number]>
+  /** `[G92:…]` and `[TLO:…]` from the same `$#`. Only the probe uses them, and only
+   *  because it writes its result as a machine coordinate (`G10 L2`) and must subtract
+   *  what `G10 L20` would have subtracted for it. Both are all-zero on this machine
+   *  today; TLO stops being zero as soon as tool lengths are measured. */
+  g92Offset: [number, number, number]
+  toolOffset: [number, number, number]
   job: JobProgress
   /** Measured run time (ms) per program filename, from the last normal finish.
    *  Persisted → survives restarts, so a program always shows its real time. */
@@ -731,6 +737,8 @@ export const useStore = create<AppState>((set, get) => ({
   info: EMPTY_INFO,
   travel: null,
   wcsOffsets: {},
+  g92Offset: [0, 0, 0],
+  toolOffset: [0, 0, 0],
   job: emptyJob,
   runTimes: loadRunTimes(),
   lastRunMs: null,
@@ -1046,6 +1054,14 @@ export const useStore = create<AppState>((set, get) => ({
           const m23 = /^\$23=(\d+)/.exec(e.data.trim())
           // WCS offset report [G54:x,y,z,…] → positions multi-fixture toolpaths
           const mW = /^\[(G5[4-9]):([-\d.,]+)/.exec(e.data.trim())
+          // The two MODIFIERS that sit on top of the coordinate system, from the same
+          // `$#` reply. Kept because a probe that writes its result as a machine
+          // coordinate (G10 L2) has to subtract them by hand: the board's own G10 L20
+          // does it internally — `WCS = MPos - G92 - TLO - WPos` (gcode.c) — and a
+          // replacement that skipped the term would be exact only while both are zero,
+          // which is today and stops being true the moment tool length offsets are used.
+          const mG92 = /^\[G92:([-\d.,]+)/.exec(e.data.trim())
+          const mTLO = /^\[TLO:([-\d.,]+)/.exec(e.data.trim())
           // a reset/welcome banner means the controller restarted → clear the
           // transient console `message`. The persistent `alert` (below) is NOT
           // touched here — it survives the banner and is cleared only when the
@@ -1153,7 +1169,9 @@ export const useStore = create<AppState>((set, get) => ({
             ...(m20 ? { softLimits: Number(m20[1]) !== 0 } : {}),
             ...(m23 ? { homingDirMask: Number(m23[1]) } : {}),
             ...(mT ? { travel: withTravel(s.travel, Number(mT[1]) - 130, Number(mT[2])) } : {}),
-            ...(mW ? { wcsOffsets: { ...s.wcsOffsets, [mW[1]]: firstThree(mW[2]) } } : {})
+            ...(mW ? { wcsOffsets: { ...s.wcsOffsets, [mW[1]]: firstThree(mW[2]) } } : {}),
+            ...(mG92 ? { g92Offset: firstThree(mG92[1]) } : {}),
+            ...(mTLO ? { toolOffset: firstThree(mTLO[1]) } : {})
           }
           // during SD dump etc. don't flood the terminal with raw lines
           if (s.suppressLog) return extra

@@ -454,6 +454,7 @@ export const sr: Record<string, string> = {
   'ui.console.copy': 'Copy',
   'ui.console.mdiDisabled': 'MDI onemogućen tokom posla',
   'ui.console.mdiPlaceholder': 'MDI komanda ($$, ?, G0 X0 …)',
+  'ui.console.pasteTooMany': 'Nalepljeno {n} linija — terminal šalje najviše {max}. Učitaj to kao program.',
   'ui.console.send': 'Pošalji',
   'ui.tabs.terminal': 'Terminal',
   'ui.tabs.gcode': 'G-Code',

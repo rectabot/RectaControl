@@ -3,6 +3,11 @@ import { useStore } from '../store'
 import { useT } from '../i18n'
 
 /** Terminal body — log + MDI input. Card chrome/tabs are provided by RightTabs. */
+
+/** How many pasted lines the MDI will fire off. Beyond this it is a program in the
+ *  wrong place — see onPaste. */
+const MAX_PASTE = 20
+
 /** HH:MM:SS, zero-padded, fixed-width — for the terminal timestamp column. */
 function fmtTime(ms: number): string {
   const d = new Date(ms)
@@ -15,6 +20,7 @@ export function Console(): JSX.Element {
   const lines = useStore((s) => s.consoleLines)
   const connected = useStore((s) => s.connected)
   const jobRunning = useStore((s) => s.job.running)
+  const pushConsole = useStore((s) => s.pushConsole)
   const [cmd, setCmd] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [hIdx, setHIdx] = useState(-1)
@@ -43,6 +49,39 @@ export function Console(): JSX.Element {
     if (!line || !connected) return
     window.recta.send(line)
     setHistory((h) => [...h, line])
+    setHIdx(-1)
+    setCmd('')
+  }
+
+  /**
+   * Pasting several lines sends them in order, one line each.
+   *
+   * This box is a single-line `<input>`, so the browser flattens a multi-line paste
+   * into one string — newlines become spaces, silently. The board then receives one
+   * block containing three G53s and three G0s and answers `error:21`, modal group
+   * violation, which is correct and completely opaque to whoever pasted a perfectly
+   * ordinary three-line setup sequence. Filip hit it on 3 Aug 2026 pasting a probe
+   * routine; nothing moved, and the error talked about a rule he had not broken.
+   *
+   * Sending is what a terminal does with a paste, and this panel is a terminal — the
+   * intent behind pasting three commands into it is that three commands run. What it
+   * must not do is join them into a fourth thing that is none of them.
+   *
+   * Capped, because a paste that size is somebody putting a PROGRAM in the wrong
+   * place, and the answer to that is the file loader, not a hundred MDI lines.
+   */
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>): void => {
+    const text = e.clipboardData.getData('text')
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    if (lines.length < 2) return // ordinary paste — let the box have it
+    e.preventDefault()
+    if (!connected) return
+    if (lines.length > MAX_PASTE) {
+      pushConsole(`* ${t('ui.console.pasteTooMany', { n: lines.length, max: MAX_PASTE })}`)
+      return
+    }
+    for (const l of lines) window.recta.send(l)
+    setHistory((h) => [...h, ...lines])
     setHIdx(-1)
     setCmd('')
   }
@@ -127,6 +166,7 @@ export function Console(): JSX.Element {
           disabled={!connected || jobRunning}
           onChange={(e) => setCmd(e.target.value)}
           onKeyDown={onKey}
+          onPaste={onPaste}
         />
         <button className="btn" onClick={send} disabled={!connected || jobRunning}>
           {t('ui.console.send')}

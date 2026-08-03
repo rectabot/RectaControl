@@ -466,6 +466,7 @@ export const en: Record<string, string> = {
   'ui.console.copy': 'Copy',
   'ui.console.mdiDisabled': 'MDI disabled during a job',
   'ui.console.mdiPlaceholder': 'MDI command ($$, ?, G0 X0 …)',
+  'ui.console.pasteTooMany': '{n} lines pasted — the terminal sends at most {max}. Load it as a program instead.',
   'ui.console.send': 'Send',
   'ui.tabs.terminal': 'Terminal',
   'ui.tabs.gcode': 'G-Code',

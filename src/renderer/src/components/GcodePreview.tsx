@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { useT } from '../i18n'
+import { ROW, rowWindow } from '../rowWindow'
 
 /** Shared text styling so the editor's textarea, its highlight layer and the
  *  read-only view line up character-for-character. `leading-5` = an INTEGER 20 px
@@ -9,13 +10,8 @@ import { useT } from '../i18n'
  *  wobbles a pixel or two — an integer height keeps every row identical. */
 const CELL = 'font-mono text-xs leading-5'
 
-/** Row height in px — the integer `leading-5` above. The read-only view renders
- *  only the rows in view and positions them by index, which needs this to be an
- *  exact, uniform number. */
-const ROW = 20
-/** Rows kept mounted above and below the viewport, so ordinary scrolling and the
- *  line-by-line highlight never reach an unmounted row. */
-const OVERSCAN = 20
+/* ROW (the integer row height matching `leading-5`) and the window arithmetic live in
+ * ../rowWindow, where they can be tested without a renderer. */
 
 /** G-code view. Read-only by default (syntax colors, current-line highlight and
  *  auto-scroll to the executing line, kept aligned with the toolpath arrow via
@@ -65,6 +61,26 @@ export function GcodePreview(): JSX.Element {
     ro.observe(box)
     return () => ro.disconnect()
   }, [editing])
+
+  // A newly loaded program starts at the top.
+  //
+  // Nothing else ever put `scrollTop` back: the only writer is the scroll handler, so
+  // the offset of the program you were last looking at survived into the next one. That
+  // is wrong on its own — open a file and land two thousand lines down — but it also
+  // showed the editor EMPTY, which is what Filip hit on 3 Aug 2026 loading a program
+  // from the SD card. The panel was hidden at the time (he was on the file manager),
+  // and a hidden element is never laid out, so the browser could not clamp its scroll
+  // and no scroll event fired to correct the state. Come back to a program shorter than
+  // the stale offset and the mounted window starts past the last line: nothing renders.
+  // Clicking Terminal and back forced the layout that fixed it, which is exactly the
+  // "it refreshes itself" that made this look intermittent rather than conditional.
+  //
+  // Keyed on the file, not on `gcode`, so saving an edit leaves you where you were
+  // working rather than throwing you to line 1.
+  useEffect(() => {
+    setScrollTop(0)
+    if (scrollBoxRef.current) scrollBoxRef.current.scrollTop = 0
+  }, [filename])
 
   useEffect(() => {
     // Keep the executing line pinned to the MIDDLE of the viewport, the way most
@@ -219,8 +235,7 @@ export function GcodePreview(): JSX.Element {
   }
 
   // the mounted window: what the viewport covers, plus overscan on both sides
-  const first = Math.max(0, Math.floor(scrollTop / ROW) - OVERSCAN)
-  const last = Math.min(lines.length, Math.ceil((scrollTop + (boxH || 600)) / ROW) + OVERSCAN)
+  const { first, last } = rowWindow(scrollTop, boxH, lines.length)
 
   return (
     <div className="relative h-full">

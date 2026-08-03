@@ -5,7 +5,7 @@ import { useT } from '../i18n'
 /** Terminal body — log + MDI input. Card chrome/tabs are provided by RightTabs. */
 
 /** How many pasted lines the MDI will fire off. Beyond this it is a program in the
- *  wrong place — see onPaste. */
+ *  wrong place — see send(). */
 const MAX_PASTE = 20
 
 /** HH:MM:SS, zero-padded, fixed-width — for the terminal timestamp column. */
@@ -44,50 +44,50 @@ export function Console(): JSX.Element {
     endRef.current?.scrollIntoView({ block: 'end' })
   }, [lines])
 
-  const send = (): void => {
-    const line = cmd.trim()
-    if (!line || !connected) return
-    window.recta.send(line)
-    setHistory((h) => [...h, line])
-    setHIdx(-1)
-    setCmd('')
-  }
-
   /**
-   * Pasting several lines sends them in order, one line each.
+   * Send what is in the box, one machine line per line of text.
    *
-   * This box is a single-line `<input>`, so the browser flattens a multi-line paste
-   * into one string — newlines become spaces, silently. The board then receives one
-   * block containing three G53s and three G0s and answers `error:21`, modal group
-   * violation, which is correct and completely opaque to whoever pasted a perfectly
-   * ordinary three-line setup sequence. Filip hit it on 3 Aug 2026 pasting a probe
-   * routine; nothing moved, and the error talked about a rule he had not broken.
-   *
-   * Sending is what a terminal does with a paste, and this panel is a terminal — the
-   * intent behind pasting three commands into it is that three commands run. What it
-   * must not do is join them into a fourth thing that is none of them.
+   * Multi-line is ordinary: a short setup sequence, a snippet from a guide, three
+   * lines somebody was given. The box used to be a single-line `<input>`, which let
+   * the browser flatten a paste into one string with the newlines turned into spaces
+   * — the board then saw one block holding three G53s and three G0s and answered
+   * `error:21`, modal group violation. Correct, and completely opaque to whoever
+   * pasted three perfectly ordinary lines and broke no such rule.
    *
    * Capped, because a paste that size is somebody putting a PROGRAM in the wrong
    * place, and the answer to that is the file loader, not a hundred MDI lines.
    */
-  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>): void => {
-    const text = e.clipboardData.getData('text')
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-    if (lines.length < 2) return // ordinary paste — let the box have it
-    e.preventDefault()
+  const send = (): void => {
     if (!connected) return
-    if (lines.length > MAX_PASTE) {
-      pushConsole(`* ${t('ui.console.pasteTooMany', { n: lines.length, max: MAX_PASTE })}`)
+    const out = cmd
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+    if (!out.length) return
+    if (out.length > MAX_PASTE) {
+      pushConsole(`* ${t('ui.console.pasteTooMany', { n: out.length, max: MAX_PASTE })}`)
       return
     }
-    for (const l of lines) window.recta.send(l)
-    setHistory((h) => [...h, ...lines])
+    for (const line of out) window.recta.send(line)
+    setHistory((h) => [...h, ...out])
     setHIdx(-1)
     setCmd('')
   }
-  const onKey = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === 'Enter') send()
-    else if (e.key === 'ArrowUp') {
+
+  const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    // Enter sends; Shift+Enter adds a line. Pasting therefore FILLS the box and
+    // waits — on a machine that moves metal, Ctrl+V must not be the thing that
+    // starts the motion. The first version of this fired on paste, terminal-style,
+    // and Filip caught it within minutes of using it: "posle svakog ctrl+v ode kod".
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+      return
+    }
+    // …and the history keys only while there is one line to replace. With a pasted
+    // block in the box, Up and Down belong to the caret.
+    if (cmd.includes('\n')) return
+    if (e.key === 'ArrowUp') {
       e.preventDefault()
       const idx = hIdx < 0 ? history.length - 1 : Math.max(0, hIdx - 1)
       if (history[idx] !== undefined) {
@@ -159,14 +159,18 @@ export function Console(): JSX.Element {
         </div>
       </div>
       <div className="flex gap-2 border-t border-border p-2">
-        <input
-          className="input flex-1"
+        {/* A textarea, not an input, so a pasted sequence keeps its line breaks and
+            can be READ before it is sent. One row until there is more to show, then
+            up to six — past that the scrollbar takes over rather than the box eating
+            the terminal it belongs to. */}
+        <textarea
+          className="input flex-1 resize-none"
+          rows={Math.min(6, cmd.split('\n').length)}
           placeholder={jobRunning ? t('ui.console.mdiDisabled') : t('ui.console.mdiPlaceholder')}
           value={cmd}
           disabled={!connected || jobRunning}
           onChange={(e) => setCmd(e.target.value)}
           onKeyDown={onKey}
-          onPaste={onPaste}
         />
         <button className="btn" onClick={send} disabled={!connected || jobRunning}>
           {t('ui.console.send')}

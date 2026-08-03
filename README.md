@@ -7,6 +7,12 @@ Electron + React + TypeScript. Connects over **USB** (virtual COM) or **Ethernet
 landing/configurator. Built as a paired, polished companion to the hardware —
 tuned so the operator can't easily go wrong.
 
+![RectaControl connected to a board, showing the Connections screen: a diagram of the RectaBot v1.0 controller with the DOOR connector selected and its wiring explained](docs/images/rectacontrol.png)
+
+*Connections knows the board it is talking to: click a connector on the diagram and it
+tells you what goes on each pin. The DRO, jog and terminal stay to the left, so nothing
+is ever more than one click away from the machine.*
+
 ---
 
 ## 📊 Status

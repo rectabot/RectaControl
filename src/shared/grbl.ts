@@ -150,6 +150,31 @@ export function zeroWcs(p: number, axes: string[]): string {
   return `G10 L20 P${p} ${axes.map((a) => `${a}0`).join(' ')}`
 }
 
+/**
+ * Does this command move a work origin?
+ *
+ * Everything above lands here, which is the point: the board answers all of them with
+ * a bare `ok` and never says what the new offset is, so the app has to notice it asked
+ * and go and re-read `$#`. Missing one leaves the 3D view drawing the toolpath around
+ * an origin the machine has stopped using — see useOriginWatch, which is the only
+ * caller and carries the story.
+ *
+ * `G10 L2` writes an offset outright, `G10 L20` sets it from where the machine stands,
+ * and `G92` (with its `.1`/`.2`/`.3` cancels) shifts every system at once.
+ *
+ * What ends each word is "no further digit", not a word boundary. A boundary looks
+ * right and is wrong twice over: `G10 L20P0Z0` — which is a perfectly legal thing to
+ * type, and grblHAL reads it the same — has no boundary after `L20` at all, and `L2`
+ * would otherwise match the front of `L20`. `L20?(?!\d)` says the real rule, which is
+ * that `L2` and `L20` are the whole word and `L200` is a different one.
+ *
+ * Deliberately NOT here: `G54`–`G59` on their own. Switching coordinate system does
+ * not move anything, and the app already holds every system's offset from one `$#`.
+ */
+export function movesOrigin(line: string): boolean {
+  return /\bG10\s*L20?(?!\d)|\bG92(\.[123])?(?!\d)/i.test(line)
+}
+
 function trim(n: number): string {
   // compact number, no trailing zeros (like '%g')
   return Number(n.toFixed(4)).toString()

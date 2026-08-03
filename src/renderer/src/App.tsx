@@ -20,6 +20,7 @@ import { RotaryLoadPrompt } from './components/RotaryLoadPrompt'
 import { useKeyboardControls } from './useKeyboardControls'
 import { useGamepadControls } from './useGamepadControls'
 import { useCloseGuard } from './useCloseGuard'
+import { useOriginWatch } from './useOriginWatch'
 import { useZoom } from './zoom'
 import { RECONNECT_TRIES, RECONNECT_GAP_MS } from './reconnect'
 
@@ -52,6 +53,9 @@ export default function App(): JSX.Element {
   useGamepadControls()
   // intercept the window-close (X) when a job is streaming → ask before quitting
   useCloseGuard()
+  // re-read `$#` whenever anything moves the work origin, so the drawing and the
+  // machine keep the same zero — see useOriginWatch for what went wrong without it
+  useOriginWatch()
   // auto-fit the UI scale to the monitor (+ manual override, Ctrl +/−/0)
   useZoom()
   // when the terminal/g-code panel is expanded it grows in height by taking over

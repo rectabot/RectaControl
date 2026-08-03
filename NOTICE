@@ -22,6 +22,9 @@ Each is distributed under its own license by its respective authors.
   zustand ..................... MIT License
   serialport .................. MIT License
   basic-ftp ................... MIT License
+  adm-zip ..................... MIT License
+  electron-updater ............ MIT License
+  electron-builder ............ MIT License
   Vite / electron-vite ........ MIT License
   Tailwind CSS ................ MIT License
   PostCSS / Autoprefixer ...... MIT License

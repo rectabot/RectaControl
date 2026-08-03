@@ -78,7 +78,7 @@ export function Console(): JSX.Element {
     // Enter sends; Shift+Enter adds a line. Pasting therefore FILLS the box and
     // waits — on a machine that moves metal, Ctrl+V must not be the thing that
     // starts the motion. The first version of this fired on paste, terminal-style,
-    // and Filip caught it within minutes of using it: "posle svakog ctrl+v ode kod".
+    // and Filip caught it within minutes of using it: every Ctrl+V sent the code.
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       send()

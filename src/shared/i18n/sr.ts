@@ -978,6 +978,8 @@ export const sr: Record<string, string> = {
   'ui.app.autoFailManual': 'Auto-povezivanje nije uspelo — poveži ručno (Connect ▾).',
   'ui.app.reconnecting': 'Ploča je otišla — čekam da se vrati…',
   'ui.app.reconnectGaveUp': 'Ploča se nije vratila — poveži ručno (Connect ▾).',
+  'ui.app.ethBusy':
+    'Ploča se javlja na mreži ali prekida sesiju čim se otvori — još drži prethodnu i odbijaće dok se ta ne oslobodi. Resetuj ploču (ugasi pa upali) i mrežna veza se odmah vraća. USB, ako je uključen, dotle je dohvata.',
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Klikni konektor na ploči za objašnjenje povezivanja.',

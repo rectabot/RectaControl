@@ -52,8 +52,24 @@ const ECHOED_REALTIME: Record<number, string> = {
  *  the same queue purely so their bytes are counted against the RX buffer. */
 type Slot = { cost: number; job: boolean }
 
+/** Same board, same cable — asked for twice. Baud is deliberately part of it: changing
+ *  it is a different link even though the port is the same. */
+function sameTarget(a: ConnectOptions | null, b: ConnectOptions): boolean {
+  if (!a || a.kind !== b.kind) return false
+  return a.kind === 'usb' && b.kind === 'usb'
+    ? a.port === b.port && a.baud === b.baud
+    : a.kind === 'ethernet' && b.kind === 'ethernet'
+      ? a.host === b.host && a.port === b.port
+      : false
+}
+
 export class Controller {
   private transport: Transport | null = null
+  /** Which cable the live transport is — the transports themselves do not say. */
+  private kind: TransportKind | null = null
+  /** What the live transport was opened with, so a repeated ask can be recognised as
+   *  the same board rather than served as a new connection. */
+  private connOpts: ConnectOptions | null = null
   private parser = new StatusParser()
   // Decode incoming bytes as UTF-8 (g-code comments may contain accented chars
   // like š/ž/č); StringDecoder buffers multibyte sequences split across packets.
@@ -95,7 +111,38 @@ export class Controller {
 
   // --------------------------------------------------------------- lifecycle
   async connect(opts: ConnectOptions): Promise<void> {
+    // Already talking to this board? Then keep talking to it.
+    //
+    // The link lives in this process; the window does not. A renderer reload — a dev
+    // rebuild, F5, a crash the ErrorBoundary recovered from — brings up a fresh App.tsx
+    // that knows nothing and runs its startup auto-connect, which used to tear down a
+    // perfectly good session in order to build the same one again. On 3 Aug 2026 that is
+    // exactly what locked us out: the socket closed and the replacement asked for a
+    // session 2 ms later, while the board still had the old one. Seventeen minutes of
+    // being refused, from a reconnect nobody needed.
+    //
+    // Re-announcing is all the new window actually wants — the `connected` event plus
+    // the same discovery a fresh connection runs, which repopulates what it lost.
+    if (this.transport?.isOpen && sameTarget(this.connOpts, opts)) {
+      this.emit({ type: 'connected', data: { kind: opts.kind } })
+      this.announce()
+      return
+    }
+
+    const replacing = this.transport?.isOpen ? this.kind : null
     if (this.transport?.isOpen) await this.disconnect()
+
+    // Let go of the old telnet session before asking for a new one. Closing sends a FIN
+    // and returns as soon as the local socket is down — the board has not necessarily
+    // read it yet. On 3 Aug 2026 the new SYN went out 2 ms behind the FIN; the daemon,
+    // which serves one client, was still holding the old session and refused every
+    // socket for the next 17 minutes. This is only the sequencing of a reconnect, so a
+    // quarter of a second costs nothing and is the difference between reconnecting and
+    // locking ourselves out. USB has no such state.
+    if (replacing === 'ethernet' && opts.kind === 'ethernet')
+      await new Promise((r) => setTimeout(r, 250))
+    this.kind = opts.kind
+    this.connOpts = opts
 
     this.transport =
       opts.kind === 'usb'
@@ -121,6 +168,14 @@ export class Controller {
     this.emit({ type: 'connected', data: { kind: opts.kind } })
 
     this.startPoll()
+    this.announce()
+  }
+
+  /** Ask the board to introduce itself. Everything the UI needs and cannot guess:
+   *  who it is, what parser state it is in, and which spindles this firmware carries.
+   *  Run on every fresh connection, and again when a reloaded window rejoins one that
+   *  was already up — the board's answers are what fills the new window in. */
+  private announce(): void {
     // ask the controller who it is + current parser state (WCS / units)
     setTimeout(() => this.sendLine('$I'), 250)
     this.askParserState(400)
@@ -143,6 +198,14 @@ export class Controller {
     ethPort: number
     baud: number
   }): Promise<TransportKind | null> {
+    // Already on a cable? Then there is nothing to choose. A window that reloads runs
+    // this on startup, and re-deciding would drop a USB link — the one the flash flow
+    // puts the board on — in order to go looking for the network. Rejoin what is up.
+    if (this.transport?.isOpen && this.connOpts) {
+      await this.connect(this.connOpts)
+      return this.kind
+    }
+
     // 1) Ethernet (telnet on the W5500) — preferred.
     try {
       await this.connect({ kind: 'ethernet', host: opts.ethHost, port: opts.ethPort })

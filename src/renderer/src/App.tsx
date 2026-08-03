@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useStore, parserSilentFor } from './store'
 import { readOffsets, applyOffsetsRead } from './offsets'
 import { t as translate } from '@shared/i18n'
+import { BUSY_SESSION } from '@shared/types'
 import { TopBar } from './components/TopBar'
 import { DRO } from './components/DRO'
 import { JogPanel } from './components/JogPanel'
@@ -296,7 +297,11 @@ export default function App(): JSX.Element {
       const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
       const baud = Number(localStorage.getItem('conn.baud')) || 115200
       pushConsole(`* ${translate('ui.app.reconnecting', lang)}`)
-      const ethFirst = lastKind.current !== 'usb'
+      // The head start is for a board that is still booting. A board that answers the
+      // network and refuses the session is not booting — it is holding an older telnet
+      // session, and no number of further tries will change that. Spend the rest of the
+      // chase on the cable that can actually come up.
+      let ethFirst = lastKind.current !== 'usb'
       for (let i = 0; i < RECONNECT_TRIES; i++) {
         await new Promise((r) => setTimeout(r, RECONNECT_GAP_MS))
         // bail out if the operator reconnected by hand, unplugged on purpose, or
@@ -310,8 +315,12 @@ export default function App(): JSX.Element {
             return
           }
           if (await window.recta.autoConnect({ ethHost, ethPort, baud })) return
-        } catch {
+        } catch (e) {
           /* not up yet — still booting, or this is not the cable it came back on */
+          if (ethFirst && String((e as Error)?.message ?? e).includes(BUSY_SESSION)) {
+            ethFirst = false
+            pushConsole(`! ${translate('ui.app.ethBusy', lang)}`)
+          }
         }
       }
       if (!cancelled && !useStore.getState().connected)

@@ -16,6 +16,16 @@ export interface EthernetConnectOptions {
 
 export type ConnectOptions = UsbConnectOptions | EthernetConnectOptions
 
+/** Marks the one connection failure worth telling apart: the board completed the TCP
+ *  handshake and dropped the session immediately, because its telnet daemon still has a
+ *  client. Reachable, but not available — and the way out is USB, not another try.
+ *
+ *  It travels inside the error message because that is all an Error keeps when it
+ *  crosses the IPC bridge; both the thrower (main/transport/ethernet.ts) and the reader
+ *  (the reconnect chase in App.tsx) live on the far side of that bridge from each other,
+ *  which is why the string is defined here and nowhere else. */
+export const BUSY_SESSION = 'busy-session'
+
 export interface SerialPortInfo {
   path: string
   manufacturer?: string

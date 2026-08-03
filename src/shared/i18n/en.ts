@@ -1018,6 +1018,8 @@ export const en: Record<string, string> = {
   'ui.app.autoFailManual': 'Auto-connect failed — connect manually (Connect ▾).',
   'ui.app.reconnecting': 'The board went away — waiting for it to come back…',
   'ui.app.reconnectGaveUp': 'The board did not come back — connect manually (Connect ▾).',
+  'ui.app.ethBusy':
+    'The board answers on the network but drops the session the moment it is opened — it is still holding an earlier one, and will keep refusing until that one is let go. Reset the board (power off, power on) and the network link comes straight back. A USB cable, if one is plugged in, reaches it meanwhile.',
 
   // ── Board diagram ──────────────────────────────────────────────────────────
   'board.hint': 'Click a connector on the board for wiring details.',

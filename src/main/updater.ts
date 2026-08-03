@@ -42,6 +42,21 @@ const isPortable = (): boolean => !!process.env.PORTABLE_EXECUTABLE_DIR
 
 let pending: UpdateReady | null = null
 
+/** Why a check failed, in one line.
+ *
+ *  electron-updater puts the whole HTTP response into `err.message` when the feed
+ *  answers with an error — status line, every response header, and the Set-Cookie
+ *  the server handed out. That is ~40 lines per failed check, on a repo that is
+ *  simply not there yet, and the log it lands in is the same log the problem
+ *  report packs up and mails to us. Nobody needs our copy of GitHub's cookies to
+ *  answer "why did the update not arrive", so keep the first line and drop the rest.
+ */
+function brief(err: unknown): string {
+  const msg = (err as { message?: string })?.message ?? String(err)
+  const line = msg.split('\n')[0].trim()
+  return line.length > 200 ? `${line.slice(0, 200)}…` : line
+}
+
 /** Release notes arrive as HTML, as a list, or not at all — flatten to plain lines. */
 function toLines(notes: unknown): string[] {
   const raw = Array.isArray(notes)
@@ -94,10 +109,10 @@ export function startUpdater(notify: (u: UpdateReady) => void): void {
   })
 
   // Offline, no releases repo yet, a rate limit: all normal, none worth a dialog.
-  autoUpdater.on('error', (err) => log('app', `update: check failed — ${err?.message ?? err}`))
+  autoUpdater.on('error', (err) => log('app', `update: check failed — ${brief(err)}`))
 
   const check = (): void => {
-    autoUpdater.checkForUpdates().catch((err) => log('app', `update: check failed — ${err?.message ?? err}`))
+    autoUpdater.checkForUpdates().catch((err) => log('app', `update: check failed — ${brief(err)}`))
   }
   const unref = (t: unknown): void => (t as { unref?: () => void }).unref?.()
   unref(setTimeout(check, CHECK_DELAY_MS))

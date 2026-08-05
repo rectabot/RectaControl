@@ -83,6 +83,10 @@ export interface MachineInfo {
    *  Answers "which firmware is on this board" — grblHAL's version and the board
    *  name cannot. null on a board running anything but our firmware. */
   firmwareBuild: string | null
+  /** The `[NEWOPT:…]` list from $I — which optional features this build carries
+   *  (ETH, FTP, SD, HOME, …). The UI asks it what the board CAN do, rather than
+   *  inferring it from what it happens to be connected over. */
+  newopt: string | null
   /** Registered spindles enumerated from `$SPINDLESH` (machine-readable), so the
    *  $395 "Default spindle" picker lists the drivers this firmware actually has
    *  (analog PWM + every compiled Modbus VFD) instead of a hard-coded 0/1. */

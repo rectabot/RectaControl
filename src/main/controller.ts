@@ -117,7 +117,7 @@ export class Controller {
   // marker jumping ~120° per update).
   private motionActive = false
 
-  private info: MachineInfo = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
+  private info: MachineInfo = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, newopt: null, spindles: [] }
 
   constructor(private emit: (e: ControllerEvent) => void) {}
 
@@ -174,7 +174,7 @@ export class Controller {
     this.decoder = new StringDecoder('utf8')
 
     // fresh capability info per connection (axes/spindle re-discovered from $I)
-    this.info = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
+    this.info = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, newopt: null, spindles: [] }
 
     await this.transport.open()
     this.emit({ type: 'connected', data: { kind: opts.kind } })
@@ -776,6 +776,9 @@ export class Controller {
     // this is the one line that says WHICH image is on the board — which the operator
     // needs after a flash, and support needs in every problem report.
     const fw = /\[PLUGIN:RectaBot firmware v([^\]]*)\]/.exec(line)
+    // what this build carries — ETH/FTP/SD/HOME/… — so the UI can show the paths
+    // this board HAS, not merely the one it came up on
+    const nopt = /\[NEWOPT:([^\]]*)\]/.exec(line)
     const spEnum = parseSpindleEntry(line) // machine-readable $SPINDLESH entry, or null
     let changed = false
     if (spEnum) {
@@ -811,6 +814,10 @@ export class Controller {
     }
     if (fw) {
       this.info.firmwareBuild = fw[1].trim()
+      changed = true
+    }
+    if (nopt) {
+      this.info.newopt = nopt[1]
       changed = true
     }
     if (changed) this.emit({ type: 'info', data: { ...this.info } })

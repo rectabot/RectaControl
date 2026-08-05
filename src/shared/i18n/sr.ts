@@ -482,6 +482,8 @@ export const sr: Record<string, string> = {
   'ui.top.settingsTitle': 'grblHAL podešavanja',
   'ui.top.ethTitle': 'Povezano preko Ethernet-a',
   'ui.top.usbTitle': 'Povezano preko USB-C',
+  'ui.top.ethIdle': 'Ethernet se ne koristi (ploča ga ima; stanje kabla nepoznato)',
+  'ui.top.usbIdle': 'USB-C kabl priključen, ne koristi se',
   'ui.top.disconnect': 'Diskonektuj',
   'ui.disc.title': 'Diskonektovati tokom rada?',
   'ui.disc.body':

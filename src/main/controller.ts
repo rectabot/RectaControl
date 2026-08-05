@@ -644,6 +644,23 @@ export class Controller {
     // renderer still sees the job as running and opens the recovery popup.
     let abortAfter = false
 
+    // grblHAL LATCHES a rejection. With COMPATIBILITY_LEVEL 0 — which is the default
+    // and what our firmware builds with — protocol.c only parses a block while
+    // gc_state.last_error is clear, and reports the OLD error for every line that
+    // follows. So a refused line does not merely fail: the machine then refuses
+    // everything, answering with a code that has nothing to do with what was sent.
+    //
+    // Confirmed on the board, 5 Aug 2026 — `M99` -> error:20, then `G21` -> error:20,
+    // on a machine sitting Idle with no alarm. Until now the app left it that way:
+    // abortOnError() deliberately does not soft-reset (a reset would bury the error the
+    // recovery popup is about), so the operator met a machine that refused their next
+    // move with a stale code, while jogging still worked because `$J=` takes a
+    // different branch. Nothing said why.
+    //
+    // The way out is the firmware's own: an empty line, which protocol.c handles as
+    // "Empty line. For syncing purposes." and which sets last_error back to OK.
+    const syncAfter = /^error:/i.test(line)
+
     // An alarm ends the job outright. The machine halted mid-motion, so its position
     // is no longer trustworthy and the rest of the program must not be streamed. This
     // is also what stops an E-stopped job from resuming the moment the operator
@@ -663,6 +680,15 @@ export class Controller {
       // streaming is void — drop it rather than carry it across the reset
       if (this.running) abortAfter = true
       this.askParserState(200)
+    }
+
+    // The sync line's own `ok` answers nothing the operator asked for, and printing it
+    // directly under a rejection reads as "never mind, that worked". Swallow it. Only
+    // the unmetered case is counted here; while a program runs the sync rides the queue
+    // and its reply is accounted for as the manual slot it is.
+    if (this.syncPending > 0 && line === 'ok' && !this.inflight.length) {
+      this.syncPending--
+      return
     }
 
     // job flow control: ok / error answer the lines we metered out — the program's
@@ -710,6 +736,30 @@ export class Controller {
     this.emit({ type: 'line', data: line })
 
     if (abortAfter) this.abortOnError()
+    // After the teardown, never before it: a program line's rejection tears the stream
+    // down, and resetJob() drops whatever is queued — a sync queued ahead of that would
+    // be thrown away with it.
+    if (syncAfter) this.clearErrorLatch()
+  }
+
+  /** Give the machine back to the operator after a rejection — see the note in
+   *  handleLine for what grblHAL does without this.
+   *
+   *  While a program streams the sync goes through the same queue that meters every
+   *  other line, ahead of the program: writing past the character counting is the bug
+   *  that was fixed on 1 Aug and it is not worth reintroducing for one byte. With no
+   *  stream up there is nothing to meter it against, so it goes straight out. */
+  private syncPending = 0
+  private clearErrorLatch(): void {
+    if (!this.transport?.isOpen) return
+    if (this.running) {
+      this.manualQueue.unshift('')
+      this.pump()
+    } else {
+      this.syncPending++
+      this.transport.write('\n')
+    }
+    log('app', 'sent a sync line to clear the error grblHAL had latched')
   }
 
   private captureInfo(line: string): void {

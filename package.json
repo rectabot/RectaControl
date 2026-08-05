@@ -1,6 +1,6 @@
 {
   "name": "rectacontrol",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "RectaControl — branded grblHAL desktop sender for the RectaBot CNC controller",
   "main": "./out/main/index.js",
   "author": "RectaBot",
@@ -64,7 +64,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

@@ -242,12 +242,19 @@ function ViewCube({
     cUR: '78,49.65',
     cBOT: '60,80.7'
   }
+  // Each face is named for the axis you are looking along, so the labels take that
+  // axis's colour — the same red/green/blue the origin corner is drawn in down in the
+  // scene (X red, Y green, Z blue). Looking at the FRONT is looking along Y, the TOP
+  // along Z, the RIGHT along X. It saves the operator matching a word to a direction.
+  const AX = { x: '#ef4444', y: '#22c55e', z: '#60a5fa' }
   // label = [text, x, y, rotationDeg] — Front/Right are slanted to sit on the iso face
-  // (Front descends to the right +30°, Right rises to the right −30°); Top stays flat
-  const faces: { view: ViewName; pts: string; base: string; label?: [string, number, number, number] }[] = [
-    { view: 'top', pts: `${P.TOP} ${P.UR} ${P.cUR} ${P.cUL} ${P.UL}`, base: '#3a4a5e', label: ['TOP', 60, 37, 0] },
-    { view: 'front', pts: `${P.UL} ${P.LL} ${P.BOT} ${P.cBOT} ${P.cUL}`, base: '#2a3646', label: ['FRONT', 40, 73, 30] },
-    { view: 'right', pts: `${P.UR} ${P.cUR} ${P.cBOT} ${P.BOT} ${P.LR}`, base: '#1b2431', label: ['RIGHT', 80, 73, -30] },
+  // (Front descends to the right +30°, Right rises to the right −30°); Top stays flat.
+  // Both sit a touch below the face's centre: the slant lifts the far end of the word,
+  // and dead-centre made them ride up against the chamfer.
+  const faces: { view: ViewName; pts: string; base: string; label?: [string, number, number, number]; ink?: string }[] = [
+    { view: 'top', pts: `${P.TOP} ${P.UR} ${P.cUR} ${P.cUL} ${P.UL}`, base: '#3a4a5e', label: ['TOP', 60, 37, 0], ink: AX.z },
+    { view: 'front', pts: `${P.UL} ${P.LL} ${P.BOT} ${P.cBOT} ${P.cUL}`, base: '#2a3646', label: ['FRONT', 40, 77, 30], ink: AX.y },
+    { view: 'right', pts: `${P.UR} ${P.cUR} ${P.cBOT} ${P.BOT} ${P.LR}`, base: '#1b2431', label: ['RIGHT', 80, 77, -30], ink: AX.x },
     { view: 'iso', pts: `${P.cUL} ${P.cUR} ${P.cBOT}`, base: '#54657a' }
   ]
   const hex = `${P.TOP} ${P.UR} ${P.LR} ${P.BOT} ${P.LL} ${P.UL}`
@@ -289,7 +296,7 @@ function ViewCube({
             fontSize={9}
             fontWeight={700}
             pointerEvents="none"
-            fill={active === f.view ? '#06212a' : '#cbd5e1'}
+            fill={active === f.view ? '#06212a' : (f.ink ?? '#cbd5e1')}
           >
             {f.label![0]}
           </text>
@@ -1004,7 +1011,7 @@ export function Visualizer(): JSX.Element {
           title="Keep the camera on the moving tool"
           className={`rounded-md border px-3 py-1 font-mono text-xs backdrop-blur transition ${
             follow
-              ? 'border-brand bg-brand text-base'
+              ? 'border-brand bg-brand text-[#020617]'
               : 'border-border bg-panel/80 text-slate-400 hover:text-slate-200'
           }`}
         >

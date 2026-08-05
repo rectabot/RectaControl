@@ -4,6 +4,7 @@ import type { SerialPortInfo } from '@shared/types'
 import { useT, useLabel } from '../i18n'
 import appIcon from '../assets/icon.png'
 import { stateColor as colorForState } from '../machineState'
+import { GearIcon } from './icons'
 
 export function TopBar(): JSX.Element {
   const t = useT()
@@ -148,8 +149,15 @@ export function TopBar(): JSX.Element {
 
       {/* right: settings + connect (theme moved to Settings → System → Theme) */}
       <div className="ml-auto flex items-center gap-2">
-        <button className="btn" onClick={() => setSettingsOpen(true)} title={t('ui.top.settingsTitle')}>
-          ⚙
+        {/* No frame, and a gear big enough to be read as one. The bordered `btn` made
+            it look like a third connection control sitting next to Connect, which is
+            the one thing it is not; a bare gear is what an operator reaches for. */}
+        <button
+          className="rounded-md p-1.5 text-slate-300 transition hover:bg-panel2 hover:text-white"
+          onClick={() => setSettingsOpen(true)}
+          title={t('ui.top.settingsTitle')}
+        >
+          <GearIcon className="h-7 w-7" />
         </button>
 
         {connected ? (
@@ -172,7 +180,7 @@ export function TopBar(): JSX.Element {
           </>
         ) : (
           <button
-            className="rounded-md bg-brand px-4 py-1.5 font-semibold text-base transition hover:bg-brandDark"
+            className="rounded-md bg-brand px-4 py-1.5 font-semibold text-[#020617] transition hover:bg-brandDark"
             onClick={() => setOpen((o) => !o)}
           >
             {L('ui.top.connect')} ▾
@@ -184,7 +192,7 @@ export function TopBar(): JSX.Element {
       {open && !connected && (
         <div className="absolute right-4 top-full z-40 mt-2 w-72 rounded-lg border border-border bg-panel p-3 shadow-glow">
           <button
-            className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand/50 bg-brand/10 py-2 text-sm font-semibold text-brand transition hover:bg-brand hover:text-base disabled:opacity-50"
+            className="mb-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-brand/50 bg-brand/10 py-2 text-sm font-semibold text-brand transition hover:bg-brand hover:text-[#020617] disabled:opacity-50"
             onClick={autoConnect}
             disabled={busy}
             title={t('ui.top.autoConnectTitle')}
@@ -198,7 +206,7 @@ export function TopBar(): JSX.Element {
                 key={m}
                 onClick={() => setMode(m)}
                 className={`flex-1 px-3 py-1.5 text-sm transition ${
-                  mode === m ? 'bg-brand text-base' : 'bg-panel2 text-slate-300 hover:bg-border'
+                  mode === m ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-300 hover:bg-border'
                 }`}
               >
                 {m === 'usb' ? 'USB' : 'Ethernet'}
@@ -251,7 +259,7 @@ export function TopBar(): JSX.Element {
           )}
 
           <button
-            className="mt-3 w-full rounded-md bg-brand py-2 font-semibold text-base transition hover:bg-brandDark disabled:opacity-50"
+            className="mt-3 w-full rounded-md bg-brand py-2 font-semibold text-[#020617] transition hover:bg-brandDark disabled:opacity-50"
             onClick={connect}
             disabled={busy}
           >

@@ -220,7 +220,7 @@ export function FileManager(): JSX.Element | null {
         <div className="flex items-center gap-1 border-b border-border px-3 py-2">
           <button
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-              isPc ? 'bg-brand text-base' : 'text-slate-400 hover:text-slate-200'
+              isPc ? 'bg-brand text-[#020617]' : 'text-slate-400 hover:text-slate-200'
             }`}
             onClick={() => pickTab('pc')}
           >
@@ -228,7 +228,7 @@ export function FileManager(): JSX.Element | null {
           </button>
           <button
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition ${
-              !isPc ? 'bg-brand text-base' : 'text-slate-400 hover:text-slate-200'
+              !isPc ? 'bg-brand text-[#020617]' : 'text-slate-400 hover:text-slate-200'
             }`}
             onClick={() => pickTab('sd')}
           >
@@ -285,7 +285,7 @@ export function FileManager(): JSX.Element | null {
                   {!isLoading && <span className="font-mono text-[10px] text-slate-500">{fmtSize(e.size)}</span>}
                   <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
                     <button
-                      className="rounded bg-brand/90 px-2 py-0.5 text-[11px] font-semibold text-base hover:bg-brand disabled:opacity-40"
+                      className="rounded bg-brand/90 px-2 py-0.5 text-[11px] font-semibold text-[#020617] hover:bg-brand disabled:opacity-40"
                       onClick={() => load(e)}
                       disabled={busy || loading !== null}
                       title={t('ui.fm.loadTitle')}

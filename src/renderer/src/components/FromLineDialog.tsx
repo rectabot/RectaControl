@@ -89,7 +89,7 @@ export function FromLineDialog(): JSX.Element | null {
           <p className="font-mono text-[10px] text-warn">{t('ui.fromline.warn')}</p>
 
           <button
-            className="w-full rounded-md bg-ok py-2 font-semibold text-base transition hover:opacity-90 disabled:opacity-40"
+            className="w-full rounded-md bg-ok py-2 font-semibold text-[#020617] transition hover:opacity-90 disabled:opacity-40"
             disabled={!connected || !gcode}
             onClick={start}
           >

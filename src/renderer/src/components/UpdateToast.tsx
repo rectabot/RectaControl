@@ -46,7 +46,7 @@ export function UpdateToast(): JSX.Element | null {
         onClick={() => setOpen(true)}
         className="fixed bottom-4 right-4 z-[55] flex items-center gap-3 rounded-lg border border-[#3390EC]/50 bg-panel px-4 py-3 text-left shadow-glow transition hover:border-[#3390EC]"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3390EC] text-base">⬆</span>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#3390EC] text-[#020617]">⬆</span>
         <span>
           <span className="block text-sm font-semibold text-slate-100">{t('ui.upd.available')}</span>
           <span className="block font-mono text-[11px] text-[#3390EC]">RectaControl v{update.version}</span>

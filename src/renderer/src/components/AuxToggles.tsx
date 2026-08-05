@@ -139,7 +139,7 @@ function Chip({
       // fixed width so all three coolant buttons are identical; label centred.
       className={`flex w-20 items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold backdrop-blur transition disabled:opacity-40 ${
         on
-          ? 'border-ok bg-ok/90 text-base shadow-glow'
+          ? 'border-ok bg-ok/90 text-[#020617] shadow-glow'
           : 'border-border bg-panel/80 text-slate-300 hover:border-brand'
       }`}
     >

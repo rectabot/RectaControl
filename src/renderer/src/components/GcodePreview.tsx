@@ -177,7 +177,7 @@ export function GcodePreview(): JSX.Element {
                   onKeyDown={(e) => e.key === 'Enter' && confirmSaveAs()}
                 />
                 <button
-                  className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-base transition hover:bg-brandDark"
+                  className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-[#020617] transition hover:bg-brandDark"
                   onClick={confirmSaveAs}
                 >
                   ✓
@@ -192,7 +192,7 @@ export function GcodePreview(): JSX.Element {
             ) : (
               <>
                 <button
-                  className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-base transition hover:bg-brandDark"
+                  className="rounded bg-brand px-2.5 py-1 text-xs font-semibold text-[#020617] transition hover:bg-brandDark"
                   onClick={save}
                   title={
                     libFile

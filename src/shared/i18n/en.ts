@@ -495,11 +495,6 @@ export const en: Record<string, string> = {
   'ui.top.settingsTitle': 'grblHAL settings',
   'ui.top.ethTitle': 'Connected via Ethernet',
   'ui.top.usbTitle': 'Connected via USB-C',
-  // Greyed marks. The USB one is a fact — the board enumerates or it does not. The
-  // Ethernet one is not: grblHAL reports no link state, so this says the build has
-  // ethernet, not that the cable is in. Worded so it does not claim more.
-  'ui.top.ethIdle': 'Ethernet not in use (this board has it; cable state unknown)',
-  'ui.top.usbIdle': 'USB-C cable connected, not in use',
   'ui.top.disconnect': 'Disconnect',
   'ui.disc.title': 'Disconnect while running?',
   'ui.disc.body':

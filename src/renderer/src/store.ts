@@ -19,7 +19,6 @@ const EMPTY_INFO: MachineInfo = {
   axes: [],
   spindle: null,
   firmwareBuild: null,
-  newopt: null,
   spindles: []
 }
 

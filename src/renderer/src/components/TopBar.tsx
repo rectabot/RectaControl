@@ -26,32 +26,6 @@ export function TopBar(): JSX.Element {
   const [host, setHost] = useState(() => localStorage.getItem('conn.ethHost') || '192.168.5.1')
   const [tcpPort, setTcpPort] = useState(() => localStorage.getItem('conn.ethPort') || '23')
   const [busy, setBusy] = useState(false)
-  const info = useStore((s) => s.info)
-  /** Is the board sitting on the USB bus, whether or not we are talking over it?
-   *  It enumerates or it does not, so this is a fact rather than a guess. Polled
-   *  because a cable can come and go while the app is open. */
-  const [usbPresent, setUsbPresent] = useState(false)
-  useEffect(() => {
-    let stop = false
-    const look = async (): Promise<void> => {
-      try {
-        const list = await window.recta.listPorts()
-        if (!stop) setUsbPresent(list.some((p) => p.usb))
-      } catch {
-        /* nothing to say about a port list we could not read */
-      }
-    }
-    look()
-    const timer = setInterval(look, 4000)
-    return () => {
-      stop = true
-      clearInterval(timer)
-    }
-  }, [])
-  // The board's own answer to "what do you carry" ($I's NEWOPT), so a board built
-  // without the W5500 shows no ethernet mark at all instead of a permanently grey one.
-  const hasEth = connKind === 'ethernet' || !!info.newopt?.includes('ETH')
-  const hasUsb = connKind === 'usb' || usbPresent
 
   const refreshPorts = async (): Promise<void> => {
     const list = await window.recta.listPorts()
@@ -188,30 +162,13 @@ export function TopBar(): JSX.Element {
 
         {connected ? (
           <>
-            {/* Both paths, when both are there: the one carrying the session in its own
-                colour, the other grey. Which cable is live is the thing an operator most
-                wants to read off this bar, and showing only the winner never said whether
-                the other was even plugged in.
-                USB presence is real — the board enumerates, so the port is either there
-                or it is not. ETHERNET IS NOT DETECTABLE: grblHAL reports no link state,
-                so the grey ETH mark means "this build has ethernet", not "the cable is
-                in". Said plainly rather than guessed at. */}
-            {hasEth && (
+            {connKind && (
               <span
-                className={`flex items-center gap-1.5 text-xs font-semibold ${connKind === 'ethernet' ? 'text-ok' : 'text-slate-500'}`}
-                title={connKind === 'ethernet' ? t('ui.top.ethTitle') : t('ui.top.ethIdle')}
+                className="flex items-center gap-1.5 rounded-md border border-ok/40 bg-ok/10 px-2.5 py-1.5 text-xs font-semibold text-ok"
+                title={connKind === 'ethernet' ? t('ui.top.ethTitle') : t('ui.top.usbTitle')}
               >
-                <EthIcon />
-                ETH
-              </span>
-            )}
-            {hasUsb && (
-              <span
-                className={`flex items-center gap-1.5 text-xs font-semibold ${connKind === 'usb' ? 'text-warn' : 'text-slate-500'}`}
-                title={connKind === 'usb' ? t('ui.top.usbTitle') : t('ui.top.usbIdle')}
-              >
-                <UsbcIcon />
-                USB-C
+                {connKind === 'ethernet' ? <EthIcon /> : <UsbcIcon />}
+                {connKind === 'ethernet' ? 'ETH' : 'USB-C'}
               </span>
             )}
             <button
@@ -316,23 +273,21 @@ export function TopBar(): JSX.Element {
 
 /** RJ45 / Ethernet port glyph. */
 function EthIcon(): JSX.Element {
-  // RJ45 plug seen head-on: the body, the latch tab on top, and four contacts.
-  // The old one was a wall socket with legs, which read as neither.
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9.5 3h5v2.5H17a1.5 1.5 0 0 1 1.5 1.5v12.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V7a1.5 1.5 0 0 1 1.5-1.5h2.5V3Z" />
-      <path d="M8.5 9v3.5M10.8 9v3.5M13.2 9v3.5M15.5 9v3.5" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="8" width="18" height="11" rx="1.5" />
+      <path d="M7 8V5h10v3" />
+      <path d="M7 19v-3M10 19v-3M14 19v-3M17 19v-3" />
     </svg>
   )
 }
 
-/** USB-C connector: the oval shell with its tongue. */
+/** USB-C connector glyph. */
 function UsbcIcon(): JSX.Element {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="2.5" y="8" width="19" height="8" rx="4" />
-      <rect x="6" y="10.9" width="12" height="2.2" rx="1.1" />
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="8.5" width="18" height="7" rx="3.5" />
+      <path d="M7.5 12h9" />
     </svg>
   )
 }
-

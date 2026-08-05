@@ -422,7 +422,9 @@ export function RescueWizard(): React.JSX.Element | null {
  *  and the procedure has to say that rather than offer a step it cannot finish. */
 async function hasUsb(): Promise<boolean> {
   try {
-    return (await window.recta.listPorts()).length > 0
+    // USB devices only. A chipset COM1 is a serial port and is not a way to reach a
+    // bootloader, so counting it here promised a step that could never be finished.
+    return (await window.recta.listPorts()).some((p) => p.usb)
   } catch {
     return false
   }

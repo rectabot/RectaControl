@@ -22,8 +22,12 @@ export const RECONNECT_GAP_MS = 1500
 /** What one failed attempt can cost. A refused TCP connect returns almost at once;
  *  one that goes unanswered sits on the OS timeout, which is where the seconds go on
  *  a rig whose Ethernet cable is out. Measured at ~4 s on Windows 10 on 2 Aug 2026;
- *  rounded up, because being early is the failure mode that hurts. */
-export const RECONNECT_ATTEMPT_MS = 5000
+ *  rounded up, because being early is the failure mode that hurts.
+ *
+ *  Plus the USB probation (2 s, controller.ts): from 5 Aug 2026 a serial port has to
+ *  answer before it counts as the board, and an attempt that falls through to a port
+ *  which never answers pays both halves. */
+export const RECONNECT_ATTEMPT_MS = 7000
 
 /** The moment after which the app itself has stopped trying — so nobody waiting on
  *  the app has any reason to wait longer, and no reason to stop sooner. */

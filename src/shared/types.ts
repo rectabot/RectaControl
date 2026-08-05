@@ -38,6 +38,13 @@ export const BUSY_SESSION = 'busy-session'
 export interface SerialPortInfo {
   path: string
   manufacturer?: string
+  /** USB vendor/product ids — only a USB device has them. */
+  vendorId?: string
+  productId?: string
+  /** Is this a USB device at all, as opposed to a chipset COM port the machine has
+   *  always had (ACPI\PNP0501) or a Bluetooth pairing? The board is USB, so this is
+   *  the difference between a candidate and a port that merely exists. */
+  usb: boolean
 }
 
 /** Parsed grbl/grblHAL status report. */

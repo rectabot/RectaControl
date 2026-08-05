@@ -29,7 +29,12 @@ export function TopBar(): JSX.Element {
   const refreshPorts = async (): Promise<void> => {
     const list = await window.recta.listPorts()
     setPorts(list)
-    if (list.length && !port) setPort(list[0].path)
+    // Offer a USB port, never merely the first one. On a PC with a chipset COM1 the
+    // first one is COM1 — an empty UART that opens without complaint — and it sat
+    // pre-filled in this box waiting to be connected to. Every port stays in the list
+    // below; this only decides what the operator is handed without asking.
+    const first = list.find((p) => p.usb)
+    if (first && !port) setPort(first.path)
   }
   useEffect(() => {
     refreshPorts()

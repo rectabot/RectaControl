@@ -21,6 +21,18 @@ import { RESCUE, type RescueAction } from './rescue'
 import { SettingsBackup } from './settingsBackup'
 import { log } from './logger'
 
+/** The question a serial port has to answer before the app calls it a board.
+ *
+ *  `?` and nothing else. It is the one thing grblHAL answers in EVERY state: realtime
+ *  bytes are served from the receive interrupt, so a machine parked in Door, held, in
+ *  Alarm, homing or mid-cut replies to it while every line command waits. Probing with
+ *  `$I` instead would connect to a running machine and refuse a parked one, which is
+ *  the everyday case since parking pauses became normal.
+ *
+ *  Two seconds and a repeat every half second: a healthy board answers in single-digit
+ *  milliseconds, so this is only ever paid by a port that is not the board. */
+const USB_PROBE = { bytes: Buffer.from([RT.status]), timeoutMs: 2000, everyMs: 500 }
+
 const POLL_MS = 200 // idle status '?' interval (~5 Hz)
 const JOB_POLL_MS = 50 // status '?' interval while running (~20 Hz) — finer tool
 // position sampling so the editor highlight scrolls through lines, not just a few
@@ -146,7 +158,7 @@ export class Controller {
 
     this.transport =
       opts.kind === 'usb'
-        ? new SerialTransport(opts.port, opts.baud)
+        ? new SerialTransport(opts.port, opts.baud, USB_PROBE)
         : new EthernetTransport(opts.host, opts.port)
 
     this.transport.onData((chunk) => this.onData(chunk))
@@ -226,13 +238,21 @@ export class Controller {
       /* board silent on TCP — try the USB cable instead */
     }
 
-    // 2) USB CDC — pick the most likely board port (see pickBoardPort).
+    // 2) USB CDC — pick the most likely board port (see pickBoardPort), and let the
+    //    probation there decide whether it is one. Both halves of that are new as of
+    //    5 Aug 2026 and both are load-bearing: this fallback is reached whenever the
+    //    network drops, which includes the board simply being switched off, and until
+    //    now it answered "connected over usb" on a machine with no power.
     try {
       const path = await pickBoardPort()
-      if (!path) return null
+      if (!path) {
+        log('app', 'auto-connect: no board on USB either (no USB serial device present)')
+        return null
+      }
       await this.connect({ kind: 'usb', port: path, baud: opts.baud })
       return 'usb'
-    } catch {
+    } catch (e) {
+      log('app', `auto-connect: ${(e as Error).message}`)
       return null
     }
   }

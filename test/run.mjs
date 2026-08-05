@@ -79,6 +79,12 @@ await build({
         b.onResolve({ filter: /^\.\/(transport\/(serial|ethernet)|logger|settingsBackup|rescue)$/ }, (a) =>
           a.importer.endsWith('controller.ts') ? { path: path.join(TEST, 'fakes', `${FAKES[a.path]}.ts`) } : undefined
         )
+        // The serialport package itself, for usb.test.ts — which tests the real
+        // transport/serial.ts rather than a stand-in for it, because the rules under
+        // test (which port is a board, what it has to answer) live in that file. The
+        // package is a native binding built for Electron and would not load on plain
+        // node anyway.
+        b.onResolve({ filter: /^serialport$/ }, () => ({ path: path.join(TEST, 'fakes', 'serialport.ts') }))
         b.onResolve({ filter: /^@shared\// }, (a) => ({ path: path.join(SRC, 'shared', `${a.path.slice(8)}.ts`) }))
         if (controller)
           b.onResolve({ filter: /(^|\/)src\/main\/controller$/ }, () => ({ path: controller }))

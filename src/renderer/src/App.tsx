@@ -80,8 +80,8 @@ export default function App(): JSX.Element {
   // board; main had the answer the whole time. Same reason `pendingUpdate()` exists.
   useEffect(() => {
     void window.recta.linkState().then((s) => {
-      if (!s.connected || !s.kind) return
-      apply({ type: 'connected', data: { kind: s.kind } })
+      if (!s.connected || !s.kind || !s.opts) return
+      apply({ type: 'connected', data: { kind: s.kind, opts: s.opts } })
       if (s.info.version) apply({ type: 'info', data: s.info })
     })
   }, [apply])

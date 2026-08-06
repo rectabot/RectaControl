@@ -136,7 +136,7 @@ export class Controller {
     // Re-announcing is all the new window actually wants — the `connected` event plus
     // the same discovery a fresh connection runs, which repopulates what it lost.
     if (this.transport?.isOpen && sameTarget(this.connOpts, opts)) {
-      this.emit({ type: 'connected', data: { kind: opts.kind } })
+      this.emit({ type: 'connected', data: { kind: opts.kind, opts } })
       this.announce(true)
       return
     }
@@ -177,7 +177,7 @@ export class Controller {
     this.info = { version: null, board: null, options: null, axes: [], spindle: null, firmwareBuild: null, spindles: [] }
 
     await this.transport.open()
-    this.emit({ type: 'connected', data: { kind: opts.kind } })
+    this.emit({ type: 'connected', data: { kind: opts.kind, opts } })
 
     this.startPoll()
     this.announce()
@@ -375,7 +375,15 @@ export class Controller {
    *  immediate and it is the truth, where connecting-to-find-out is neither. */
   get linkState(): LinkState {
     const connected = !!this.transport?.isOpen
-    return { connected, kind: connected ? this.kind : null, info: { ...this.info } }
+    return {
+      connected,
+      kind: connected ? this.kind : null,
+      // What the link actually IS, not what someone asked for. The top bar names the
+      // port it is talking on, and the renderer cannot know that: auto-connect picks
+      // the port here, and a window that reloaded never asked for anything at all.
+      opts: connected ? this.connOpts : null,
+      info: { ...this.info }
+    }
   }
 
   // ------------------------------------------------------------------ output

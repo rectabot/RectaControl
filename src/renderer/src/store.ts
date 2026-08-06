@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ControllerEvent, JobProgress, LinkState, MachineInfo, StatusReport, TransportKind, UpdateReady } from '@shared/types'
+import type { ConnectOptions, ControllerEvent, JobProgress, LinkState, MachineInfo, StatusReport, TransportKind, UpdateReady } from '@shared/types'
 import { describe, parseCode, getAlarm, getError } from '@shared/messages'
 import { t, type Lang } from '@shared/i18n'
 import { DEFAULT_BINDINGS, type Binding } from './controls'
@@ -354,6 +354,10 @@ interface AppState {
   connected: boolean
   /** Active transport kind, so the UI can gate FTP-only features (Ethernet). */
   connKind: TransportKind | null
+  /** Where the live link actually goes — the COM port and baud, or the host and TCP
+   *  port. Reported by the main process, which is the only side that knows: the port
+   *  auto-connect settled on was never something this window asked for. */
+  connOpts: ConnectOptions | null
   status: StatusReport | null
   /** Last known override % [feed, rapid, spindle] — cached because grblHAL only
    *  reports Ov: periodically (snapping to 100 between reports causes flicker). */
@@ -741,7 +745,7 @@ interface AppState {
  *  Not cached, and deliberately not persisted: this is what main knows THIS instant. A
  *  remembered axis list is the bug EMPTY_INFO exists to prevent — see above. */
 function bootLink(): LinkState {
-  const empty: LinkState = { connected: false, kind: null, info: EMPTY_INFO }
+  const empty: LinkState = { connected: false, kind: null, opts: null, info: EMPTY_INFO }
   // guarded so the store can be imported outside a preload'd window (tests, tooling)
   if (typeof window === 'undefined' || !window.recta?.linkStateSync) return empty
   try {
@@ -755,6 +759,7 @@ const boot = bootLink()
 export const useStore = create<AppState>((set, get) => ({
   connected: boot.connected,
   connKind: boot.kind,
+  connOpts: boot.opts,
   status: null,
   overrides: [100, 100, 100],
   accessory: '',
@@ -844,6 +849,7 @@ export const useStore = create<AppState>((set, get) => ({
           return {
             connected: true,
             connKind: e.data.kind,
+            connOpts: e.data.opts,
             // the board on the other end may not be the one we last spoke to —
             // a different firmware, a different machine — so forget what we knew
             // and let this connection's own $I say who it is
@@ -864,6 +870,7 @@ export const useStore = create<AppState>((set, get) => ({
           return {
             connected: false,
             connKind: null,
+            connOpts: null,
             status: null,
             job: emptyJob,
             sdRunning: false,

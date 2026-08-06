@@ -22,6 +22,9 @@ export type ConnectOptions = UsbConnectOptions | EthernetConnectOptions
 export interface LinkState {
   connected: boolean
   kind: TransportKind | null
+  /** The target the live link was opened on — the actual COM port and baud, or the
+   *  actual host and TCP port. Null when nothing is connected. */
+  opts: ConnectOptions | null
   info: MachineInfo
 }
 
@@ -121,7 +124,7 @@ export type ControllerEvent =
   | { type: 'status'; data: StatusReport }
   | { type: 'line'; data: string } // any non-status line from controller (ok, [..], error, ALARM)
   | { type: 'sent'; data: string } // a line we sent (for console echo)
-  | { type: 'connected'; data: { kind: TransportKind } }
+  | { type: 'connected'; data: { kind: TransportKind; opts: ConnectOptions } }
   | { type: 'disconnected'; data: { reason?: string } }
   | { type: 'info'; data: MachineInfo }
   | { type: 'job'; data: JobProgress }

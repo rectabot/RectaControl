@@ -164,6 +164,10 @@ export default function App(): JSX.Element {
       // re-asks the board three questions it has already answered and says so in the
       // console every time the window comes back.
       if (useStore.getState().connected) return
+      // Switched off, nothing opens a port that was not clicked. Checked here rather
+      // than around the effect so the preference is read when the timer fires, not
+      // when the app mounted.
+      if (!useStore.getState().autoConnect) return
       const lang = useStore.getState().lang
       const ethHost = localStorage.getItem('conn.ethHost') || '192.168.5.1'
       const ethPort = Number(localStorage.getItem('conn.ethPort')) || 23
@@ -312,6 +316,9 @@ export default function App(): JSX.Element {
     }
     if (!wasConnected) return
     if (useStore.getState().noReconnect) return
+    // Same switch as the launch attempt: off means the operator picks the link back
+    // up by hand after a reboot too, and the app does not chase it.
+    if (!useStore.getState().autoConnect) return
 
     let cancelled = false
     void (async () => {

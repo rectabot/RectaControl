@@ -443,6 +443,12 @@ interface AppState {
   /** Preference: auto-open the recovery popup on a new alarm/error. Experienced
    *  users can turn this off — the footer notice + "what do I do?" button remain. */
   recoveryPopup: boolean
+  /** Preference: may the app reach for the board on its own? On, it connects at
+   *  launch and picks the link back up after the board reboots — Ethernet first,
+   *  USB if that is not there. Off, nothing opens a port that the operator did not
+   *  click, which is what you want when the board is on the bench being poked at
+   *  rather than on the machine being used. */
+  autoConnect: boolean
   /** Hard limits are TEMPORARILY suspended so the operator can drive off a limit
    *  switch (parked on one, every move re-trips the alarm — grbl machines have
    *  always needed this dance). Holds the $21 value to put back. The app restores
@@ -652,6 +658,9 @@ interface AppState {
   restoreLimits: () => void
   /** Enable/disable auto-opening the recovery popup (persisted). */
   setRecoveryPopup: (on: boolean) => void
+  /** Enable/disable the app connecting on its own, at launch and after a reboot
+   *  (persisted). Off means every connection starts with a click. */
+  setAutoConnect: (on: boolean) => void
   /** Update keyboard/gamepad control preferences (persisted). */
   setControls: (patch: Partial<KbControls>) => void
   /** Restore all control preferences (bindings, mode, feed, step) to defaults. */
@@ -784,6 +793,7 @@ export const useStore = create<AppState>((set, get) => ({
   noReconnect: false,
   alarmHandled: false,
   recoveryPopup: localStorage.getItem('recoveryPopup') !== '0',
+  autoConnect: localStorage.getItem('conn.auto') !== '0',
   limitsSuspended: null,
   limitsPending: null,
   limitsPendingAt: 0,
@@ -1273,6 +1283,10 @@ export const useStore = create<AppState>((set, get) => ({
   setRecoveryPopup: (on) => {
     localStorage.setItem('recoveryPopup', on ? '1' : '0')
     set({ recoveryPopup: on })
+  },
+  setAutoConnect: (on) => {
+    localStorage.setItem('conn.auto', on ? '1' : '0')
+    set({ autoConnect: on })
   },
   setControls: (patch) =>
     set((s) => {

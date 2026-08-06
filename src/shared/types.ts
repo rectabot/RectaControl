@@ -234,6 +234,8 @@ export interface BackupRow {
 /** API surface exposed to the renderer via contextBridge (window.recta). */
 export interface RectaApi {
   listPorts(): Promise<SerialPortInfo[]>
+  /** The port most likely to be the board, or null if no board is on the USB bus. */
+  pickBoardPort(): Promise<string | null>
   connect(opts: ConnectOptions): Promise<void>
   /** Try Ethernet first, then USB. Returns the kind that connected, or null. */
   autoConnect(opts: {

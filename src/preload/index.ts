@@ -36,6 +36,7 @@ try {
 
 const api: RectaApi = {
   listPorts: () => ipcRenderer.invoke('ports:list'),
+  pickBoardPort: () => ipcRenderer.invoke('ports:pick'),
   connect: (opts: ConnectOptions) => ipcRenderer.invoke('connect', opts),
   autoConnect: (opts: { ethHost: string; ethPort: number; baud: number }) =>
     ipcRenderer.invoke('autoConnect', opts),

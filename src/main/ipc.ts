@@ -38,6 +38,11 @@ export function registerIpc(getWindow: () => BrowserWindow | null): Controller {
 
   ipcMain.handle('ports:list', () => listPorts())
 
+  // Which port the one-click USB button should open. The choice is pickBoardPort's
+  // and stays there: it is the function that knows an RP2350 by its vendor id and,
+  // more to the point, knows that a port which is not a USB device is not a board.
+  ipcMain.handle('ports:pick', () => pickBoardPort())
+
   // What a window asks the moment it exists, before it assumes anything.
   ipcMain.handle('link:state', () => controller.linkState)
 

@@ -496,6 +496,13 @@ export const en: Record<string, string> = {
   'ui.top.settingsTitle': 'grblHAL settings',
   'ui.top.ethTitle': 'Connected via Ethernet',
   'ui.top.usbTitle': 'Connected via USB-C',
+  'ui.top.usbBtnTitle': 'Connect over USB-C to the board on the bus',
+  'ui.top.usbNone':
+    'No board on USB. Check that the cable is in and that it carries data — a charge-only cable never enumerates.',
+  // Says what it will do, not what it can see. The board reports no link state for the
+  // network port, so whether that cable is plugged in is not a question this can answer.
+  'ui.top.ethBtnTitle': 'Connect over Ethernet to {host}:{port}',
+  'ui.top.manualTitle': 'Another port, baud rate or address',
   'ui.top.disconnect': 'Disconnect',
   'ui.disc.title': 'Disconnect while running?',
   'ui.disc.body':
@@ -513,14 +520,21 @@ export const en: Record<string, string> = {
     'A program is still running. Entering the bootloader reboots the board and aborts the job immediately. Stop the job before flashing.',
   'ui.fwGuard.confirm': 'Reboot to bootloader anyway',
   'ui.top.connect': 'Connect',
+  'ui.top.connectMachine': 'Connect to machine',
   'ui.top.autoConnect': 'Auto-connect',
   'ui.top.autoConnectTitle': 'Try Ethernet then USB',
+  'ui.top.autoOnTitle':
+    'On: the app connects by itself at launch and after the board reboots — Ethernet first, USB if that is not there. Click to switch off.',
+  'ui.top.autoOffTitle':
+    'Off: nothing opens a port you did not click, at launch or after a reboot. Click to switch on.',
   'ui.top.usb': 'USB',
   'ui.top.ethernet': 'Ethernet',
-  'ui.top.portPlaceholder': 'e.g. COM6',
+  // Field names, shown inside the box while it is empty — the panel is too narrow to
+  // carry a column of labels beside the fields as well.
+  'ui.top.portPlaceholder': 'COM:',
   'ui.top.refresh': 'Refresh',
-  'ui.top.ipPlaceholder': 'card IP',
-  'ui.top.tcpPlaceholder': 'port (23)',
+  'ui.top.ipPlaceholder': 'IP:',
+  'ui.top.tcpPlaceholder': 'Port:',
   'ui.top.connecting': 'Connecting…',
   'ui.top.pickPort': 'Select a COM port.',
   'ui.top.connErr': 'Connection error: {msg}',

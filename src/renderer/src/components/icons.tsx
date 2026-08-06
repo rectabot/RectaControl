@@ -254,6 +254,37 @@ export function FileIcon({ className }: { className?: string }): JSX.Element {
   )
 }
 
+/** RJ45 plug — the Ethernet path.
+ *
+ *  A plug seen head-on: the body, the keyway the latch sits in raised out of its
+ *  top edge, three contacts inside. The glyph this replaces drew a wall socket with
+ *  legs, which at the size it was rendered read as a plain box. Three contacts, not
+ *  eight: at 20px the strokes of eight merge into a grey band. */
+export function EthIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <Svg className={className}>
+      <path d="M4 9.5A1.5 1.5 0 0 1 5.5 8H9V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v3h3.5A1.5 1.5 0 0 1 20 9.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z" />
+      <path d="M8 12.5v3M12 12.5v3M16 12.5v3" />
+    </Svg>
+  )
+}
+
+/** USB-C plug — the USB path. The shell and its tongue, nothing else; the shape is
+ *  distinctive enough that detail only muddies it.
+ *
+ *  Drawn taller than the connector really is (2.2:1 against a true 3.4:1). Set beside
+ *  the near-square RJ45 at the same box size, an accurate USB-C is a thin sliver and
+ *  reads as the weaker of the two — which is not something the drawing should be
+ *  saying about a choice between them. */
+export function UsbcIcon({ className }: { className?: string }): JSX.Element {
+  return (
+    <Svg className={className}>
+      <rect x="2.5" y="7.5" width="19" height="9" rx="4.5" />
+      <path d="M7 12h10" />
+    </Svg>
+  )
+}
+
 /** Monochrome icon for a settings section, chosen by its id — replaces the
  *  coloured emoji that used to live in machine-config.ts. */
 export function SectionIcon({ id, className = 'h-4 w-4' }: { id: string; className?: string }): JSX.Element {

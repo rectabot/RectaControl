@@ -69,6 +69,7 @@ export const en: Record<string, string> = {
   'ui.controls.gamepadEnable': 'Gamepad control',
   'ui.controls.gamepadEnableHint': 'Drive the machine with a connected gamepad / joystick.',
   'ui.controls.mode': 'Jog mode',
+  'ui.jog.stepHoldHint': 'Hold for the fine steps — 0.01 / 0.05 / 0.1',
   'ui.controls.modeHint': 'Hold = jog while held; Step = one increment per press.',
   'ui.controls.mode.hold': 'Hold',
   'ui.controls.mode.step': 'Step',

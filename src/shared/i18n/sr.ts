@@ -67,6 +67,7 @@ export const sr: Record<string, string> = {
   'ui.controls.gamepadEnable': 'Kontrola gamepad-om',
   'ui.controls.gamepadEnableHint': 'Upravljaj mašinom povezanim gamepad-om / džojstikom.',
   'ui.controls.mode': 'Jog režim',
+  'ui.jog.stepHoldHint': 'Drži za fine korake — 0.01 / 0.05 / 0.1',
   'ui.controls.modeHint': 'Drži = jog dok je pritisnuto; Korak = jedan inkrement po pritisku.',
   'ui.controls.mode.hold': 'Drži',
   'ui.controls.mode.step': 'Korak',

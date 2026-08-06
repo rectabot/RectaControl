@@ -5,11 +5,33 @@ import { fromDisplay, unitLabel } from '../units'
 import { clampContinuousJog } from '../jogLimits'
 import { parkForAccess, resumeFromPark, goToPark, atRest } from '../controlActions'
 import { useT, useLabel } from '../i18n'
+import { useLongPress } from '../useLongPress'
 import { Panel } from './Panel'
 import { InfoTip } from './InfoTip'
 
 const STEPS = [0.1, 1, 10]
-const FEED_PRESETS = [500, 1000, 2000, 3000, 4000]
+/** The fine steps, which live under the first slot of the row rather than in slots
+ *  of their own — the row has to stay three wide to line up with the XY pad below it.
+ *  Hold that button and they drop down; 0.1 is the one it shows until you pick
+ *  another, so the row reads exactly as it always did until someone asks for more. */
+const FINE_STEPS = [0.01, 0.05, 0.1]
+const STEP_HOLD_MS = 500
+const FEED_PRESETS = [500, 1000, 2000, 3000, 4000, 5000]
+
+/** How hard a feed rate is, as a colour.
+ *
+ *  Read from the rate in mm/min, not from the number in the box — in inch mode the
+ *  same digits are twenty-five times the speed, and a colour that says "gentle" about
+ *  12 700 mm/min would be worse than no colour at all.
+ *
+ *  Under 2000 green · under 4000 amber · 4000 and above red, so a typed rate is
+ *  judged on the same scale as one picked off the list. */
+function feedTone(feed: number, units: 'mm' | 'inch'): string {
+  const mmPerMin = fromDisplay(feed || 0, units)
+  if (mmPerMin < 2000) return 'text-ok'
+  if (mmPerMin < 4000) return 'text-warn'
+  return 'text-danger'
+}
 const CONT_DIST = 1000 // mm — large; jog is cancelled on button release
 const PARK_HOLD_MS = 700 // press-and-hold time to confirm "go to park" (guards a stray tap)
 
@@ -57,6 +79,23 @@ export function JogPanel(): JSX.Element {
   // step / feed / mode are shared with the keyboard + gamepad layers, so they
   // live in the store's controls (one source of truth for every jog input).
   const { mode, feed, step } = useStore((s) => s.controls)
+
+  // The fine list, and which of its values the first slot is currently offering.
+  // Neither is persisted: a fine step is for one careful approach, and coming back
+  // tomorrow to a pad that moves a hundredth of a millimetre per press is a surprise
+  // nobody asked for.
+  const [fineOpen, setFineOpen] = useState(false)
+  const [fineVal, setFineVal] = useState(STEPS[0])
+  const fineRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!fineOpen) return
+    const onDown = (e: MouseEvent): void => {
+      if (fineRef.current && !fineRef.current.contains(e.target as Node)) setFineOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [fineOpen])
   const setControls = useStore((s) => s.setControls)
 
   // one jog: Hold mode sends a large move cancelled on release; Step mode sends
@@ -122,21 +161,50 @@ export function JogPanel(): JSX.Element {
       <div className="mb-3 flex items-stretch gap-2">
         {/* step increments — span the full XY-pad width (label removed). Disabled in
             Hold mode (a step size is meaningless then); one is selected in Step mode. */}
-        <div className="flex h-[27px] w-[9.5rem] shrink-0 overflow-hidden rounded-md border border-border2">
-          {STEPS.map((s) => (
-            <button
-              key={s}
+        <div ref={fineRef} className="relative w-[9.5rem] shrink-0">
+          <div className="flex h-[27px] overflow-hidden rounded-md border border-border2">
+            {/* Slot 1 carries the fine list. It shows whichever fine value is armed —
+                0.1 until someone picks another — so the row still reads 0.1 · 1 · 10
+                out of the box. */}
+            <StepButton
+              value={fineVal}
+              selected={mode === 'step' && step === fineVal}
               disabled={mode === 'hold'}
-              onClick={() => setControls({ step: s })}
-              className={`flex-1 font-mono text-sm transition disabled:opacity-40 ${
-                mode === 'step' && step === s
-                  ? 'bg-brand text-[#020617]'
-                  : 'bg-panel2 text-slate-400 enabled:hover:text-slate-200'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+              onPick={() => setControls({ step: fineVal })}
+              onLong={() => setFineOpen(true)}
+              title={t('ui.jog.stepHoldHint')}
+            />
+            {STEPS.slice(1).map((s) => (
+              <StepButton
+                key={s}
+                value={s}
+                selected={mode === 'step' && step === s}
+                disabled={mode === 'hold'}
+                onPick={() => setControls({ step: s })}
+              />
+            ))}
+          </div>
+
+          {fineOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-1/3 overflow-hidden rounded-md border border-border2 bg-panel shadow-lg">
+              {FINE_STEPS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setFineVal(s)
+                    setControls({ step: s })
+                    setFineOpen(false)
+                  }}
+                  className={`block w-full py-1 text-center font-mono text-xs transition hover:bg-panel2 ${
+                    s === fineVal ? 'text-brand' : 'text-slate-300'
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Step / Hold mode — mirrors the Z + rotary block width below, so the Feed
@@ -422,6 +490,42 @@ function ParkBtn(): JSX.Element {
   )
 }
 
+/** One step increment. A tap selects it. The first slot also takes a hold, which
+ *  drops the fine list open underneath it; the other two have nothing to hold for
+ *  and behave as they always did. */
+function StepButton({
+  value,
+  selected,
+  disabled,
+  onPick,
+  onLong,
+  title
+}: {
+  value: number
+  selected: boolean
+  disabled: boolean
+  onPick: () => void
+  onLong?: () => void
+  title?: string
+}): JSX.Element {
+  // Selecting rides on the hook's onShort, not on onClick — onClick fires on release
+  // whether or not the hold already went off, so the hold that opens the list would
+  // arm the value on its way out too.
+  const press = useLongPress(onLong ?? (() => {}), onPick, STEP_HOLD_MS)
+  return (
+    <button
+      disabled={disabled}
+      title={title}
+      {...press}
+      className={`flex-1 font-mono text-sm transition disabled:opacity-40 ${
+        selected ? 'bg-brand text-[#020617]' : 'bg-panel2 text-slate-400 enabled:hover:text-slate-200'
+      }`}
+    >
+      {value}
+    </button>
+  )
+}
+
 /** Feed control: a box you can type into (up to 4 digits) with a real dropdown
  *  of preset rates — one control, fills the action-column width, unit after it. */
 function FeedControl(): JSX.Element {
@@ -429,6 +533,7 @@ function FeedControl(): JSX.Element {
   const L = useLabel()
   const units = useStore((s) => s.units)
   const feed = useStore((s) => s.controls.feed)
+  const connected = useStore((s) => s.connected)
   const setControls = useStore((s) => s.setControls)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -444,7 +549,20 @@ function FeedControl(): JSX.Element {
 
   return (
     <div ref={ref} className="relative flex h-[27px] min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border2 bg-panel2 px-2">
-      <span className="shrink-0 font-mono text-[11px] text-slate-500">{L('ui.jog.feed')}</span>
+      {/* The LABEL carries the warning, not the number. A digit that changes colour is
+          still just a digit being read; a word that goes from green to red is a light
+          coming on, and it is legible from further away than four small figures are.
+          Green up to 2000 mm/min, amber to 4000, red above.
+          Offline it goes grey with the rest of the panel: nothing is about to move, so
+          there is nothing to warn about, and a lit indicator over a dead machine only
+          teaches the operator to stop reading it. */}
+      <span
+        className={`shrink-0 font-mono text-[11px] ${
+          connected ? `font-bold ${feedTone(feed, units)}` : 'text-slate-500'
+        }`}
+      >
+        {L('ui.jog.feed')}
+      </span>
       <input
         className="min-w-0 flex-1 bg-transparent text-center font-mono text-sm text-slate-100 outline-none"
         type="text"

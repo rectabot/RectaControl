@@ -160,7 +160,7 @@ export function parseToolpath(gcode: string, opts: WcoOpts = {}): Toolpath {
 
     const moves = w.X !== undefined || w.Y !== undefined || w.Z !== undefined
     const aMove = w.A !== undefined
-    if (!moves && !aMove && w.I === undefined && w.R === undefined) continue
+    if (!moves && !aMove && w.I === undefined && w.J === undefined && w.R === undefined) continue
 
     if (rot) {
       // rotary wrap treats G2/G3 as linear for now (arcs around a cylinder are rare)

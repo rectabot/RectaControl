@@ -133,8 +133,17 @@ function parkOrLiftOnIdle(safeWorkZ: number): void {
     clearTimeout(timer)
   }
   const unsub = useStore.subscribe((st) => {
+    if (done) return
     const base = (st.status?.state ?? '').split(':')[0]
     if (base !== 'Idle') return
+    // ⚠️ OFF THE LIST FIRST, before anything below writes to the store. `pushConsole`
+    // is a store write, the store calls its listeners from inside that write, and this
+    // listener was still one of them with the state still Idle — so it called itself
+    // until the stack ran out, and the exception left before the lift was sent. A park
+    // on a machine that is not homed, or has no park spot, did not lift the head at all
+    // (lab on a board, Nov 2026: 66 × "Maximum call stack size exceeded", Z left at
+    // -7.972 after the park).
+    finish()
     if (st.parkPos && st.homed) {
       // retract Z fully to the machine top FIRST (so XY travel can't drag through the
       // part), then rapid to the saved park XY in machine coords (G53). Z is left at
@@ -145,8 +154,15 @@ function parkOrLiftOnIdle(safeWorkZ: number): void {
     } else {
       // No saved park spot, or the machine isn't homed (G53 coords wouldn't be valid),
       // so just lift Z for a manual jog. Explain WHY when a park position IS saved but
-      // homing is missing — otherwise "Park only lifts Z" looks broken.
-      if (st.parkPos && !st.homed) {
+      // homing is missing — otherwise "Park only lifts Z" looks broken. With homing
+      // switched OFF ($22 bit 0 = 0) "home it ($H)" is bad advice — $H only answers
+      // with an error — and saving a park spot would not help either: there are no
+      // machine coordinates to keep it in. Say that instead.
+      if (!st.homingEnabled) {
+        useStore
+          .getState()
+          .pushConsole('* Park: homing is off ($22), so there are no machine coordinates for a park position. Lifting Z for a manual jog.')
+      } else if (st.parkPos && !st.homed) {
         useStore
           .getState()
           .pushConsole('* Park: machine not homed — home it ($H) to use the saved park position. Lifting Z for a manual jog for now.')
@@ -161,7 +177,6 @@ function parkOrLiftOnIdle(safeWorkZ: number): void {
       // auto-clamped to remaining travel when soft limits are on. Only ever lift UP.
       if (dz > 0.01) window.recta.send(`$J=G91 G21 Z${Number(dz.toFixed(3))} F${feed}`)
     }
-    finish()
   })
   const timer = setTimeout(finish, 6000)
 }
